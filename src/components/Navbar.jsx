@@ -1,11 +1,18 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import Logo from './Logo';
 import SearchBar from './SearchBar';
 import UserAvatar from './UserAvatar';
 import SearchResults from './SearchResults';
+import SearchSuggestions from './SearchSuggestions';
 import { searchMovies } from '../services/tmdbService';
 
 const NAV_LINKS = ['Home', 'Series', 'Movies', 'New & Popular', 'My List'];
+
+// Debounced query-suggestion behaviour.
+const DEBOUNCE_MS = 350; // Delay before suggestions are fetched while typing.
+const MIN_SUGGEST_CHARS = 2; // Minimum query length to fetch suggestions.
+const MAX_SUGGESTIONS = 6; // Max suggestions returned.
 
 /**
  * Fixed top navigation bar. On desktop: logo | search | avatar with a link row.
@@ -26,7 +33,27 @@ export default function Navbar() {
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState(null);
 
+  // Debounced query-suggestion state.
+  const [suggestions, setSuggestions] = useState([]);
+  const [suggestionsLoading, setSuggestionsLoading] = useState(false);
+  const [suggestionsActive, setSuggestionsActive] = useState(false);
+  const queryRef = useRef(query);
+  queryRef.current = query;
+
+  const showSuggestions =
+    suggestionsActive && query.trim() !== '' && submittedQuery === '';
   const showResults = submittedQuery !== '' || searching;
+
+  // Typing in the field clears any committed results so we return to live
+  // suggestions while the user refines their query.
+  const handleChange = (value) => {
+    setQuery(value);
+    setSubmittedQuery('');
+    setSearchError(null);
+    setResults([]);
+  };
+
+  const navigate = useNavigate();
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 12);
@@ -43,13 +70,40 @@ export default function Navbar() {
     };
   }, [menuOpen]);
 
-  const runSearch = async () => {
+  // Debounced query suggestions — fires only after the user pauses typing.
+  useEffect(() => {
     const term = query.trim();
+    if (term.length < MIN_SUGGEST_CHARS) {
+      setSuggestionsActive(false);
+      setSuggestions([]);
+      setSuggestionsLoading(false);
+      return;
+    }
+    setSuggestionsActive(true);
+    setSuggestionsLoading(true);
+    const timer = setTimeout(async () => {
+      try {
+        const data = await searchMovies(term);
+        if (term !== queryRef.current.trim()) return; // stale response
+        setSuggestions(data.results?.slice(0, MAX_SUGGESTIONS) ?? []);
+      } catch {
+        if (term === queryRef.current.trim()) setSuggestions([]);
+      } finally {
+        if (term === queryRef.current.trim()) setSuggestionsLoading(false);
+      }
+    }, DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [query]);
+
+  const runSearch = async (termOverride) => {
+    const term = (termOverride ?? query).trim();
     if (!term) return;
     setSubmittedQuery(term);
     setSearching(true);
     setSearchError(null);
     setResults([]);
+    setSuggestionsActive(false);
+    setSuggestionsLoading(false);
     try {
       const data = await searchMovies(term);
       setResults(data.results ?? []);
@@ -64,6 +118,17 @@ export default function Navbar() {
     setSubmittedQuery('');
     setSearchError(null);
     setResults([]);
+  };
+
+  const closeSuggestions = () => {
+    setSuggestionsActive(false);
+    setSuggestions([]);
+    setSuggestionsLoading(false);
+  };
+
+  // Clicking a suggestion or search result goes straight to the player.
+  const openMovie = (movie) => {
+    if (movie?.id != null) navigate(`/watch/${movie.id}`);
   };
 
   return (
@@ -101,7 +166,7 @@ export default function Navbar() {
         <SearchBar
           id="desktop-search"
           value={query}
-          onChange={setQuery}
+          onChange={handleChange}
           onSubmit={runSearch}
           loading={searching}
           className="hidden max-w-sm md:block lg:w-64"
@@ -146,7 +211,7 @@ export default function Navbar() {
           <SearchBar
             id="mobile-search"
             value={query}
-            onChange={setQuery}
+            onChange={handleChange}
             onSubmit={runSearch}
             loading={searching}
             className="mb-4"
@@ -172,6 +237,17 @@ export default function Navbar() {
         </div>
       )}
 
+      {/* Query suggestions panel — shown while typing (debounced) */}
+      {showSuggestions && (
+        <SearchSuggestions
+          query={query.trim()}
+          suggestions={suggestions}
+          loading={suggestionsLoading}
+          onSelect={openMovie}
+          onClose={closeSuggestions}
+        />
+      )}
+
       {/* Search results panel — shared across desktop and mobile */}
       {showResults && (
         <SearchResults
@@ -179,6 +255,7 @@ export default function Navbar() {
           results={results}
           loading={searching}
           error={searchError}
+          onSelect={openMovie}
           onClose={closeResults}
         />
       )}

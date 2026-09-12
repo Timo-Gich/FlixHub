@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   fetchTrendingMovies,
   getBackdropUrl,
@@ -37,6 +38,9 @@ export default function Hero() {
   }, [paused, slideCount, safeActive]);
 
   const markBackdropBroken = (id) => setBrokenBackdrops((prev) => ({ ...prev, [id]: true }));
+
+  const navigate = useNavigate();
+  const watchUrl = (movieId) => `/watch/${movieId}`;
 
   return (
     <section
@@ -101,8 +105,11 @@ export default function Hero() {
           <div
             key={movie.id}
             aria-hidden={!isActive}
+            onClick={() => {
+              if (isActive) navigate(watchUrl(movie.id));
+            }}
             className={`absolute inset-0 transition-opacity duration-700 ${
-              isActive ? 'opacity-100' : 'pointer-events-none opacity-0'
+              isActive ? 'cursor-pointer opacity-100' : 'pointer-events-none opacity-0'
             }`}
           >
             {/* Backdrop or gradient fallback */}
@@ -157,6 +164,7 @@ export default function Hero() {
                 <div className="mt-1 flex flex-wrap items-center gap-3">
                   <button
                     type="button"
+                    onClick={() => navigate(watchUrl(movie.id))}
                     className="rounded-md bg-brand px-7 py-3 text-sm font-bold text-white shadow-md
                                shadow-brand/40 transition hover:bg-brand-dark focus:outline-none
                                focus-visible:ring-2 focus-visible:ring-white/70 active:scale-[0.98]"

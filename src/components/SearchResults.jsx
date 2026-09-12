@@ -1,9 +1,10 @@
 import { getPosterUrl, formatRating, formatYear } from '../services/tmdbService';
 
 /**
- * A single search result row: small poster + title + year/rating.
+ * A single search result row: small poster + title + year/rating. Clicking it
+ * opens the movie's player.
  */
-function ResultRow({ movie, onClose }) {
+function ResultRow({ movie, onSelect }) {
   const poster = getPosterUrl(movie.poster_path);
   const year = formatYear(movie.release_date ?? movie.first_air_date);
   const rating = formatRating(movie.vote_average);
@@ -12,7 +13,7 @@ function ResultRow({ movie, onClose }) {
     <li>
       <button
         type="button"
-        onClick={onClose}
+        onClick={() => onSelect?.(movie)}
         className="group flex w-full gap-3 overflow-hidden rounded-md border border-ink-border
                    bg-ink-soft text-left transition hover:border-brand"
       >
@@ -51,9 +52,10 @@ function ResultRow({ movie, onClose }) {
  *   - results : array of TMDb movie objects
  *   - loading : boolean
  *   - error   : Error | null
+ *   - onSelect: (movie) => void — fired when a result is clicked
  *   - onClose : called to dismiss the panel
  */
-export default function SearchResults({ query, results = [], loading, error, onClose }) {
+export default function SearchResults({ query, results = [], loading, error, onSelect, onClose }) {
   return (
     <div className="border-b border-ink-border bg-ink/98 shadow-lg backdrop-blur">
       <div className="mx-auto max-w-[1600px] px-4 py-4 sm:px-8">
@@ -100,7 +102,7 @@ export default function SearchResults({ query, results = [], loading, error, onC
         {!loading && !error && results.length > 0 && (
           <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
             {results.map((movie) => (
-              <ResultRow key={movie.id} movie={movie} onClose={onClose} />
+              <ResultRow key={movie.id} movie={movie} onSelect={onSelect} />
             ))}
           </ul>
         )}

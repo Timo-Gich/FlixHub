@@ -1,27 +1,23 @@
-import Navbar from './components/Navbar';
-import Hero from './components/Hero';
-import MovieRow from './components/MovieRow';
-import Footer from './components/Footer';
-import { fetchTrendingMovies, fetchPopularMovies } from './services/tmdbService';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import HomePage from './pages/HomePage';
+import WatchPage from './pages/WatchPage';
 
 /**
- * App shell. Compose the fixed navbar, a hero banner streaming trending data,
- * a couple of self-fetching content rows, and the footer. All async work flows
- * through tmdbService with loading / error states handled in each component.
+ * Application root. Installs client-side routing so the VidKing player can live
+ * at /watch/:id while everything else stays on the home page.
+ *
+ * Note: With BrowserRouter, direct deep-links work in the Vite dev server. For
+ * a static production host, configure a SPA fallback so unknown paths serve
+ * index.html (e.g. rewrite /* -> / in the host's routing rules).
  */
 export default function App() {
   return (
-    <div className="min-h-screen bg-ink text-foreground">
-      <Navbar />
-
-      <main>
-        <Hero />
-
-        <MovieRow title="Trending Now" fetcher={() => fetchTrendingMovies()} />
-        <MovieRow title="Popular on FlixHub" fetcher={() => fetchPopularMovies()} />
-      </main>
-
-      <Footer />
-    </div>
+    <BrowserRouter>
+      <Routes>
+        <Route path="/" element={<HomePage />} />
+        <Route path="/watch/:id" element={<WatchPage />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </BrowserRouter>
   );
 }

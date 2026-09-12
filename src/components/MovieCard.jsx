@@ -1,11 +1,13 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { getPosterUrl, formatRating, formatYear } from '../services/tmdbService';
 import { gradients } from '../data/movies';
 
 /**
  * A single movie tile fed from TMDb data.
  * Renders the real poster when available, otherwise a gradient placeholder.
- * Hovering reveals the overview and a play affordance.
+ * Hovering reveals the overview and a play affordance. The whole card links to
+ * the watch page for that movie.
  * Props:
  *   - movie : a TMDb movie object (title, poster_path, vote_average, …)
  *   - index : optional numeric rank shown in the corner
@@ -24,8 +26,9 @@ export default function MovieCard({ movie, index }) {
   const gradient = gradients[index % gradients.length];
 
   return (
-    <button
-      type="button"
+    <Link
+      to={`/watch/${movie.id}`}
+      aria-label={`Watch ${title}`}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
       className="group relative block aspect-[2/3] w-full overflow-hidden rounded-md
@@ -101,6 +104,6 @@ export default function MovieCard({ movie, index }) {
           )}
         </span>
       </div>
-    </button>
+    </Link>
   );
 }

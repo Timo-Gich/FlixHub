@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import Logo from './Logo';
 import SearchBar from './SearchBar';
 import UserAvatar from './UserAvatar';
@@ -7,7 +7,14 @@ import SearchResults from './SearchResults';
 import SearchSuggestions from './SearchSuggestions';
 import { searchMovies } from '../services/tmdbService';
 
-const NAV_LINKS = ['Home', 'Series', 'Movies', 'New & Popular', 'My List'];
+const NAV_LINKS = [
+  { key: 'home', label: 'Home', to: '/' },
+  { key: 'series', label: 'Series' },
+  { key: 'movies', label: 'Movies' },
+  { key: 'popular', label: 'New & Popular' },
+  { key: 'mylist', label: 'My List', to: '/watch-later' },
+  { key: 'history', label: 'History', to: '/history' },
+];
 
 // Debounced query-suggestion behaviour.
 const DEBOUNCE_MS = 350; // Delay before suggestions are fetched while typing.
@@ -54,6 +61,7 @@ export default function Navbar() {
   };
 
   const navigate = useNavigate();
+  const { pathname } = useLocation();
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 12);
@@ -145,18 +153,25 @@ export default function Navbar() {
 
         {/* Desktop links */}
         <ul className="ml-4 hidden items-center gap-5 lg:flex">
-          {NAV_LINKS.map((link, i) => (
-            <li key={link}>
-              <a
-                href="#"
-                className={`text-sm transition hover:text-white ${
-                  i === 0 ? 'font-semibold text-foreground' : 'text-muted'
-                }`}
-              >
-                {link}
-              </a>
-            </li>
-          ))}
+          {NAV_LINKS.map((link) => {
+            const active = link.to ? (link.to === '/' ? pathname === '/' : pathname.startsWith(link.to)) : false;
+            const cls = `text-sm transition hover:text-white ${
+              active ? 'font-semibold text-foreground' : 'text-muted'
+            }`;
+            return (
+              <li key={link.key}>
+                {link.to ? (
+                  <Link to={link.to} className={cls}>
+                    {link.label}
+                  </Link>
+                ) : (
+                  <a href="#" className={cls}>
+                    {link.label}
+                  </a>
+                )}
+              </li>
+            );
+          })}
         </ul>
 
         {/* Spacer keeps search centered-ish without flex-grow pushing it far */}
@@ -217,19 +232,31 @@ export default function Navbar() {
             className="mb-4"
           />
           <ul className="space-y-1">
-            {NAV_LINKS.map((link, i) => (
-              <li key={link}>
-                <a
-                  href="#"
-                  onClick={() => setMenuOpen(false)}
-                  className={`block rounded-md px-3 py-2.5 transition hover:bg-ink-raised ${
-                    i === 0 ? 'font-semibold text-brand' : 'text-foreground'
-                  }`}
-                >
-                  {link}
-                </a>
-              </li>
-            ))}
+            {NAV_LINKS.map((link) => {
+              return (
+                <li key={link.key}>
+                  {link.to ? (
+                    <Link
+                      to={link.to}
+                      onClick={() => setMenuOpen(false)}
+                      className="block rounded-md px-3 py-2.5 transition hover:bg-ink-raised
+                                 text-foreground"
+                    >
+                      {link.label}
+                    </Link>
+                  ) : (
+                    <a
+                      href="#"
+                      onClick={() => setMenuOpen(false)}
+                      className="block rounded-md px-3 py-2.5 transition hover:bg-ink-raised
+                                 text-foreground"
+                    >
+                      {link.label}
+                    </a>
+                  )}
+                </li>
+              );
+            })}
           </ul>
           <div className="mt-4 border-t border-ink-border pt-4">
             <UserAvatar name="Nina K." />

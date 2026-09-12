@@ -100,9 +100,37 @@ export function getHistory() {
 export function logPlayed(movie) {
   if (!movie?.id) return;
   let items = getHistory().filter((e) => e.movie.id !== movie.id);
-  items.unshift({ movie: snapshot(movie), watchedAt: Date.now() });
+  items.unshift({
+    movie: snapshot(movie),
+    watchedAt: Date.now(),
+    progressSeconds: 0,
+    durationSeconds: Math.round((movie.runtime || 0) * 60),
+  });
   if (items.length > MAX_HISTORY) items = items.slice(0, MAX_HISTORY);
   writeJSON(HISTORY_KEY, items);
+}
+
+/**
+ * Update how far a movie was watched (in seconds). Only ever stores increases,
+ * so a quick visit or scrubbing backwards never reduces progress.
+ */
+export function updateWatchProgress(id, seconds, durationSeconds) {
+  if (id == null) return;
+  const items = getHistory();
+  let changed = false;
+  const next = items.map((e) => {
+    if (e.movie.id === id && seconds > (e.progressSeconds || 0)) {
+      changed = true;
+      return {
+        ...e,
+        progressSeconds: Math.round(seconds),
+        durationSeconds: durationSeconds || e.durationSeconds || 0,
+        updatedAt: Date.now(),
+      };
+    }
+    return e;
+  });
+  if (changed) writeJSON(HISTORY_KEY, next);
 }
 
 export function removeFromHistory(id) {

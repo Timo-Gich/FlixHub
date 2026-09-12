@@ -1,6 +1,8 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import HomePage from './pages/HomePage';
 import WatchPage from './pages/WatchPage';
+import WatchLaterPage from './pages/WatchLaterPage';
+import HistoryPage from './pages/HistoryPage';
 
 /**
  * Application root. Installs client-side routing so the VidKing player can live
@@ -16,6 +18,8 @@ export default function App() {
       <Routes>
         <Route path="/" element={<HomePage />} />
         <Route path="/watch/:id" element={<WatchPage />} />
+        <Route path="/watch-later" element={<WatchLaterPage />} />
+        <Route path="/history" element={<HistoryPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>

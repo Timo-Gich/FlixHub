@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { getPosterUrl, formatRating, formatYear } from '../services/tmdbService';
+import { subscribeLibrary, isSaved, toggleWatchLater } from '../services/libraryService';
 import { gradients } from '../data/movies';
 
 /**
@@ -9,12 +10,34 @@ import { gradients } from '../data/movies';
  * Hovering reveals the overview and a play affordance. The whole card links to
  * the watch page for that movie.
  * Props:
- *   - movie : a TMDb movie object (title, poster_path, vote_average, …)
- *   - index : optional numeric rank shown in the corner
+ *   - movie        : a TMDb movie object (title, poster_path, vote_average, …)
+ *   - index        : optional numeric rank shown in the corner
+ *   - saved        : optional controlled saved-state. When provided, the
+ *                    bookmark button calls onToggleSaved instead of writing to
+ *                    localStorage directly.
+ *   - onToggleSaved: (movie) => void
+ *   - onRemove     : (movie) => void — when provided, shows a ✕ remove button
+ *   - progress     : optional number 0..1 for a "Continue Watching" progress bar
  */
-export default function MovieCard({ movie, index }) {
+export default function MovieCard({ movie, index, saved, onToggleSaved, onRemove, progress }) {
   const [hover, setHover] = useState(false);
   const [imgFailed, setImgFailed] = useState(false);
+  const controlled = typeof saved === 'boolean';
+  const [selfSaved, setSelfSaved] = useState(() =>
+    controlled ? saved : movie?.id ? isSaved(movie.id) : false,
+  );
+
+  // Keep the bookmark state in sync with external changes (and our own writes).
+  useEffect(() => {
+    if (controlled) {
+      setSelfSaved(!!saved);
+      return;
+    }
+    if (!movie?.id) return;
+    setSelfSaved(isSaved(movie.id));
+    return subscribeLibrary(() => setSelfSaved(isSaved(movie.id)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [controlled, saved, movie.id]);
 
   if (!movie) return null;
 
@@ -24,6 +47,17 @@ export default function MovieCard({ movie, index }) {
   const year = formatYear(movie.release_date ?? movie.first_air_date);
   const overview = movie.overview;
   const gradient = gradients[index % gradients.length];
+  const savedState = controlled ? saved : selfSaved;
+
+  const handleBookmark = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (controlled) {
+      onToggleSaved?.(movie);
+    } else {
+      setSelfSaved(toggleWatchLater(movie));
+    }
+  };
 
   return (
     <Link
@@ -54,7 +88,45 @@ export default function MovieCard({ movie, index }) {
 
       {/* Card content */}
       <div className="relative flex h-full flex-col justify-end bg-gradient-to-t from-black/80 via-black/20 to-transparent p-3">
-        {typeof index === 'number' && (
+        {/* Bookmark (watch later) toggle — always available */}
+        <button
+          type="button"
+          onClick={handleBookmark}
+          aria-pressed={savedState}
+          aria-label={savedState ? 'Remove from Watch Later' : 'Add to Watch Later'}
+          title={savedState ? 'Remove from Watch Later' : 'Add to Watch Later'}
+          className={`absolute left-1 top-1 z-10 flex h-8 w-8 items-center justify-center rounded-full
+                       shadow transition hover:scale-105 ${
+                         savedState ? 'bg-ink-raised text-brand ring-1 ring-brand/60' : 'bg-black/60 text-white'
+                       }`}
+        >
+          <svg viewBox="0 0 24 24" className={`h-4 w-4 ${
+            savedState ? 'fill-brand' : 'fill-none stroke-current'
+          }`} strokeWidth="2" strokeLinejoin="round" aria-hidden="true">
+            <path d="M7 4h10v5h-10v9h10v-3h-10z" />
+          </svg>
+        </button>
+
+        {onRemove && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onRemove(movie);
+            }}
+            aria-label="Remove"
+            title="Remove"
+            className="absolute right-1 top-1 z-10 flex h-8 w-8 items-center justify-center rounded-full
+                       bg-black/60 text-white/90 shadow transition hover:bg-brand"
+          >
+            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M6 6l12 12M18 6l-12 12" />
+            </svg>
+          </button>
+        )}
+
+        {!onRemove && typeof index === 'number' && (
           <span className="absolute right-2 top-2 text-4xl font-black text-white/30 drop-shadow">
             {index < 10 ? `0${index}` : index}
           </span>
@@ -77,6 +149,18 @@ export default function MovieCard({ movie, index }) {
           {year && <span className="text-xs text-foreground/70">{year}</span>}
           <span className="h-px flex-1 bg-gradient-to-r from-white/40 to-transparent" />
         </span>
+
+        {typeof progress === 'number' && (
+          <span
+            className="mt-1 h-1 w-full overflow-hidden rounded-full bg-ink-border"
+            aria-label={`${Math.round(Math.max(0, Math.min(progress, 1)) * 100)}% watched`}
+          >
+            <span
+              className="block h-full rounded-full bg-brand"
+              style={{ width: `${Math.max(0, Math.min(progress, 1)) * 100}%` }}
+            />
+          </span>
+        )}
 
         {/* Hover overlay with overview + play */}
         <span

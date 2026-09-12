@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { fetchMovieDetails } from '../services/tmdbService';
 import { useMovieData } from '../hooks/useMovieData';
+import { logPlayed, updateWatchProgress } from '../services/libraryService';
 
 const VIDKING_EMBED_BASE = 'https://www.vidking.net/embed/movie/';
 
@@ -68,6 +69,35 @@ export default function WatchPage() {
     () => fetchMovieDetails(id),
     [id],
   );
+
+  // Auto-log to watch history once the movie is known (fires on "play").
+  useEffect(() => {
+    if (details?.id) logPlayed(details);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [details?.id]);
+
+  // Track watch progress periodically. VidKing doesn't expose playback
+  // position, so we approximate progress by time spent on the player and
+  // persist it every few seconds plus on leaving the page.
+  const progressRef = useRef(0);
+  useEffect(() => {
+    if (!details?.id) return;
+    const durationSeconds = Math.round((details.runtime || 0) * 60);
+    progressRef.current = 0;
+    const write = () => {
+      progressRef.current += 5;
+      updateWatchProgress(details.id, progressRef.current, durationSeconds);
+    };
+    const id = setInterval(write, 5000);
+    const cleanup = () => {
+      clearInterval(id);
+      if (progressRef.current > 0) {
+        updateWatchProgress(details.id, progressRef.current, durationSeconds);
+      }
+    };
+    return cleanup;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [details?.id]);
 
   return (
     <div className="relative flex min-h-screen flex-col bg-ink">

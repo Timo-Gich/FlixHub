@@ -1,0 +1,93 @@
+@import "tailwindcss";
+
+/* ----------------------------------------------------------------------------
+   Dark theme by default. The entire app lives on a near-black backdrop with
+   the signature Netflix red used as the primary accent.
+---------------------------------------------------------------------------- */
+:root {
+  color-scheme: dark;
+}
+
+@theme {
+  /* Brand accent (Netflix red) */
+  --color-brand: #e50914;
+  --color-brand-dark: #b20710;
+  --color-brand-light: #ff4754;
+
+  /* Neutral dark surfaces */
+  --color-ink: #141414;
+  --color-ink-soft: #181818;
+  --color-ink-raised: #222222;
+  --color-ink-border: #3a3a3a;
+
+  /* Text */
+  --color-foreground: #ffffff;
+  --color-muted: #a3a3a3;
+
+  /* Fonts */
+  --font-sans: "Inter", "Segoe UI", system-ui, -apple-system, "Helvetica Neue",
+    Arial, sans-serif;
+}
+
+/* Base layer */
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+
+  /* Used by the mobile nav drawer. */
+  @keyframes dropdown {
+    from {
+      opacity: 0;
+      transform: translateY(-8px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background-color: var(--color-ink);
+    color: var(--color-foreground);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  ::selection {
+    background-color: var(--color-brand);
+    color: #ffffff;
+  }
+
+  /* Custom scrollbar for the dark theme */
+  ::-webkit-scrollbar {
+    width: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: var(--color-ink);
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--color-ink-border);
+    border-radius: 9999px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--color-brand);
+  }
+}
+
+/* Thin horizontal scroll helper for card rows */
+@utility scrollbar-hide {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* Subtle text-shadow used on hero + cards over imagery */
+@utility text-shadow-hero {
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9), 0 2px 8px rgba(0, 0, 0, 0.6);
+}

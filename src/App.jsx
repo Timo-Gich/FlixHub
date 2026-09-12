@@ -3,6 +3,9 @@ import HomePage from './pages/HomePage';
 import WatchPage from './pages/WatchPage';
 import WatchLaterPage from './pages/WatchLaterPage';
 import HistoryPage from './pages/HistoryPage';
+import MoviesPage from './pages/MoviesPage';
+import SeriesPage from './pages/SeriesPage';
+import NewAndPopularPage from './pages/NewAndPopularPage';
 
 /**
  * Application root. Installs client-side routing so the VidKing player can live
@@ -20,6 +23,9 @@ export default function App() {
         <Route path="/watch/:id" element={<WatchPage />} />
         <Route path="/watch-later" element={<WatchLaterPage />} />
         <Route path="/history" element={<HistoryPage />} />
+        <Route path="/movies" element={<MoviesPage />} />
+        <Route path="/series" element={<SeriesPage />} />
+        <Route path="/new-popular" element={<NewAndPopularPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>

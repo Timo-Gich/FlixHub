@@ -2,16 +2,15 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import Logo from './Logo';
 import SearchBar from './SearchBar';
-import UserAvatar from './UserAvatar';
 import SearchResults from './SearchResults';
 import SearchSuggestions from './SearchSuggestions';
 import { searchMovies } from '../services/tmdbService';
 
 const NAV_LINKS = [
   { key: 'home', label: 'Home', to: '/' },
-  { key: 'series', label: 'Series' },
-  { key: 'movies', label: 'Movies' },
-  { key: 'popular', label: 'New & Popular' },
+  { key: 'series', label: 'Series', to: '/series' },
+  { key: 'movies', label: 'Movies', to: '/movies' },
+  { key: 'popular', label: 'New & Popular', to: '/new-popular' },
   { key: 'mylist', label: 'My List', to: '/watch-later' },
   { key: 'history', label: 'History', to: '/history' },
 ];
@@ -187,10 +186,6 @@ export default function Navbar() {
           className="hidden max-w-sm md:block lg:w-64"
         />
 
-        <div className="hidden sm:block">
-          <UserAvatar name="Nina K." />
-        </div>
-
         {/* Mobile hamburger toggle */}
         <button
           type="button"
@@ -258,9 +253,6 @@ export default function Navbar() {
               );
             })}
           </ul>
-          <div className="mt-4 border-t border-ink-border pt-4">
-            <UserAvatar name="Nina K." />
-          </div>
         </div>
       )}
 

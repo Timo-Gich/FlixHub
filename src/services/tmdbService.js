@@ -106,6 +106,61 @@ export function fetchPopularMovies({ page = 1 } = {}) {
 }
 
 /**
+ * Movies currently in theatres.
+ * @param {object} [options]
+ * @param {number} [options.page=1]
+ */
+export function fetchNowPlayingMovies({ page = 1 } = {}) {
+  return fetchFromTMDB('/movie/now_playing', { page });
+}
+
+/**
+ * Highest-rated movies.
+ * @param {object} [options]
+ * @param {number} [options.page=1]
+ */
+export function fetchTopRatedMovies({ page = 1 } = {}) {
+  return fetchFromTMDB('/movie/top_rated', { page });
+}
+
+/**
+ * Upcoming movies.
+ * @param {object} [options]
+ * @param {number} [options.page=1]
+ */
+export function fetchUpcomingMovies({ page = 1 } = {}) {
+  return fetchFromTMDB('/movie/upcoming', { page });
+}
+
+/**
+ * Trending TV shows (for the Series section).
+ * @param {object} [options]
+ * @param {'day'|'week'} [options.window='week']
+ * @param {number} [options.page=1]
+ */
+export function fetchTrendingTV({ window = 'week', page = 1 } = {}) {
+  return fetchFromTMDB(`/trending/tv/${window}`, { page });
+}
+
+/**
+ * Popular TV shows.
+ * @param {object} [options]
+ * @param {number} [options.page=1]
+ */
+export function fetchPopularTV({ page = 1 } = {}) {
+  return fetchFromTMDB('/tv/popular', { page });
+}
+
+/**
+ * TV shows currently airing.
+ * @param {object} [options]
+ * @param {number} [options.page=1]
+ */
+export function fetchOnTheAirTV({ page = 1 } = {}) {
+  return fetchFromTMDB('/tv/on_the_air', { page });
+}
+
+/**
  * Search for movies by (fuzzy) title.
  * @param {string} query
  * @param {object} [options]

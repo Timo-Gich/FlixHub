@@ -4,7 +4,7 @@ import Logo from './Logo';
 import SearchBar from './SearchBar';
 import SearchResults from './SearchResults';
 import SearchSuggestions from './SearchSuggestions';
-import { searchMovies } from '../services/tmdbService';
+import { searchAll } from '../services/tmdbService';
 
 const NAV_LINKS = [
   { key: 'home', label: 'Home', to: '/' },
@@ -90,7 +90,7 @@ export default function Navbar() {
     setSuggestionsLoading(true);
     const timer = setTimeout(async () => {
       try {
-        const data = await searchMovies(term);
+        const data = await searchAll(term);
         if (term !== queryRef.current.trim()) return; // stale response
         setSuggestions(data.results?.slice(0, MAX_SUGGESTIONS) ?? []);
       } catch {
@@ -112,7 +112,7 @@ export default function Navbar() {
     setSuggestionsActive(false);
     setSuggestionsLoading(false);
     try {
-      const data = await searchMovies(term);
+      const data = await searchAll(term);
       setResults(data.results ?? []);
     } catch (err) {
       setSearchError(err);
@@ -133,9 +133,11 @@ export default function Navbar() {
     setSuggestionsLoading(false);
   };
 
-  // Clicking a suggestion or search result goes straight to the player.
+  // Clicking a suggestion or search result goes to its detail/player page.
   const openMovie = (movie) => {
-    if (movie?.id != null) navigate(`/watch/${movie.id}`);
+    if (movie?.id == null) return;
+    const isTv = movie.media_type === 'tv' || (movie.name && !movie.title);
+    navigate(isTv ? `/tv/${movie.id}` : `/watch/${movie.id}`);
   };
 
   return (

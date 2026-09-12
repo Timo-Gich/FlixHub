@@ -97,7 +97,7 @@ export function getHistory() {
  * Record a movie as played. Upserts by id (re-watching moves it to the front
  * rather than duplicating), then trims to MAX_HISTORY (oldest dropped).
  */
-export function logPlayed(movie) {
+export function logPlayed(movie, opts = {}) {
   if (!movie?.id) return;
   let items = getHistory().filter((e) => e.movie.id !== movie.id);
   items.unshift({
@@ -105,6 +105,9 @@ export function logPlayed(movie) {
     watchedAt: Date.now(),
     progressSeconds: 0,
     durationSeconds: Math.round((movie.runtime || 0) * 60),
+    type: opts.type,
+    season: opts.season,
+    episode: opts.episode,
   });
   if (items.length > MAX_HISTORY) items = items.slice(0, MAX_HISTORY);
   writeJSON(HISTORY_KEY, items);

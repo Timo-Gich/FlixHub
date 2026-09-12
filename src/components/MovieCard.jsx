@@ -18,8 +18,19 @@ import { gradients } from '../data/movies';
  *   - onToggleSaved: (movie) => void
  *   - onRemove     : (movie) => void — when provided, shows a ✕ remove button
  *   - progress     : optional number 0..1 for a "Continue Watching" progress bar
+ *   - to           : optional link override (e.g. a TV watch URL)
+ *   - meta         : optional short label shown near the year (e.g. "S1 E2")
  */
-export default function MovieCard({ movie, index, saved, onToggleSaved, onRemove, progress }) {
+export default function MovieCard({
+  movie,
+  index,
+  saved,
+  onToggleSaved,
+  onRemove,
+  progress,
+  to,
+  meta,
+}) {
   const [hover, setHover] = useState(false);
   const [imgFailed, setImgFailed] = useState(false);
   const controlled = typeof saved === 'boolean';
@@ -48,6 +59,9 @@ export default function MovieCard({ movie, index, saved, onToggleSaved, onRemove
   const overview = movie.overview;
   const gradient = gradients[index % gradients.length];
   const savedState = controlled ? saved : selfSaved;
+  // TV entries (from /tv endpoints) expose `name` instead of `title`.
+  const isTV = movie.media_type === 'tv' || (movie.name && !movie.title);
+  const linkTo = to ?? (isTV ? `/tv/${movie.id}` : `/watch/${movie.id}`);
 
   const handleBookmark = (e) => {
     e.preventDefault();
@@ -61,7 +75,7 @@ export default function MovieCard({ movie, index, saved, onToggleSaved, onRemove
 
   return (
     <Link
-      to={`/watch/${movie.id}`}
+      to={linkTo}
       aria-label={`Watch ${title}`}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
@@ -146,6 +160,11 @@ export default function MovieCard({ movie, index, saved, onToggleSaved, onRemove
           {title}
         </span>
         <span className="mt-1 flex items-center gap-2">
+          {meta && (
+            <span className="rounded bg-brand/15 px-1.5 text-[11px] font-bold leading-none text-brand-light">
+              {meta}
+            </span>
+          )}
           {year && <span className="text-xs text-foreground/70">{year}</span>}
           <span className="h-px flex-1 bg-gradient-to-r from-white/40 to-transparent" />
         </span>

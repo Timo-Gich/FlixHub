@@ -176,6 +176,75 @@ export function searchMovies(query, { page = 1 } = {}) {
 }
 
 /**
+ * Search for TV shows by title.
+ * @param {string} query
+ * @param {object} [options]
+ * @param {number} [options.page=1]
+ */
+export function searchTV(query, { page = 1 } = {}) {
+  const trimmed = (query ?? '').trim();
+  if (!trimmed) {
+    return Promise.reject(new TMDBError('Please enter a search term.'));
+  }
+  return fetchFromTMDB('/search/tv', { query: trimmed, page, include_adult: 'false' });
+}
+
+/**
+ * Combined movie + TV search, tagged with media_type. TV failures are treated
+ * as non-fatal so a movie-only result still returns.
+ */
+export async function searchAll(query, { page = 1 } = {}) {
+  const movieRes = await searchMovies(query, { page });
+  let tvRes = { results: [] };
+  try {
+    tvRes = await searchTV(query, { page });
+  } catch {
+    /* TV search is secondary — ignore its errors */
+  }
+  const seen = new Set();
+  const results = [
+    ...movieRes.results.map((r) => ({ ...r, media_type: r.media_type || 'movie' })),
+    ...tvRes.results.map((r) => ({ ...r, media_type: r.media_type || 'tv' })),
+  ].filter((r) => {
+    const key = `${r.media_type}-${r.id}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+  return {
+    page,
+    results,
+    total_pages: Math.max(movieRes.total_pages || 1, tvRes.total_pages || 1),
+    total_results: (movieRes.total_results || 0) + (tvRes.total_results || 0),
+  };
+}
+
+/**
+ * Full metadata for a TV series by id, including its seasons.
+ * @param {number|string} id
+ */
+export function fetchTVDetails(id) {
+  if (id == null || Number.isNaN(Number(id))) {
+    return Promise.reject(new TMDBError('A valid TV id is required.'));
+  }
+  return fetchFromTMDB(`/tv/${id}`, {
+    append_to_response: 'videos,credits,recommendations',
+  });
+}
+
+/**
+ * The list of episodes for a given season of a TV series.
+ * @param {number|string} id          TV series id
+ * @param {number|string} seasonNumber
+ */
+export function fetchTVSeason(id, seasonNumber) {
+  if (id == null || Number.isNaN(Number(id)) || seasonNumber == null) {
+    return Promise.reject(new TMDBError('A valid TV id and season are required.'));
+  }
+  return fetchFromTMDB(`/tv/${id}/season/${seasonNumber}`, {});
+}
+
+/**
  * Full metadata for a single movie by its TMDb id.
  * @param {number|string} movieId
  * @returns {Promise<object>}

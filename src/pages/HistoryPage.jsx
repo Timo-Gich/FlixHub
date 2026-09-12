@@ -32,6 +32,12 @@ function HistoryRow({ entry, onRemove }) {
   const movie = entry.movie;
   const poster = getPosterUrl(movie.poster_path);
   const year = formatYear(movie.release_date ?? movie.first_air_date);
+  // TV entries (with season/episode) should open the TV player.
+  const isTv = entry.type === 'tv';
+  const watchHref =
+    isTv && entry.season != null && entry.episode != null
+      ? `/watch/tv/${movie.id}/${entry.season}/${entry.episode}`
+      : `/watch/${movie.id}`;
   const [tx, setTx] = useState(0);
   const [dragging, setDragging] = useState(false);
   const startRef = useRef(null);
@@ -104,7 +110,7 @@ function HistoryRow({ entry, onRemove }) {
         style={{ transform: `translateX(${tx}px)`, transition: dragging ? 'none' : 'transform 0.2s ease-out' }}
       >
         <Link
-          to={`/watch/${movie.id}`}
+          to={watchHref}
           className="flex shrink-0 items-center rounded-md ring-1 ring-ink-border transition ring-brand/0 hover:ring-brand"
           aria-label={`Watch ${movie.title}`}
         >

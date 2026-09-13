@@ -8,8 +8,8 @@ import { searchAll } from '../services/tmdbService';
 
 const NAV_LINKS = [
   { key: 'home', label: 'Home', to: '/' },
-  { key: 'series', label: 'Series', to: '/series' },
   { key: 'movies', label: 'Movies', to: '/movies' },
+  { key: 'series', label: 'Series', to: '/series' },
   { key: 'popular', label: 'New & Popular', to: '/new-popular' },
   { key: 'mylist', label: 'Watchlist', to: '/watch-later' },
   { key: 'history', label: 'History', to: '/history' },

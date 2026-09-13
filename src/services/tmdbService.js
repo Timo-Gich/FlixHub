@@ -190,32 +190,28 @@ export function searchTV(query, { page = 1 } = {}) {
 }
 
 /**
- * Combined movie + TV search, tagged with media_type. TV failures are treated
- * as non-fatal so a movie-only result still returns.
+ * Search movies and TV shows together. TMDb's multi-search endpoint returns
+ * both media types in one response; people are excluded because this UI only
+ * opens movie and TV detail pages.
  */
 export async function searchAll(query, { page = 1 } = {}) {
-  const movieRes = await searchMovies(query, { page });
-  let tvRes = { results: [] };
-  try {
-    tvRes = await searchTV(query, { page });
-  } catch {
-    /* TV search is secondary — ignore its errors */
+  const trimmed = (query ?? '').trim();
+  if (!trimmed) {
+    return Promise.reject(new TMDBError('Please enter a search term.'));
   }
-  const seen = new Set();
-  const results = [
-    ...movieRes.results.map((r) => ({ ...r, media_type: r.media_type || 'movie' })),
-    ...tvRes.results.map((r) => ({ ...r, media_type: r.media_type || 'tv' })),
-  ].filter((r) => {
-    const key = `${r.media_type}-${r.id}`;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
-  return {
+  const response = await fetchFromTMDB('/search/multi', {
+    query: trimmed,
     page,
+    include_adult: 'false',
+  });
+  const results = (response.results ?? []).filter(
+    (result) => result.media_type === 'movie' || result.media_type === 'tv',
+  );
+  return {
+    page: response.page ?? page,
     results,
-    total_pages: Math.max(movieRes.total_pages || 1, tvRes.total_pages || 1),
-    total_results: (movieRes.total_results || 0) + (tvRes.total_results || 0),
+    total_pages: response.total_pages ?? 1,
+    total_results: results.length,
   };
 }
 

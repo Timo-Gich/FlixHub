@@ -46,8 +46,9 @@ export default function SearchSuggestions({ query, suggestions = [], loading, on
               const poster = getPosterUrl(movie.poster_path);
               const year = formatYear(movie.release_date ?? movie.first_air_date);
               const title = movie.title || movie.name || 'Untitled';
+              const type = movie.media_type === 'tv' ? 'TV Show' : 'Movie';
               return (
-                <li key={movie.id}>
+                <li key={`${movie.media_type}-${movie.id}`}>
                   <button
                     type="button"
                     onClick={() => onSelect(movie)}
@@ -71,7 +72,10 @@ export default function SearchSuggestions({ query, suggestions = [], loading, on
                     )}
                     <span className="flex min-w-0 flex-1 flex-col">
                       <span className="line-clamp-1 text-sm font-semibold text-foreground">{title}</span>
-                      {year && <span className="text-xs text-muted">{year}</span>}
+                      <span className="text-xs text-muted">
+                        {type}
+                        {year && ` · ${year}`}
+                      </span>
                     </span>
                     <svg viewBox="0 0 24 24" className="h-4 w-4 text-muted" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
                       <path d="M6 12h12M12 6v12" />

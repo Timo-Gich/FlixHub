@@ -8,6 +8,8 @@ function ResultRow({ movie, onSelect }) {
   const poster = getPosterUrl(movie.poster_path);
   const year = formatYear(movie.release_date ?? movie.first_air_date);
   const rating = formatRating(movie.vote_average);
+  const title = movie.title || movie.name || 'Untitled';
+  const type = movie.media_type === 'tv' ? 'TV Show' : 'Movie';
 
   return (
     <li>
@@ -20,7 +22,7 @@ function ResultRow({ movie, onSelect }) {
         {poster ? (
           <img
             src={poster}
-            alt={`${movie.title} poster`}
+            alt={`${title} poster`}
             loading="lazy"
             className="h-20 w-14 shrink-0 object-cover bg-ink-raised"
             onError={(e) => {
@@ -29,14 +31,15 @@ function ResultRow({ movie, onSelect }) {
           />
         ) : (
           <span className="flex h-20 w-14 shrink-0 items-center justify-center rounded-l-md bg-gradient-to-br from-brand/60 to-ink-raised" aria-hidden="true">
-            <span className="text-xs font-black text-white/40">{movie.title?.[0]?.toUpperCase() || '?'}</span>
+            <span className="text-xs font-black text-white/40">{title[0]?.toUpperCase() || '?'}</span>
           </span>
         )}
         <span className="flex min-w-0 flex-col justify-center pr-3">
-          <span className="line-clamp-2 text-sm font-semibold text-foreground">{movie.title}</span>
+          <span className="line-clamp-2 text-sm font-semibold text-foreground">{title}</span>
           <span className="mt-1 text-xs text-muted">
+            {type}
             {year && `${year}`}
-            {year && rating && ' · '}
+            {(year || rating) && ' · '}
             {rating && `★ ${rating}`}
           </span>
         </span>
@@ -102,7 +105,7 @@ export default function SearchResults({ query, results = [], loading, error, onS
         {!loading && !error && results.length > 0 && (
           <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
             {results.map((movie) => (
-              <ResultRow key={movie.id} movie={movie} onSelect={onSelect} />
+              <ResultRow key={`${movie.media_type}-${movie.id}`} movie={movie} onSelect={onSelect} />
             ))}
           </ul>
         )}

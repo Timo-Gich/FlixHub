@@ -143,6 +143,28 @@ export function fetchTrendingTV({ window = 'week', page = 1 } = {}) {
 }
 
 /**
+ * Trending movies and TV shows combined for mixed discovery surfaces.
+ * Results alternate between movies and TV shows where both lists have data.
+ */
+export async function fetchTrendingAll({ page = 1 } = {}) {
+  const [movies, shows] = await Promise.all([
+    fetchTrendingMovies({ page }),
+    fetchTrendingTV({ page }),
+  ]);
+  const movieResults = (movies.results ?? []).map((movie) => ({ ...movie, media_type: 'movie' }));
+  const showResults = (shows.results ?? []).map((show) => ({ ...show, media_type: 'tv' }));
+  const results = [];
+  const maxLength = Math.max(movieResults.length, showResults.length);
+
+  for (let index = 0; index < maxLength; index++) {
+    if (movieResults[index]) results.push(movieResults[index]);
+    if (showResults[index]) results.push(showResults[index]);
+  }
+
+  return { page, results };
+}
+
+/**
  * Popular TV shows.
  * @param {object} [options]
  * @param {number} [options.page=1]

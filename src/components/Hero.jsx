@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  fetchTrendingMovies,
+  fetchTrendingAll,
   getBackdropUrl,
   formatRating,
   formatYear,
@@ -9,7 +9,7 @@ import {
 import { useMovieData } from '../hooks/useMovieData';
 import { gradients } from '../data/movies';
 
-const MAX_SLIDES = 5; // Number of trending titles in the carousel.
+const MAX_SLIDES = 10; // Number of trending titles in the carousel.
 const ROTATE_MS = 10000; // Autoplay interval.
 
 /**
@@ -18,7 +18,7 @@ const ROTATE_MS = 10000; // Autoplay interval.
  * overview and a Play button. Rotates automatically and pauses on hover/focus.
  */
 export default function Hero() {
-  const { data, loading, error, reload } = useMovieData(fetchTrendingMovies, []);
+  const { data, loading, error, reload } = useMovieData(fetchTrendingAll, []);
 
   const slides = (data?.results ?? []).slice(0, MAX_SLIDES);
   const slideCount = slides.length;
@@ -40,13 +40,14 @@ export default function Hero() {
   const markBackdropBroken = (id) => setBrokenBackdrops((prev) => ({ ...prev, [id]: true }));
 
   const navigate = useNavigate();
-  const watchUrl = (movieId) => `/watch/${movieId}`;
+  const watchUrl = (movie) =>
+    movie.media_type === 'tv' ? `/tv/${movie.id}` : `/watch/${movie.id}`;
 
   return (
     <section
       role="region"
       aria-roledescription="carousel"
-      aria-label="Trending film highlights"
+      aria-label="Trending movie and TV highlights"
       aria-live="off"
       onMouseEnter={() => setPaused(true)}
       onMouseLeave={() => setPaused(false)}
@@ -103,10 +104,10 @@ export default function Hero() {
 
         return (
           <div
-            key={movie.id}
+            key={`${movie.media_type}-${movie.id}`}
             aria-hidden={!isActive}
             onClick={() => {
-              if (isActive) navigate(watchUrl(movie.id));
+              if (isActive) navigate(watchUrl(movie));
             }}
             className={`absolute inset-0 transition-opacity duration-700 ${
               isActive ? 'cursor-pointer opacity-100' : 'pointer-events-none opacity-0'
@@ -164,7 +165,7 @@ export default function Hero() {
                 <div className="mt-1 flex flex-wrap items-center gap-3">
                   <button
                     type="button"
-                    onClick={() => navigate(watchUrl(movie.id))}
+                    onClick={() => navigate(watchUrl(movie))}
                     className="rounded-md bg-brand px-7 py-3 text-sm font-bold text-white shadow-md
                                shadow-brand/40 transition hover:bg-brand-dark focus:outline-none
                                focus-visible:ring-2 focus-visible:ring-white/70 active:scale-[0.98]"

@@ -3,15 +3,15 @@
 //
 // All functions return Promises and throw structured errors so the UI can
 // render loading / error states gracefully. The API key is read from the
-// environment (Vite exposes only `VITE_*` vars to the client):
+// environment (the `TMDB_` prefix is explicitly exposed by Vite):
 //
-//   import.meta.env.VITE_TMDB_API_KEY
+//   import.meta.env.TMDB_API_KEY
 //
 // Set it in your `.env` file (copy `.env.example` ➜ `.env`). A missing key
 // throws a clear, actionable error instead of failing silently.
 // ----------------------------------------------------------------------------
 
-const API_KEY = import.meta.env.VITE_TMDB_API_KEY;
+const API_KEY = import.meta.env.TMDB_API_KEY;
 const API_BASE_URL = 'https://api.themoviedb.org/3';
 const IMAGE_BASE_URL = 'https://image.tmdb.org/t/p';
 
@@ -40,7 +40,7 @@ export class TMDBError extends Error {
 async function fetchFromTMDB(endpoint, params = {}) {
   if (!API_KEY) {
     throw new TMDBError(
-      'TMDb API key is missing. Copy .env.example to .env and set VITE_TMDB_API_KEY, then restart the dev server.',
+      'TMDb API key is missing. Copy .env.example to .env and set TMDB_API_KEY, then restart the dev server.',
       { endpoint },
     );
   }

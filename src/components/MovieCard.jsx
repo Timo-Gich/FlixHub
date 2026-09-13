@@ -117,7 +117,7 @@ export default function MovieCard({
           <svg viewBox="0 0 24 24" className={`h-4 w-4 ${
             savedState ? 'fill-brand' : 'fill-none stroke-current'
           }`} strokeWidth="2" strokeLinejoin="round" aria-hidden="true">
-            <path d="M7 4h10v5h-10v9h10v-3h-10z" />
+            <path d="M6 3h12v18l-6-4-6 4V3z" />
           </svg>
         </button>
 

@@ -119,7 +119,7 @@ export default function WatchPage() {
                        hover:bg-brand hover:text-white"
           >
             <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <path d="M11 5l-5 0 0 7 5 0 0-7 5 0 0 7 5 0z" />
+              <path d="M19 12H5M12 19l-7-7 7-7" />
             </svg>
             Back
           </button>

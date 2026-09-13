@@ -48,17 +48,50 @@ async function makePng(size, path) {
 
   const rowBytes = size * 4;
   const raw = new Uint8Array((rowBytes + 1) * size);
+  const scale = size / 512;
+
+  function fillRect(x, y, width, height, color) {
+    const left = Math.round(x * scale);
+    const top = Math.round(y * scale);
+    const right = Math.min(size, Math.round((x + width) * scale));
+    const bottom = Math.min(size, Math.round((y + height) * scale));
+    for (let py = Math.max(0, top); py < bottom; py++) {
+      const row = py * (rowBytes + 1) + 1;
+      for (let px = Math.max(0, left); px < right; px++) {
+        const o = row + px * 4;
+        raw[o] = color[0];
+        raw[o + 1] = color[1];
+        raw[o + 2] = color[2];
+        raw[o + 3] = 0xff;
+      }
+    }
+  }
+
+  const black = [0x05, 0x05, 0x05];
+  const red = [0xe5, 0x09, 0x14];
+  const white = [0xff, 0xff, 0xff];
   for (let y = 0; y < size; y++) {
     const row = y * (rowBytes + 1);
     raw[row] = 0;
     for (let x = 0; x < size; x++) {
       const o = row + 1 + x * 4;
-      raw[o] = 0xe5;
-      raw[o + 1] = 0x09;
-      raw[o + 2] = 0x14;
+      raw[o] = black[0];
+      raw[o + 1] = black[1];
+      raw[o + 2] = black[2];
       raw[o + 3] = 0xff;
     }
   }
+
+  // Red F forms the back layer of the interlocked monogram.
+  fillRect(112, 112, 58, 288, red);
+  fillRect(112, 112, 228, 58, red);
+  fillRect(112, 226, 178, 54, red);
+
+  // White H crosses the F, then a red overpass restores the woven effect.
+  fillRect(224, 112, 58, 288, white);
+  fillRect(370, 112, 58, 288, white);
+  fillRect(224, 226, 204, 58, white);
+  fillRect(224, 226, 58, 58, red);
 
   const idat = await deflateAsync(raw);
   const idatArr = new Uint8Array(idat);

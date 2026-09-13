@@ -57,7 +57,7 @@ export default function WatchLaterPage() {
 
       <main className="mx-auto w-full max-w-[1600px] px-4 pt-24 sm:px-8">
         <div className="flex flex-wrap items-center gap-3">
-          <h1 className="text-2xl font-black text-white">Watch Later</h1>
+          <h1 className="text-2xl font-black text-white">Watchlist</h1>
           <span className="w-fit rounded bg-ink-raised px-2 py-0.5 text-xs font-semibold text-muted">
             {items.length} saved
           </span>

@@ -1,7 +1,7 @@
 const FOOTER_COLUMNS = [
   {
     heading: 'Browse',
-    links: ['Home', 'Series', 'Films', 'New & Popular', 'My List'],
+    links: ['Home', 'Series', 'Films', 'New & Popular', 'Watchlist'],
   },
   {
     heading: 'Company',

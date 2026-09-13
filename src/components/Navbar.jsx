@@ -11,7 +11,7 @@ const NAV_LINKS = [
   { key: 'series', label: 'Series', to: '/series' },
   { key: 'movies', label: 'Movies', to: '/movies' },
   { key: 'popular', label: 'New & Popular', to: '/new-popular' },
-  { key: 'mylist', label: 'My List', to: '/watch-later' },
+  { key: 'mylist', label: 'Watchlist', to: '/watch-later' },
   { key: 'history', label: 'History', to: '/history' },
 ];
 

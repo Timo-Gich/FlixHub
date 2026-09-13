@@ -107,8 +107,8 @@ export default function MovieCard({
           type="button"
           onClick={handleBookmark}
           aria-pressed={savedState}
-          aria-label={savedState ? 'Remove from Watch Later' : 'Add to Watch Later'}
-          title={savedState ? 'Remove from Watch Later' : 'Add to Watch Later'}
+          aria-label={savedState ? 'Remove from Watchlist' : 'Add to Watchlist'}
+          title={savedState ? 'Remove from Watchlist' : 'Add to Watchlist'}
           className={`absolute left-1 top-1 z-10 flex h-8 w-8 items-center justify-center rounded-full
                        shadow transition hover:scale-105 ${
                          savedState ? 'bg-ink-raised text-brand ring-1 ring-brand/60' : 'bg-black/60 text-white'

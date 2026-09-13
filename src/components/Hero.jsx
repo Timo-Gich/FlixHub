@@ -10,7 +10,7 @@ import { useMovieData } from '../hooks/useMovieData';
 import { gradients } from '../data/movies';
 
 const MAX_SLIDES = 5; // Number of trending titles in the carousel.
-const ROTATE_MS = 6000; // Autoplay interval.
+const ROTATE_MS = 10000; // Autoplay interval.
 
 /**
  * Full-width, auto-rotating hero carousel backdropped by the top trending

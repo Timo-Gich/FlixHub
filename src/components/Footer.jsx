@@ -58,7 +58,7 @@ export default function Footer() {
             </p>
           </div>
           <a
-            href="mailto:support@flixhub.example"
+            href="mailto:gichigotimothy@gmail.com"
             className="w-fit rounded-md border border-ink-border px-4 py-2.5 text-sm font-semibold text-white transition hover:border-brand hover:bg-brand"
           >
             Contact support

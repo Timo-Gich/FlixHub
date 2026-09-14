@@ -294,6 +294,11 @@ export function getPosterUrl(path, width = 342) {
   return getImageUrl(path, width);
 }
 
+/** Portrait headshot for cast members (used on detail pages). */
+export function getProfileUrl(path, width = 185) {
+  return getImageUrl(path, width);
+}
+
 /** Wide cinematic backdrop (16:9 landscape). */
 export function getBackdropUrl(path, width = 1280) {
   return getImageUrl(path, width);
@@ -311,4 +316,15 @@ export function formatYear(dateString) {
   if (!dateString) return null;
   const year = new Date(dateString).getFullYear();
   return Number.isNaN(year) ? null : String(year);
+}
+
+/** Formats a runtime in minutes into "2h 12m" (or "45m"). */
+export function formatRuntime(totalMinutes) {
+  const minutes = Number(totalMinutes);
+  if (!Number.isFinite(minutes) || minutes <= 0) return null;
+  const h = Math.floor(minutes / 60);
+  const m = Math.round(minutes % 60);
+  if (h && m) return `${h}h ${m}m`;
+  if (h) return `${h}h`;
+  return `${m}m`;
 }

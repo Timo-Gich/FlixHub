@@ -2,19 +2,25 @@ import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
+import DetailHero from '../components/DetailHero';
+import CastRow from '../components/CastRow';
+import RecommendationsRow from '../components/RecommendationsRow';
 import { useMovieData } from '../hooks/useMovieData';
 import {
   fetchTVDetails,
   fetchTVSeason,
   getBackdropUrl,
+  getPosterUrl,
   formatRating,
   formatYear,
 } from '../services/tmdbService';
 
 /**
- * /tv/:id — series detail page. Shows the show's header, a season selector and
- * the episode list for the selected season. Clicking an episode opens the TV
- * player (/watch/tv/:id/:season/:episode).
+ * /tv/:id — VidBox-style series detail page. Uses the shared DetailHero (same
+ * structure as movies) plus a cast row and a "Similar Shows" carousel, all from
+ * a single call to fetchTVDetails (append_to_response=credits,recommendations).
+ * A season selector + episode list let you open the TV player
+ * (/watch/tv/:id/:season/:episode).
  */
 export default function TVDetailPage() {
   const { id } = useParams();
@@ -41,72 +47,57 @@ export default function TVDetailPage() {
   const title = series?.name || 'Series';
   const rating = formatRating(series?.vote_average);
   const year = formatYear(series?.first_air_date);
+  const numSeasons = series?.number_of_seasons;
+  const meta = [
+    year,
+    numSeasons ? `${numSeasons} season${numSeasons === 1 ? '' : 's'}` : null,
+  ].filter(Boolean);
   const backdrop = series?.backdrop_path ? getBackdropUrl(series.backdrop_path) : null;
+  const poster = series?.poster_path ? getPosterUrl(series.poster_path, 500) : null;
+  const genres = series?.genres ?? [];
+  const overview = series?.overview;
+  const hasValidId = id !== undefined && !Number.isNaN(Number(id));
+  // Default "Play" starts the first episode of season 1.
+  const playHref = hasValidId ? `/watch/tv/${id}/1/1` : null;
 
   return (
     <div className="min-h-screen bg-ink text-foreground">
       <Navbar />
 
       <main className="pb-12">
-        {/* Header */}
-        <section className="relative overflow-hidden bg-gradient-to-br from-brand/40 via-ink-raised to-ink pb-10 pt-20">
-          {backdrop && (
-            <img src={backdrop} alt="" aria-hidden="true" className="absolute inset-0 h-full w-full object-cover" />
-          )}
-          <div className="absolute inset-0 bg-ink/70" aria-hidden="true" />
-          <div className="absolute inset-0 bg-gradient-to-r from-ink via-ink/70 to-transparent" aria-hidden="true" />
+        {loading && <div aria-hidden="true" className="h-[480px] w-full animate-pulse bg-ink-raised" />}
 
-          <div className="relative mx-auto flex max-w-[1600px] flex-col gap-4 px-4 sm:px-8">
-            {loading && (
-              <div className="space-y-4">
-                <div className="h-10 w-3/4 animate-pulse rounded bg-ink-raised" />
-                <div className="h-4 w-2/3 animate-pulse rounded bg-ink-raised" />
-              </div>
-            )}
-
-            {error && (
-              <div className="rounded-md border border-brand/30 bg-brand/5 p-6 text-center">
-                <h1 className="text-2xl font-black text-white">Series unavailable</h1>
-                <p className="mt-2 text-sm text-muted">{error.message}</p>
-                <button type="button" onClick={reload} className="mt-4 rounded-md bg-brand px-6 py-2.5 text-sm font-bold text-white transition hover:bg-brand-dark">
-                  Try again
-                </button>
-              </div>
-            )}
-
-            {series && !loading && !error && (
-              <>
-                <h1 className="text-shadow-hero text-4xl font-black text-white sm:text-5xl">{title}</h1>
-                {series.tagline && <p className="text-lg italic text-foreground/80">{series.tagline}</p>}
-                <p className="max-w-2xl text-shadow-hero line-clamp-4 text-sm text-foreground/90 sm:text-base">
-                  {series.overview}
-                </p>
-                <div className="flex flex-wrap items-center gap-3 text-sm text-foreground/80">
-                  {rating && (
-                    <span className="w-fit rounded bg-black/50 px-2 py-0.5 text-xs font-bold text-amber-400">
-                      ★ {rating} / 10
-                    </span>
-                  )}
-                  {year && <span>{year}</span>}
-                  {series.number_of_seasons && (
-                    <span>· {series.number_of_seasons} season{series.number_of_seasons === 1 ? '' : 's'}</span>
-                  )}
-                  {series.original_language && <span>· {series.original_language.toUpperCase()}</span>}
-                </div>
-              </>
-            )}
+        {error && (
+          <div className="flex min-h-[60vh] items-center justify-center px-6">
+            <div className="w-full max-w-xl rounded-md border border-brand/30 bg-brand/5 p-6 text-center">
+              <h1 className="text-2xl font-black text-white">Series unavailable</h1>
+              <p className="mt-2 text-sm text-muted">{error.message}</p>
+              <button
+                type="button"
+                onClick={reload}
+                className="mt-4 rounded-md bg-brand px-6 py-2.5 text-sm font-bold text-white transition hover:bg-brand-dark"
+              >
+                Try again
+              </button>
+            </div>
           </div>
-        </section>
+        )}
 
-        {/* Link back to all series */}
-        <div className="mx-auto w-full max-w-[1600px] px-4 py-4 sm:px-8">
-          <Link
-            to="/series"
-            className="inline-flex w-fit items-center gap-2 rounded-md bg-ink-raised px-3 py-1.5 text-sm font-semibold text-white ring-1 ring-ink-border transition hover:bg-brand"
-          >
-            ← Back to Series
-          </Link>
-        </div>
+        {series && !loading && !error && (
+          <>
+            <DetailHero
+              backdropUrl={backdrop}
+              posterUrl={poster}
+              title={title}
+              tagline={series.tagline}
+              meta={meta}
+              genres={genres}
+              rating={rating}
+              overview={overview}
+              playHref={playHref}
+            />
+          </>
+        )}
 
         {/* Episode picker */}
         {series && !loading && !error && (
@@ -173,6 +164,13 @@ export default function TVDetailPage() {
               </ul>
             )}
           </section>
+        )}
+
+        {series && !loading && !error && (
+          <>
+            <CastRow people={series.credits?.cast} />
+            <RecommendationsRow title="Similar Shows" items={series.recommendations?.results} />
+          </>
         )}
       </main>
 

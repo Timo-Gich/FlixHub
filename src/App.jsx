@@ -8,6 +8,7 @@ import SeriesPage from './pages/SeriesPage';
 import NewAndPopularPage from './pages/NewAndPopularPage';
 import TVDetailPage from './pages/TVDetailPage';
 import WatchTVPage from './pages/WatchTVPage';
+import MovieDetailPage from './pages/MovieDetailPage';
 import InfoPage from './pages/InfoPage';
 
 /**
@@ -24,6 +25,7 @@ export default function App() {
       <Routes>
         <Route path="/" element={<HomePage />} />
         <Route path="/watch/:id" element={<WatchPage />} />
+        <Route path="/movie/:id" element={<MovieDetailPage />} />
         <Route path="/watch/tv/:id/:season/:episode" element={<WatchTVPage />} />
         <Route path="/tv/:id" element={<TVDetailPage />} />
         <Route path="/watch-later" element={<WatchLaterPage />} />

@@ -137,7 +137,7 @@ export default function Navbar() {
   const openMovie = (movie) => {
     if (movie?.id == null) return;
     const isTv = movie.media_type === 'tv' || (movie.name && !movie.title);
-    navigate(isTv ? `/tv/${movie.id}` : `/watch/${movie.id}`);
+    navigate(isTv ? `/tv/${movie.id}` : `/movie/${movie.id}`);
   };
 
   return (

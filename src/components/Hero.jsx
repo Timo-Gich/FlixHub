@@ -41,7 +41,7 @@ export default function Hero() {
 
   const navigate = useNavigate();
   const watchUrl = (movie) =>
-    movie.media_type === 'tv' ? `/tv/${movie.id}` : `/watch/${movie.id}`;
+    movie.media_type === 'tv' ? `/tv/${movie.id}` : `/movie/${movie.id}`;
 
   return (
     <section

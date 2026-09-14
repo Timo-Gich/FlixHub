@@ -61,7 +61,8 @@ export default function MovieCard({
   const savedState = controlled ? saved : selfSaved;
   // TV entries (from /tv endpoints) expose `name` instead of `title`.
   const isTV = movie.media_type === 'tv' || (movie.name && !movie.title);
-  const linkTo = to ?? (isTV ? `/tv/${movie.id}` : `/watch/${movie.id}`);
+  // Movies now open a detail page; TV shows already link to their detail page.
+  const linkTo = to ?? (isTV ? `/tv/${movie.id}` : `/movie/${movie.id}`);
 
   const handleBookmark = (e) => {
     e.preventDefault();
@@ -76,7 +77,7 @@ export default function MovieCard({
   return (
     <Link
       to={linkTo}
-      aria-label={`Watch ${title}`}
+      aria-label={`View ${title}`}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
       className="group relative block aspect-[2/3] w-full overflow-hidden rounded-md

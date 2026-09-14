@@ -113,7 +113,7 @@ export default function WatchPage() {
         <div className="flex items-center gap-3 border-b border-ink-border bg-ink-raised px-3 py-2.5 text-sm shadow-md">
           <button
             type="button"
-            onClick={() => navigate('/')}
+            onClick={() => navigate(hasValidId ? `/movie/${id}` : '/')}
             className="inline-flex w-fit items-center gap-2 rounded-md bg-ink-raised px-3 py-1.5
                        font-semibold text-white ring-1 ring-ink-border transition
                        hover:bg-brand hover:text-white"

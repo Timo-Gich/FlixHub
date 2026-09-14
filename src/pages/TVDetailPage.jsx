@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import DetailHero from '../components/DetailHero';
@@ -28,9 +28,22 @@ export default function TVDetailPage() {
   const { data: series, loading, error, reload } = useMovieData(() => fetchTVDetails(id), [id]);
   const seasons = (series?.seasons ?? []).filter((s) => s.season_number > 0 && s.episode_count > 0);
 
+  // Optional deep-link from "Continue Watching" (?season=N&episode=M) so the
+  // episode list opens on the right season and highlights where to resume.
+  const [searchParams] = useSearchParams();
+  const resumeSeason = searchParams.get('season');
+  const resumeEpisode = searchParams.get('episode');
+
   const [season, setSeason] = useState(null);
   useEffect(() => {
     if (series && season === null) {
+      // Prefer the deep-linked season when it exists.
+      const requested = resumeSeason != null ? Number(resumeSeason) : null;
+      const match = requested != null ? seasons.find((s) => s.season_number === requested) : null;
+      if (match) {
+        setSeason(match.season_number);
+        return;
+      }
       const first = seasons[0];
       if (first) setSeason(first.season_number);
     }
@@ -43,6 +56,9 @@ export default function TVDetailPage() {
     [id, selectedSeason],
   );
   const episodes = seasonData?.episodes ?? [];
+  // Which episode (if any) the user left off on, to highlight as the resume point.
+  const resumeEpisodeNum = resumeEpisode != null ? Number(resumeEpisode) : null;
+  const showResumeHighlight = resumeSeason != null && Number(resumeSeason) === selectedSeason;
 
   const title = series?.name || 'Series';
   const rating = formatRating(series?.vote_average);
@@ -137,30 +153,47 @@ export default function TVDetailPage() {
 
             {!seasonLoading && !seasonError && episodes.length > 0 && (
               <ul className="mt-4 divide-y divide-ink-border">
-                {episodes.map((ep) => (
-                  <li key={ep.id} className="py-3">
-                    <Link
-                      to={`/watch/tv/${id}/${selectedSeason}/${ep.episode_number}`}
-                      className="group flex gap-4 hover:bg-ink-raised"
+                {episodes.map((ep) => {
+                  const isResume = showResumeHighlight && ep.episode_number === resumeEpisodeNum;
+                  return (
+                    <li
+                      key={ep.id}
+                      className={`py-3 ${
+                        isResume ? 'rounded-md bg-brand/10 px-3 ring-1 ring-brand/50' : ''
+                      }`}
                     >
-                      <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-md bg-brand/15 text-xs font-black text-brand-light">
-                        E{ep.episode_number}
-                      </span>
-                      <span className="flex min-w-0 flex-1 flex-col">
-                        <span className="text-sm font-semibold text-foreground">
-                          {ep.name || `Episode ${ep.episode_number}`}
+                      <Link
+                        to={`/watch/tv/${id}/${selectedSeason}/${ep.episode_number}`}
+                        className="group flex gap-4 hover:bg-ink-raised"
+                      >
+                        <span
+                          className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-md text-xs font-black ${
+                            isResume ? 'bg-brand text-white' : 'bg-brand/15 text-brand-light'
+                          }`}
+                        >
+                          E{ep.episode_number}
                         </span>
-                        {ep.overview && (
-                          <span className="mt-1 line-clamp-2 text-xs text-muted">{ep.overview}</span>
-                        )}
-                        {ep.air_date && <span className="mt-1 text-xs text-muted">{ep.air_date}</span>}
-                      </span>
-                      <svg viewBox="0 0 24 24" className="h-5 w-5 shrink-0 text-muted group-hover:text-white" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
-                        <path d="M9 5l6 3 4 3-4 3-6-8 6 11z" />
-                      </svg>
-                    </Link>
-                  </li>
-                ))}
+                        <span className="flex min-w-0 flex-1 flex-col">
+                          <span className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                            {ep.name || `Episode ${ep.episode_number}`}
+                            {isResume && (
+                              <span className="rounded bg-brand px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">
+                                Resume
+                              </span>
+                            )}
+                          </span>
+                          {ep.overview && (
+                            <span className="mt-1 line-clamp-2 text-xs text-muted">{ep.overview}</span>
+                          )}
+                          {ep.air_date && <span className="mt-1 text-xs text-muted">{ep.air_date}</span>}
+                        </span>
+                        <svg viewBox="0 0 24 24" className="h-5 w-5 shrink-0 text-muted group-hover:text-white" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+                          <path d="M9 5l6 3 4 3-4 3-6-8 6 11z" />
+                        </svg>
+                      </Link>
+                    </li>
+                  );
+                })}
               </ul>
             )}
           </section>

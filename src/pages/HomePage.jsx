@@ -41,12 +41,20 @@ export default function HomePage() {
               {continueWatching.map((entry) => {
                 const dur = entry.durationSeconds || 0;
                 const progress = dur > 0 ? Math.min((entry.progressSeconds || 0) / dur, 1) : null;
-                const meta = entry.type === 'tv' ? `S${entry.season} E${entry.episode}` : null;
+                const isTv = entry.type === 'tv';
+                const meta = isTv ? `S${entry.season} E${entry.episode}` : null;
+                // Resume by deep-linking to the detail page at the exact season
+                // and episode the user left off on (movies just go to /movie/:id).
+                const resumeTo =
+                  isTv && entry.season != null
+                    ? `/tv/${entry.movie.id}?season=${entry.season}${entry.episode != null ? `&episode=${entry.episode}` : ''}`
+                    : undefined;
                 return (
                   <MovieCard
                     key={entry.movie.id}
                     movie={entry.movie}
                     progress={progress}
+                    to={resumeTo}
                     meta={meta}
                   />
                 );

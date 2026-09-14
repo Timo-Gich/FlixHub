@@ -1,5 +1,11 @@
 import { Link } from 'react-router-dom';
 
+// Official TMDB logo (hosted by TMDb) used for API attribution. The image falls
+// back to text-only automatically if it ever fails to load.
+const TMDB_LOGO_URL =
+  'https://www.themoviedb.org/assets/2/v4/logos/v2/blue_square_2-d537fb228e3b8140ce4fce1956a93f9a.svg';
+const TMDB_WEBSITE = 'https://www.themoviedb.org';
+
 const FOOTER_COLUMNS = [
   {
     heading: 'Browse',
@@ -70,6 +76,29 @@ export default function Footer() {
             <p className="text-xs font-bold uppercase tracking-[0.18em] text-brand">FlixHub</p>
             <p className="mt-3 max-w-xs text-sm leading-relaxed text-muted">
               Thoughtful discovery for the films and series worth making time for.
+            </p>
+            <p className="mt-5 flex items-center gap-2 text-xs text-muted">
+              Powered by
+              <a
+                href={TMDB_WEBSITE}
+                target="_blank"
+                rel="noreferrer noopener"
+                aria-label="TMDB — The Movie Database"
+                className="inline-flex items-center transition opacity-90 hover:opacity-100"
+              >
+                <img
+                  src={TMDB_LOGO_URL}
+                  alt="TMDB"
+                  loading="lazy"
+                  onError={(e) => {
+                    e.currentTarget.style.display = 'none';
+                  }}
+                  className="h-5 w-auto"
+                />
+              </a>
+            </p>
+            <p className="mt-2 max-w-xs text-[11px] leading-relaxed text-muted/70">
+              This product uses the TMDB API but is not endorsed or certified by TMDB.
             </p>
           </div>
 

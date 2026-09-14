@@ -32,13 +32,9 @@ function HistoryRow({ entry, onRemove }) {
   const movie = entry.movie;
   const poster = getPosterUrl(movie.poster_path);
   const year = formatYear(movie.release_date ?? movie.first_air_date);
-  // TV entries (with season/episode) should open the TV player; movies open the
-  // movie detail page.
-  const isTv = entry.type === 'tv';
-  const watchHref =
-    isTv && entry.season != null && entry.episode != null
-      ? `/watch/tv/${movie.id}/${entry.season}/${entry.episode}`
-      : `/movie/${movie.id}`;
+  // Route to the matching detail page: TV shows to /tv/:id, movies to /movie/:id.
+  const isTv = entry.type === 'tv' || movie.media_type === 'tv';
+  const watchHref = isTv ? `/tv/${movie.id}` : `/movie/${movie.id}`;
   const [tx, setTx] = useState(0);
   const [dragging, setDragging] = useState(false);
   const startRef = useRef(null);

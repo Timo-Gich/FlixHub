@@ -41,18 +41,12 @@ export default function HomePage() {
               {continueWatching.map((entry) => {
                 const dur = entry.durationSeconds || 0;
                 const progress = dur > 0 ? Math.min((entry.progressSeconds || 0) / dur, 1) : null;
-                const isTv = entry.type === 'tv';
-                const watchTo =
-                  isTv && entry.season != null && entry.episode != null
-                    ? `/watch/tv/${entry.movie.id}/${entry.season}/${entry.episode}`
-                    : undefined;
-                const meta = isTv ? `S${entry.season} E${entry.episode}` : null;
+                const meta = entry.type === 'tv' ? `S${entry.season} E${entry.episode}` : null;
                 return (
                   <MovieCard
                     key={entry.movie.id}
                     movie={entry.movie}
                     progress={progress}
-                    to={watchTo}
                     meta={meta}
                   />
                 );

@@ -43,10 +43,15 @@ export function subscribeLibrary(cb) {
 
 /** Minimal, stable snapshot of a movie enough to render a card without refetching. */
 function snapshot(movie) {
+  // Preserve which media type this is so cards can link to the right detail
+  // page. TMDb TV objects expose `name` (not `title`), which also lets us
+  // infer the type when media_type is missing.
+  const isTv = movie.media_type === 'tv' || (movie.name && !movie.title);
   return {
     id: movie.id,
     title: movie.title || movie.name || 'Untitled',
     name: movie.name,
+    media_type: movie.media_type || (isTv ? 'tv' : 'movie'),
     poster_path: movie.poster_path,
     backdrop_path: movie.backdrop_path,
     release_date: movie.release_date,

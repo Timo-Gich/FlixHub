@@ -1,4 +1,5 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { Analytics } from '@vercel/analytics/react';
 import HomePage from './pages/HomePage';
 import WatchPage from './pages/WatchPage';
 import WatchLaterPage from './pages/WatchLaterPage';
@@ -18,10 +19,26 @@ import InfoPage from './pages/InfoPage';
  * Note: With BrowserRouter, direct deep-links work in the Vite dev server. For
  * a static production host, configure a SPA fallback so unknown paths serve
  * index.html (e.g. rewrite /* -> / in the host's routing rules).
+ *
+ * Vercel Web Analytics is bound to the router so pageviews are reported on every
+ * route change. We use `@vercel/analytics/react` (the entry for React/Vite apps)
+ * because this project is Vite + React, not Next.js — the `/next` entry imports
+ * `next/navigation`, which isn't installed here and would break the build.
  */
+function VercelAnalytics() {
+  const location = useLocation();
+  return (
+    <Analytics
+      route={location.pathname}
+      path={location.pathname + location.search}
+    />
+  );
+}
+
 export default function App() {
   return (
     <BrowserRouter>
+      <VercelAnalytics />
       <Routes>
         <Route path="/" element={<HomePage />} />
         <Route path="/watch/:id" element={<WatchPage />} />

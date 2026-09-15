@@ -276,6 +276,30 @@ export function fetchMovieDetails(movieId) {
   });
 }
 
+/**
+ * External ids for a movie (used by the VidSrc embed, which needs the IMDb id).
+ * @param {number|string} movieId
+ * @returns {Promise<{ imdb_id: (string|null), id: number }>}
+ */
+export function fetchMovieExternalIds(movieId) {
+  if (movieId == null || Number.isNaN(Number(movieId))) {
+    return Promise.reject(new TMDBError('A valid movie id is required.'));
+  }
+  return fetchFromTMDB(`/movie/${movieId}/external_ids`, {});
+}
+
+/**
+ * External ids for a TV series (used by the VidSrc embed, which needs IMDb id).
+ * @param {number|string} id
+ * @returns {Promise<{ imdb_id: (string|null), id: number }>}
+ */
+export function fetchTVExternalIds(id) {
+  if (id == null || Number.isNaN(Number(id))) {
+    return Promise.reject(new TMDBError('A valid TV id is required.'));
+  }
+  return fetchFromTMDB(`/tv/${id}/external_ids`, {});
+}
+
 // --- Image + display helpers -------------------------------------------------
 
 /**

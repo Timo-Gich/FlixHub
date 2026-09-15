@@ -32,15 +32,19 @@ export default function useEmbedServer({ type, id, season, episode }) {
   const validEpisode = episode == null || !Number.isNaN(Number(episode));
   const idValidForType = type === 'tv' ? validSeason && validEpisode : true;
 
+  // No server requires an IMDb id any more, so the /external_ids fetch is
+  // skipped entirely (kept generic so it lights up again if one is added).
+  const anyNeedsImdb = SERVERS.some((s) => s.usesImdb);
+
   // Persist the chosen server across sessions.
   useEffect(() => {
     localStorage.setItem(PREF_KEY, preferred);
   }, [preferred]);
 
-  // Fetch (and cache) the IMDb id exactly once per title. Server 2 (VidSrc) is
-  // the only provider that needs it.
+  // Fetch (and cache) the IMDb id once per title — only needed by providers
+  // flagged usesImdb (none today). Skipped to avoid a wasted API call.
   useEffect(() => {
-    if (!validId || !type) return;
+    if (!validId || !type || !anyNeedsImdb) return;
     let active = true;
     setImdbLoading(true);
     const request =

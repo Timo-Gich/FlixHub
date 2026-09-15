@@ -1,7 +1,7 @@
 {
   "name": "FlixHub — Movies & Series",
   "short_name": "FlixHub",
-  "description": "A Netflix-inspired movie & series streaming web app.",
+  "description": "Your little home for movies, shows, and good vibes.",
   "id": "/",
   "start_url": "/",
   "scope": "/",

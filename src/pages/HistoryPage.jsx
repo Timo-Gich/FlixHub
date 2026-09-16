@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
+import ConfirmDialog from '../components/ConfirmDialog';
 import { getHistory, clearHistory, removeFromHistory, MAX_HISTORY } from '../services/libraryService';
 import { getPosterUrl, formatYear } from '../services/tmdbService';
 
@@ -150,6 +151,7 @@ function HistoryRow({ entry, onRemove }) {
  */
 export default function HistoryPage() {
   const [items, setItems] = useState(() => getHistory());
+  const [confirmClear, setConfirmClear] = useState(false);
 
   const refresh = () => setItems(getHistory());
   const removeById = (id) => {
@@ -157,11 +159,12 @@ export default function HistoryPage() {
     refresh();
   };
 
-  const handleClear = () => {
-    if (window.confirm('Clear your entire watch history?')) {
-      clearHistory();
-      refresh();
-    }
+  const handleClear = () => setConfirmClear(true);
+
+  const doClear = () => {
+    clearHistory();
+    setConfirmClear(false);
+    refresh();
   };
 
   // Group by day label, preserving newest-first order.
@@ -235,6 +238,23 @@ export default function HistoryPage() {
       </main>
 
       <Footer />
+
+      <ConfirmDialog
+        open={confirmClear}
+        title="Clear watch history?"
+        message={
+          items.length > 0
+            ? `This will permanently remove all ${items.length} watched title${
+                items.length === 1 ? '' : 's'
+              } from your history. This can't be undone.`
+            : "This will permanently remove your entire watch history. This can't be undone."
+        }
+        confirmLabel="Clear history"
+        cancelLabel="Cancel"
+        danger
+        onConfirm={doClear}
+        onClose={() => setConfirmClear(false)}
+      />
     </div>
   );
 }

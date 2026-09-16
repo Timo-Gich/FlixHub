@@ -17,9 +17,11 @@ const NOTE_FADE_MS = 1000; // Fade-out duration (matches the CSS transition).
  *
  * Props:
  *   - type        : 'movie' | 'tv'
- *   - id          : TMDb id
+ *   - id          : TMDb id (or IMDb id for the IMDb watch route)
  *   - season      : (TV only) season number
  *   - episode     : (TV only) episode number
+ *   - servers     : optional server list override (e.g. IMDb-only VidSrc)
+ *   - rawId       : true → treat id as a raw (non-numeric) id like "tt…"
  *   - nowLabel    : text for the top bar ("Now playing · …")
  *   - backHref    : route the Back button links to
  *   - iframeTitle : accessibility title for the iframe
@@ -30,18 +32,20 @@ export default function VideoPlayer({
   id,
   season,
   episode,
+  servers,
+  rawId,
   nowLabel,
   backHref,
   iframeTitle,
   notice,
 }) {
   const {
-    servers,
+    servers: activeServers,
     activeServerId,
     selectServer,
     source,
     imdbLoading,
-  } = useEmbedServer({ type, id, season, episode });
+  } = useEmbedServer({ type, id, season, episode, servers, validateId: !rawId });
 
   const [playerLoading, setPlayerLoading] = useState(true);
   // Track the third-party notice lifecycle: visible → fading → hidden.
@@ -66,7 +70,7 @@ export default function VideoPlayer({
 
   // Only show the IMDb-fetch spinner over the player when the ACTIVE server
   // actually needs an IMDb id (avoids flashing on Server 1 / Server 3).
-  const activeServer = servers.find((s) => s.id === activeServerId);
+  const activeServer = activeServers.find((s) => s.id === activeServerId);
   const showSpinner = playerLoading || (imdbLoading && activeServer?.usesImdb);
 
   return (
@@ -95,7 +99,7 @@ export default function VideoPlayer({
         </Link>
         <span className="min-w-0 flex-1 truncate text-sm text-muted">{nowLabel}</span>
         <ServerDropdown
-          servers={servers}
+          servers={activeServers}
           activeServerId={activeServerId}
           onSelect={selectServer}
           loadingImdb={imdbLoading}

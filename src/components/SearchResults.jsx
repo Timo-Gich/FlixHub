@@ -1,4 +1,5 @@
 import { getPosterUrl, formatRating, formatYear } from '../services/tmdbService';
+import MovieCard from './MovieCard';
 
 /**
  * A single search result row: small poster + title + year/rating. Clicking it
@@ -104,9 +105,15 @@ export default function SearchResults({ query, results = [], loading, error, onS
 
         {!loading && !error && results.length > 0 && (
           <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
-            {results.map((movie) => (
-              <ResultRow key={`${movie.media_type}-${movie.id}`} movie={movie} onSelect={onSelect} />
-            ))}
+            {results.map((movie) =>
+              movie.source === 'imdb' ? (
+                <li key={`imdb-${movie.imdbId}`}>
+                  <MovieCard movie={movie} to={`/imdb/${movie.imdbId}`} />
+                </li>
+              ) : (
+                <ResultRow key={`${movie.media_type}-${movie.id}`} movie={movie} onSelect={onSelect} />
+              ),
+            )}
           </ul>
         )}
       </div>

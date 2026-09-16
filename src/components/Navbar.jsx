@@ -4,7 +4,8 @@ import Logo from './Logo';
 import SearchBar from './SearchBar';
 import SearchResults from './SearchResults';
 import SearchSuggestions from './SearchSuggestions';
-import { searchAll } from '../services/tmdbService';
+import { searchAllWithImdb } from '../services/searchService';
+import { cacheImdbItem } from '../services/imdbService';
 
 const NAV_LINKS = [
   { key: 'home', label: 'Home', to: '/' },
@@ -90,7 +91,7 @@ export default function Navbar() {
     setSuggestionsLoading(true);
     const timer = setTimeout(async () => {
       try {
-        const data = await searchAll(term);
+        const data = await searchAllWithImdb(term);
         if (term !== queryRef.current.trim()) return; // stale response
         setSuggestions(data.results?.slice(0, MAX_SUGGESTIONS) ?? []);
       } catch {
@@ -112,7 +113,7 @@ export default function Navbar() {
     setSuggestionsActive(false);
     setSuggestionsLoading(false);
     try {
-      const data = await searchAll(term);
+      const data = await searchAllWithImdb(term);
       setResults(data.results ?? []);
     } catch (err) {
       setSearchError(err);
@@ -135,6 +136,14 @@ export default function Navbar() {
 
   // Clicking a suggestion or search result goes to its detail/player page.
   const openMovie = (movie) => {
+    // IMDb-only results open the lightweight IMDb detail page.
+    if (movie?.source === 'imdb') {
+      if (movie?.imdbId) {
+        cacheImdbItem(movie);
+        navigate(`/imdb/${movie.imdbId}`);
+      }
+      return;
+    }
     if (movie?.id == null) return;
     const isTv = movie.media_type === 'tv' || (movie.name && !movie.title);
     navigate(isTv ? `/tv/${movie.id}` : `/movie/${movie.id}`);

@@ -43,12 +43,20 @@ export default function SearchSuggestions({ query, suggestions = [], loading, on
         ) : (
           <ul className="divide-y divide-ink-border">
             {suggestions.map((movie) => {
-              const poster = getPosterUrl(movie.poster_path);
-              const year = formatYear(movie.release_date ?? movie.first_air_date);
+              const imdb = movie.source === 'imdb';
+              const poster = imdb ? movie.poster : getPosterUrl(movie.poster_path);
+              const year = imdb
+                ? movie.year
+                  ? String(movie.year)
+                  : null
+                : formatYear(movie.release_date ?? movie.first_air_date);
               const title = movie.title || movie.name || 'Untitled';
-              const type = movie.media_type === 'tv' ? 'TV Show' : 'Movie';
+              const type = imdb
+                ? movie.type === 'tv' ? 'TV Show' : 'Movie'
+                : movie.media_type === 'tv' ? 'TV Show' : 'Movie';
+              const key = imdb ? `imdb-${movie.imdbId}` : `${movie.media_type}-${movie.id}`;
               return (
-                <li key={`${movie.media_type}-${movie.id}`}>
+                <li key={key}>
                   <button
                     type="button"
                     onClick={() => onSelect(movie)}
@@ -74,6 +82,7 @@ export default function SearchSuggestions({ query, suggestions = [], loading, on
                       <span className="line-clamp-1 text-sm font-semibold text-foreground">{title}</span>
                       <span className="text-xs text-muted">
                         {type}
+                        {imdb && <span className="rounded bg-amber-300/80 px-1 text-[9px] font-black text-black">IMDb</span>}
                         {year && ` · ${year}`}
                       </span>
                     </span>

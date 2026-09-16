@@ -5,36 +5,52 @@ import { fetchMovieExternalIds, fetchTVExternalIds } from '../services/tmdbServi
 const PREF_KEY = 'preferredServer';
 const DEFAULT_SERVER = 'server1';
 
-function readPreferred() {
+function readPreferred(list) {
   const stored = localStorage.getItem(PREF_KEY);
-  return !stored || !SERVERS.some((s) => s.id === stored) ? DEFAULT_SERVER : stored;
+  if (stored && list.some((s) => s.id === stored)) return stored;
+  return list[0]?.id ?? DEFAULT_SERVER;
 }
 
 /**
  * Central logic for the embed server selector on movie / TV player pages.
  *
  * - Persists the user's favourite server under localStorage("preferredServer")
- *   (defaults to Server 1 / VidKing).
- * - Fetches the IMDb id once per title (only needed by Server 2 / VidSrc) via
- *   the TMDb /external_ids endpoint, and caches it in state so it is never
- *   refetched while we stay on the same title.
+ *   (defaults to the first server in the list).
  * - Builds the active embed URL through the selected server's builder.
  *
- * @param {{ type: 'movie'|'tv', id, season?, episode? }} args
+ * @param {{
+ *   type: 'movie'|'tv',
+ *   id,
+ *   season?, episode?,
+ *   servers?: object[],     // optional server list override (e.g. IMDb-only)
+ *   validateId?: boolean    // false → allow raw ids like "tt1234567"
+ * }} args
  */
-export default function useEmbedServer({ type, id, season, episode }) {
-  const [preferred, setPreferred] = useState(readPreferred);
+export default function useEmbedServer({
+  type,
+  id,
+  season,
+  episode,
+  servers = SERVERS,
+  validateId = true,
+}) {
+  const list = servers ?? SERVERS;
+
+  const [preferred, setPreferred] = useState(() => readPreferred(list));
   const [imdbId, setImdbId] = useState(null);
   const [imdbLoading, setImdbLoading] = useState(false);
 
-  const validId = id != null && !Number.isNaN(Number(id));
+  // IMDb ids ("tt...") are not numeric, so skip numeric validation when `rawId`.
+  const validId = validateId
+    ? id != null && !Number.isNaN(Number(id))
+    : id != null;
   const validSeason = season == null || !Number.isNaN(Number(season));
   const validEpisode = episode == null || !Number.isNaN(Number(episode));
   const idValidForType = type === 'tv' ? validSeason && validEpisode : true;
 
   // No server requires an IMDb id any more, so the /external_ids fetch is
   // skipped entirely (kept generic so it lights up again if one is added).
-  const anyNeedsImdb = SERVERS.some((s) => s.usesImdb);
+  const anyNeedsImdb = list.some((s) => s.usesImdb);
 
   // Persist the chosen server across sessions.
   useEffect(() => {
@@ -64,34 +80,25 @@ export default function useEmbedServer({ type, id, season, episode }) {
       active = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [type, validId, id]);
+  }, [type, validId, id, anyNeedsImdb]);
 
-  const requested = SERVERS.find((s) => s.id === preferred) ?? SERVERS[0];
+  const requested = list.find((s) => s.id === preferred) ?? list[0];
 
   // If the persisted server needs an IMDb id that turned out to be unavailable,
-  // gracefully fall back to Server 1 so the player still works.
+  // gracefully fall back to the first server so the player still works.
   const server =
-    requested.usesImdb && !imdbLoading && !imdbId ? SERVERS[0] : requested;
+    requested.usesImdb && !imdbLoading && !imdbId ? list[0] : requested;
 
   let source = null;
   if (validId && idValidForType) {
-    if (server.usesImdb) {
-      if (imdbId) {
-        source =
-          type === 'tv'
-            ? server.tv(id, imdbId, season, episode)
-            : server.movie(id, imdbId);
-      }
-    } else {
-      source =
-        type === 'tv'
-          ? server.tv(id, imdbId, season, episode)
-          : server.movie(id, imdbId);
-    }
+    source =
+      type === 'tv'
+        ? server.tv(id, imdbId, season, episode)
+        : server.movie(id, imdbId);
   }
 
   return {
-    servers: SERVERS.map((s) => ({
+    servers: list.map((s) => ({
       ...s,
       available: !s.usesImdb || (imdbLoading ? null : Boolean(imdbId)),
     })),

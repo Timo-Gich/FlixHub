@@ -31,6 +31,7 @@ export default function MovieCard({
   to,
   meta,
 }) {
+  const isImdb = movie?.source === 'imdb';
   const [hover, setHover] = useState(false);
   const [imgFailed, setImgFailed] = useState(false);
   const controlled = typeof saved === 'boolean';
@@ -53,16 +54,32 @@ export default function MovieCard({
   if (!movie) return null;
 
   const title = movie.title || movie.name || 'Untitled';
-  const poster = imgFailed ? null : getPosterUrl(movie.poster_path);
-  const rating = formatRating(movie.vote_average);
-  const year = formatYear(movie.release_date ?? movie.first_air_date);
+  const poster = imgFailed
+    ? null
+    : isImdb
+      ? movie.poster
+      : getPosterUrl(movie.poster_path);
+  const rating = isImdb ? null : formatRating(movie.vote_average);
+  const year = isImdb
+    ? movie.year
+      ? String(movie.year)
+      : null
+    : formatYear(movie.release_date ?? movie.first_air_date);
   const overview = movie.overview;
   const gradient = gradients[index % gradients.length];
   const savedState = controlled ? saved : selfSaved;
-  // TV entries (from /tv endpoints) expose `name` instead of `title`.
-  const isTV = movie.media_type === 'tv' || (movie.name && !movie.title);
-  // Movies now open a detail page; TV shows already link to their detail page.
-  const linkTo = to ?? (isTV ? `/tv/${movie.id}` : `/movie/${movie.id}`);
+  // TV entries (from /tv endpoints / IMDb type) expose `name` instead of `title`.
+  const isTV = isImdb
+    ? movie.type === 'tv'
+    : movie.media_type === 'tv' || (movie.name && !movie.title);
+  // IMDb-only results link to the lightweight IMDb detail page.
+  const linkTo = to ?? (
+    isImdb
+      ? `/imdb/${movie.imdbId}`
+      : isTV
+        ? `/tv/${movie.id}`
+        : `/movie/${movie.id}`
+  );
 
   const handleBookmark = (e) => {
     e.preventDefault();
@@ -103,24 +120,37 @@ export default function MovieCard({
 
       {/* Card content */}
       <div className="relative flex h-full flex-col justify-end bg-gradient-to-t from-black/80 via-black/20 to-transparent p-3">
-        {/* Bookmark (watch later) toggle — always available */}
-        <button
-          type="button"
-          onClick={handleBookmark}
-          aria-pressed={savedState}
-          aria-label={savedState ? 'Remove from Watchlist' : 'Add to Watchlist'}
-          title={savedState ? 'Remove from Watchlist' : 'Add to Watchlist'}
-          className={`absolute left-1 top-1 z-10 flex h-8 w-8 items-center justify-center rounded-full
-                       shadow transition hover:scale-105 ${
-                         savedState ? 'bg-ink-raised text-brand ring-1 ring-brand/60' : 'bg-black/60 text-white'
-                       }`}
-        >
-          <svg viewBox="0 0 24 24" className={`h-4 w-4 ${
-            savedState ? 'fill-brand' : 'fill-none stroke-current'
-          }`} strokeWidth="2" strokeLinejoin="round" aria-hidden="true">
-            <path d="M6 3h12v18l-6-4-6 4V3z" />
-          </svg>
-        </button>
+        {/* IMDb-only results carry a badge and no watchlist toggle */}
+        {isImdb && (
+          <span
+            className="absolute right-2 top-2 z-10 rounded bg-amber-300/90 px-1.5 py-0.5 text-[10px]
+                       font-black tracking-wide text-black shadow"
+            title="Found via IMDb"
+          >
+            IMDb
+          </span>
+        )}
+
+        {/* Bookmark (watch later) toggle — always available for TMDb titles */}
+        {!isImdb && (
+          <button
+            type="button"
+            onClick={handleBookmark}
+            aria-pressed={savedState}
+            aria-label={savedState ? 'Remove from Watchlist' : 'Add to Watchlist'}
+            title={savedState ? 'Remove from Watchlist' : 'Add to Watchlist'}
+            className={`absolute left-1 top-1 z-10 flex h-8 w-8 items-center justify-center rounded-full
+                         shadow transition hover:scale-105 ${
+                           savedState ? 'bg-ink-raised text-brand ring-1 ring-brand/60' : 'bg-black/60 text-white'
+                         }`}
+          >
+            <svg viewBox="0 0 24 24" className={`h-4 w-4 ${
+              savedState ? 'fill-brand' : 'fill-none stroke-current'
+            }`} strokeWidth="2" strokeLinejoin="round" aria-hidden="true">
+              <path d="M6 3h12v18l-6-4-6 4V3z" />
+            </svg>
+          </button>
+        )}
 
         {onRemove && (
           <button

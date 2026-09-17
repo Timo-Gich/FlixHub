@@ -6,7 +6,7 @@ import { useMovieData } from '../hooks/useMovieData';
 import { logPlayed, updateWatchProgress } from '../services/libraryService';
 
 /**
- * /watch/:id - movie player with a server selector (VidKing / VidSrc / VidCore).
+ * /watch/:id - movie player with a server selector (2Embed / VidSrc / VidCore).
  * Logs to history and tracks approximate watch progress for Continue Watching.
  */
 export default function WatchPage() {

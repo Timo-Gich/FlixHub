@@ -2,7 +2,7 @@ import { Link, useLocation, useParams } from 'react-router-dom';
 import VideoPlayer from '../components/VideoPlayer';
 import { getImdbLookup } from '../services/imdbService';
 
-// IMDb-only watch route: only VidSrc works here, because VidKing and VidCore
+// IMDb-only watch route: only VidSrc works here, because 2Embed and VidCore
 // require a numeric TMDb id. VidSrc accepts an IMDb id ("tt…").
 const IMDB_VIDSRC = [
   {

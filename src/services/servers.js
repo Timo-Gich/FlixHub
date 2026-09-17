@@ -2,7 +2,7 @@
 // Embed provider (server) configuration.
 //
 // Each server exposes a movie(id, imdbId) and tv(id, imdbId, season, episode)
-// URL builder. Server 1 (VidKing), Server 2 (VidSrc) and Server 3 (VidCore)
+// URL builder. Server 1 (2Embed), Server 2 (VidSrc) and Server 3 (VidCore)
 // all use the TMDb id directly.
 // ----------------------------------------------------------------------------
 
@@ -10,12 +10,12 @@ export const SERVERS = [
   {
     id: 'server1',
     label: 'Server 1',
-    provider: 'VidKing',
+    provider: '2Embed',
     // Uses the TMDb id directly.
     usesImdb: false,
-    movie: (id) => `https://www.vidking.net/embed/movie/${id}`,
+    movie: (id) => `https://www.2embed.cc/embed/movie/${id}`,
     tv: (id, _imdbId, season, episode) =>
-      `https://www.vidking.net/embed/tv/${id}/${season}/${episode}`,
+      `https://www.2embed.cc/embed/tv/${id}/${season}/${episode}`,
   },
   {
     id: 'server2',

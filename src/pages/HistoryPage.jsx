@@ -84,13 +84,10 @@ function HistoryRow({ entry, onRemove }) {
         Remove
       </button>
 
-      {/* Foreground row */}
-      <div
-        role="button"
-        tabIndex={0}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ' ') e.preventDefault();
-        }}
+      {/* Foreground row — the whole row links to the title (keeps swipe-to-remove) */}
+      <Link
+        to={watchHref}
+        aria-label={`Watch ${movie.title}`}
         onTouchStart={(e) => e.touches.length && onStart(e.touches[0].clientX, e.touches[0].clientY)}
         onTouchMove={(e) => e.touches.length && onMove(e.touches[0].clientX, e.touches[0].clientY)}
         onTouchEnd={onEnd}
@@ -104,14 +101,11 @@ function HistoryRow({ entry, onRemove }) {
         onPointerMove={(e) => e.pointerType === 'touch' && onMove(e.clientX, e.clientY)}
         onPointerUp={(e) => e.pointerType === 'touch' && onEnd()}
         className="relative flex w-full items-center gap-3 rounded-md border border-ink-border
-                   bg-ink-soft px-3 py-3 [touch-action:pan-y]"
+                   bg-ink-soft px-3 py-3 ring-brand transition hover:ring-brand/60 focus-visible:ring-2
+                   focus-visible:ring-brand [touch-action:pan-y]"
         style={{ transform: `translateX(${tx}px)`, transition: dragging ? 'none' : 'transform 0.2s ease-out' }}
       >
-        <Link
-          to={watchHref}
-          className="flex shrink-0 items-center rounded-md ring-1 ring-ink-border transition ring-brand/0 hover:ring-brand"
-          aria-label={`Watch ${movie.title}`}
-        >
+        <span className="flex shrink-0 items-center rounded-md">
           {poster ? (
             <img src={poster} alt="" loading="lazy" className="h-16 w-11 rounded-sm object-cover bg-ink-raised" />
           ) : (
@@ -119,7 +113,7 @@ function HistoryRow({ entry, onRemove }) {
               <span className="text-sm font-black text-white/50">{movie.title?.[0]?.toUpperCase() || '?'}</span>
             </span>
           )}
-        </Link>
+        </span>
 
         <span className="flex min-w-0 flex-1 flex-col">
           <span className="line-clamp-1 text-sm font-semibold text-foreground">{movie.title}</span>
@@ -130,7 +124,11 @@ function HistoryRow({ entry, onRemove }) {
 
         <button
           type="button"
-          onClick={() => onRemove(entry.movie.id)}
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            onRemove(entry.movie.id);
+          }}
           aria-label={`Remove ${movie.title}`}
           title="Remove"
           className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full
@@ -140,7 +138,7 @@ function HistoryRow({ entry, onRemove }) {
             <path d="M6 6l12 12M18 6l-12 12" />
           </svg>
         </button>
-      </div>
+      </Link>
     </li>
   );
 }

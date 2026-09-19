@@ -207,7 +207,7 @@ export default function Navbar() {
 return (
     <header
       className={`fixed inset-x-0 top-0 z-50 transition-colors duration-300 ${
-        scrolled ? 'bg-ink/95 shadow-lg backdrop-blur' : 'bg-gradient-to-b from-black/80 to-transparent'
+        scrolled || pathname !== '/' ? 'bg-ink/95 shadow-lg backdrop-blur' : 'bg-transparent'
       }`}
     >
       <nav

@@ -1,9 +1,10 @@
 import { Link } from 'react-router-dom';
 
-// Official TMDB logo (hosted by TMDb) used for API attribution. The image falls
-// back to text-only automatically if it ever fails to load.
-const TMDB_LOGO_URL =
-  'https://www.themoviedb.org/assets/2/v4/logos/v2/blue_square_2-d537fb228e3b8140ce4fce1956a93f9a.svg';
+// Bundled copy of the official TMDB logo (WebP) used for API attribution. It is
+// served locally so it never depends on TMDb's externally hosted asset (which is
+// access-controlled and can fail to load). The image falls back to text-only
+// automatically if it ever fails to load.
+const TMDB_LOGO_URL = '/logos/tmdb-logo.webp';
 const TMDB_WEBSITE = 'https://www.themoviedb.org';
 
 const FOOTER_COLUMNS = [

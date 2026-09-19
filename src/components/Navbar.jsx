@@ -121,6 +121,13 @@ export default function Navbar() {
   const navigate = useNavigate();
   const { pathname } = useLocation();
 
+  // Show a back arrow on every page except Home so users can return up a level.
+  const showBack = pathname !== '/';
+  const goBack = () => {
+    if (window.history.length > 1) navigate(-1);
+    else navigate('/');
+  };
+
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 12);
     onScroll();
@@ -207,7 +214,24 @@ return (
         aria-label="Primary"
         className="mx-auto flex max-w-[1600px] items-center justify-between gap-3 px-4 py-3 sm:gap-6 sm:px-8"
       >
-        <Logo />
+        <div className="flex items-center">
+          {showBack && (
+            <button
+              type="button"
+              onClick={goBack}
+              aria-label="Go back to previous page"
+              className="mr-1 flex h-8 w-8 items-center justify-center rounded-full text-white/80
+                         transition hover:bg-white/10 hover:text-white md:h-9 md:w-9"
+            >
+              <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor"
+                   strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M20 12H5" />
+                <path d="m12 19-7-7 7-7" />
+              </svg>
+            </button>
+          )}
+          <Logo />
+        </div>
 
         {/* Center: full search pill on md+, collapsed to an icon on small screens */}
         <SearchPill

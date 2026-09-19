@@ -74,14 +74,14 @@ export default function SearchPill({
       />
 
       {/* Filter dropdown segment, occupying the reserved left zone */}
-      <div ref={filterRef} className="absolute inset-y-0 left-0 w-[84px]">
+      <div ref={filterRef} className="absolute inset-y-0 left-0 flex w-[84px] items-center justify-center">
         <button
           type="button"
           onClick={() => setFilterOpen((open) => !open)}
           aria-haspopup="listbox"
           aria-expanded={filterOpen}
-          className="absolute left-2 top-[6px] flex cursor-pointer items-center gap-x-2 rounded-xl
-                     bg-black px-2 py-1 text-sm transition hover:bg-slate-800 md:top-[9px]"
+          className="flex cursor-pointer items-center gap-x-2 rounded-xl bg-black px-2 py-1
+                    text-sm transition hover:bg-slate-800"
         >
           <svg viewBox="0 0 24 24" className="h-3 w-3 text-gray-500" fill="none" stroke="currentColor"
                strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">

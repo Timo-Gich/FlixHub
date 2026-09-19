@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en" class="dark">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
@@ -12,8 +12,16 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="FlixHub" />
     <title>FlixHub — Movies &amp; Series</title>
+    <script>
+      // Apply the saved theme (dark | cinema) before first paint to avoid a flash.
+      try {
+        if (localStorage.getItem('flixhub-theme') === 'cinema') {
+          document.documentElement.dataset.theme = 'cinema';
+        }
+      } catch (e) {}
+    </script>
   </head>
-  <body class="antialiased bg-[#141414]">
+  <body class="antialiased bg-ink">
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
     <script>

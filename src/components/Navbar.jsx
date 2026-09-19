@@ -78,7 +78,15 @@ export default function Navbar() {
   const [scrolled, setScrolled] = useState(false);
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const [filter, setFilter] = useState('all');
-  const [themeDark, setThemeDark] = useState(true);
+  const [theme, setTheme] = useState(() => {
+    try {
+      const saved = localStorage.getItem('flixhub-theme');
+      if (saved === 'dark' || saved === 'cinema') return saved;
+    } catch {
+      /* ignore storage errors */
+    }
+    return 'dark';
+  });
 
   // Search state.
   const [query, setQuery] = useState('');
@@ -134,6 +142,16 @@ export default function Navbar() {
     window.addEventListener('scroll', onScroll, { passive: true });
     return () => window.removeEventListener('scroll', onScroll);
   }, []);
+
+  // Apply the active theme (dark charcoal+red, or cinema teal+amber) to <html>.
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    try {
+      localStorage.setItem('flixhub-theme', theme);
+    } catch {
+      /* ignore storage errors */
+    }
+  }, [theme]);
 
   // Debounced query suggestions — fires only after the user pauses typing.
   useEffect(() => {
@@ -267,12 +285,12 @@ return (
         <div className="relative flex shrink-0 items-center gap-2">
           <button
             type="button"
-            aria-label={themeDark ? 'Switch to light mode' : 'Switch to dark mode'}
-            onClick={() => setThemeDark((dark) => !dark)}
+            aria-label={theme === 'dark' ? 'Switch to cinema theme' : 'Switch to dark theme'}
+            onClick={() => setTheme((prev) => (prev === 'dark' ? 'cinema' : 'dark'))}
             className="flex h-8 w-8 items-center justify-center rounded-md text-muted
                        transition hover:text-white"
           >
-            {themeDark ? (
+            {theme === 'dark' ? (
               <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor"
                    strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                 <circle cx="12" cy="12" r="4" />

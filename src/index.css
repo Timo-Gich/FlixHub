@@ -8,6 +8,26 @@
   color-scheme: dark;
 }
 
+/* Cinema theme — deep teal/emerald duotone with warm amber accents.
+   Applied by setting data-theme="cinema" on <html> (see Navbar toggle). All
+   ink/brand tokens are CSS variables in @theme, so overriding them here
+   re-tints every surface, border and accent app-wide (white text stays
+   readable because the backgrounds remain dark). */
+@layer base {
+  [data-theme="cinema"] {
+    color-scheme: dark;
+    --color-ink: #0c211d;
+    --color-ink-soft: #102824;
+    --color-ink-raised: #17332d;
+    --color-ink-border: #26443c;
+    --color-foreground: #f7f2e7;
+    --color-muted: #94a69f;
+    --color-brand: #f0a321;
+    --color-brand-dark: #cc7f0d;
+    --color-brand-light: #ffc04d;
+  }
+}
+
 @theme {
   /* Brand accent (Netflix red) */
   --color-brand: #e50914;

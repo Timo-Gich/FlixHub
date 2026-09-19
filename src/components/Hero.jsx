@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import {
   fetchTrendingAll,
   getBackdropUrl,
+  fetchMediaImages,
+  getLogoUrl,
   formatRating,
   formatYear,
 } from '../services/tmdbService';
@@ -25,6 +27,10 @@ export default function Hero() {
   const [activeIndex, setActiveIndex] = useState(0);
   const [paused, setPaused] = useState(false);
   const [brokenBackdrops, setBrokenBackdrops] = useState({});
+  // Cache of the official TMDb title logo per slide:  URL or null when absent.
+  const [titleLogos, setTitleLogos] = useState({});
+  // Tracks per-slide logo fetch progress to avoid duplicate / refetch loops.
+  const [logoStatus, setLogoStatus] = useState({});
 
   // Guard against a stale active index after a reload with fewer results.
   const safeActive = slideCount ? activeIndex % slideCount : 0;
@@ -37,7 +43,49 @@ export default function Hero() {
     return () => clearInterval(id);
   }, [paused, slideCount, safeActive]);
 
+  const slideKey = (movie) => `${movie.media_type}-${movie.id}`;
+
+  // Fetches the official TMDb title logo for one slide (movie or TV) and caches
+  // the result. On failure it stores null so the text title stays as the
+  // fallback without retrying on every render.
+  const loadLogo = (movie) => {
+    const key = slideKey(movie);
+    if (titleLogos[key] !== undefined || logoStatus[key]) return;
+
+    setLogoStatus((prev) => ({ ...prev, [key]: 'loading' }));
+    fetchMediaImages(movie.media_type, movie.id)
+      .then((images) => {
+        const url = getLogoUrl(images?.logos);
+        setTitleLogos((prev) => ({ ...prev, [key]: url }));
+        setLogoStatus((prev) => ({ ...prev, [key]: url ? 'loaded' : 'error' }));
+      })
+      .catch(() => {
+        setTitleLogos((prev) => ({ ...prev, [key]: null }));
+        setLogoStatus((prev) => ({ ...prev, [key]: 'error' }));
+      });
+  };
+
+  // Lazily load the active slide's logo (and prefetch the next) so the carousel
+  // only makes an extra TMDb call for slides that are actually shown.
+  useEffect(() => {
+    if (!slideCount) return;
+    const active = slides[safeActive];
+    if (active) loadLogo(active);
+    if (slideCount > 1) {
+      const next = slides[(safeActive + 1) % slideCount];
+      if (next) loadLogo(next);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [safeActive, slideCount]);
+
   const markBackdropBroken = (id) => setBrokenBackdrops((prev) => ({ ...prev, [id]: true }));
+
+  // If a cached logo image fails to decode/load, drop it and fall back to text.
+  const markLogoBroken = (movie) => {
+    setTitleLogos((prev) =>
+      prev[slideKey(movie)] ? { ...prev, [slideKey(movie)]: null } : prev,
+    );
+  };
 
   const navigate = useNavigate();
   const watchUrl = (movie) =>
@@ -101,6 +149,7 @@ export default function Hero() {
         const year = formatYear(movie.release_date ?? movie.first_air_date);
         const title = movie.title || movie.name || 'Untitled';
         const overview = movie.overview || '';
+        const logoUrl = titleLogos[slideKey(movie)] || null;
 
         return (
           <div
@@ -147,7 +196,18 @@ export default function Hero() {
 
                 <h1 className="max-w-3xl text-shadow-hero text-3xl font-black leading-tight text-white
                                sm:text-4xl lg:text-5xl">
-                  {title}
+                  {logoUrl ? (
+                    <img
+                      src={logoUrl}
+                      alt={title}
+                      loading="eager"
+                      onError={() => markLogoBroken(movie)}
+                      className="inline-block max-h-14 w-auto max-w-full object-contain
+                                 align-middle sm:max-h-20 lg:max-h-24"
+                    />
+                  ) : (
+                    title
+                  )}
                 </h1>
 
                 <p className="max-w-2xl text-shadow-hero line-clamp-2 text-sm text-foreground/90 sm:text-base lg:text-lg">

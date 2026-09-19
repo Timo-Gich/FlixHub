@@ -300,6 +300,23 @@ export function fetchTVExternalIds(id) {
   return fetchFromTMDB(`/tv/${id}/external_ids`, {});
 }
 
+/**
+ * Images available for a movie or TV title. The response contains the official
+ * `logos` array (plus backdrops/posters) used to render TMDb title logos.
+ * @param {'movie'|'tv'} mediaType
+ * @param {number|string} id
+ * @returns {Promise<{ logos:Array, backdrops:Array, posters:Array }>}
+ */
+export function fetchMediaImages(mediaType, id) {
+  if (mediaType !== 'movie' && mediaType !== 'tv') {
+    return Promise.reject(new TMDBError('A valid media type (movie or tv) is required.'));
+  }
+  if (id == null || Number.isNaN(Number(id))) {
+    return Promise.reject(new TMDBError('A valid title id is required.'));
+  }
+  return fetchFromTMDB(`/${mediaType}/${id}/images`, {});
+}
+
 // --- Image + display helpers -------------------------------------------------
 
 /**
@@ -326,6 +343,57 @@ export function getProfileUrl(path, width = 185) {
 /** Wide cinematic backdrop (16:9 landscape). */
 export function getBackdropUrl(path, width = 1280) {
   return getImageUrl(path, width);
+}
+
+/** Preferred width for hero title logos (upscaled cleanly, kept sharp). */
+const LOGO_DISPLAY_WIDTH = 780;
+
+/**
+ * Picks the best candidate from a TMDb `logos` array and returns its image URL.
+ *
+ * TMDb returns every localized version of a title's logo, each tagged with an
+ * `iso_639_1` language code (`null` = language-neutral, e.g. a stylized mark
+ * with no lettering). To keep the hero in English we score candidates in this
+ * order: English logos > language-neutral logos > any other language. Within a
+ * preference tier we prefer horizontal wordmarks (aspect_ratio >= 1) and then
+ * the largest width. If no high-priority tier has a logo we never hold the hero
+ * hostage to an English logo and fall back to whatever exists.
+ *
+ * @param {Array<{ file_path:string, aspect_ratio:number, width:number, iso_639_1:string|null }>} [logos]
+ * @returns {string|null}
+ */
+export function getLogoUrl(logos, width = LOGO_DISPLAY_WIDTH) {
+  const candidates = Array.isArray(logos) ? logos.filter((logo) => logo?.file_path) : [];
+  if (!candidates.length) return null;
+
+  // Higher = more preferred. English first, then language-neutral, then other.
+  const languagePriority = (logo) => {
+    const lang = logo.iso_639_1 ?? null;
+    if (lang === 'en') return 3;
+    if (lang === null || lang === 'xx') return 2;
+    return 1;
+  };
+
+  // Prefer the widest logo within a group, but break ties toward horizontal
+  // wordmarks (wide aspect ratio) which render better in the hero.
+  const pickBest = (pool) =>
+    pool.sort((a, b) => {
+      const widthDiff = (b.width ?? 0) - (a.width ?? 0);
+      if (widthDiff !== 0) return widthDiff;
+      return (b.aspect_ratio ?? 0) - (a.aspect_ratio ?? 0);
+    })[0];
+
+  // Pick the strongest tier that still contains a horizontal wordmark; the
+  // tier is guaranteed to have candidates by construction.
+  const tiers = [3, 2, 1];
+  for (const priority of tiers) {
+    const tier = candidates.filter((logo) => languagePriority(logo) === priority);
+    if (!tier.length) continue;
+    const horizontal = tier.filter((logo) => (logo.aspect_ratio ?? 0) >= 1);
+    return `${IMAGE_BASE_URL}/w${width}${pickBest(horizontal.length ? horizontal : tier).file_path}`;
+  }
+
+  return null;
 }
 
 /** Rounds a TMDb 0–10 vote_average to one decimal, e.g. 8.5. */

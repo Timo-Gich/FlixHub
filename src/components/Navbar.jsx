@@ -16,6 +16,52 @@ const NAV_LINKS = [
   { key: 'history', label: 'History', to: '/history' },
 ];
 
+// Monochrome line-style icons used for each hamburger-menu item (consistent set).
+const MENU_ICONS = {
+  home: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"
+         strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M3 9.5 12 3l9 6.5" />
+      <path d="M5 10.5V20a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1v-9.5" />
+    </svg>
+  ),
+  movies: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"
+         strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect x="3" y="3" width="18" height="18" rx="2" />
+      <path d="M7 3v18M17 3v18M3 8h4M3 16h4M17 8h4M17 16h4" />
+    </svg>
+  ),
+  series: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"
+         strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect x="2" y="7" width="20" height="14" rx="2" />
+      <path d="m17 2-5 5-5-5" />
+    </svg>
+  ),
+  popular: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"
+         strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <polyline points="22 7 13.5 15.5 8.5 10.5 2 17" />
+      <polyline points="16 7 22 7 22 13" />
+    </svg>
+  ),
+  mylist: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"
+         strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
+    </svg>
+  ),
+  history: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"
+         strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+      <path d="M3 3v5h5" />
+      <path d="M12 7v5l4 2" />
+    </svg>
+  ),
+};
+
 // Debounced query-suggestion behaviour.
 const DEBOUNCE_MS = 350; // Delay before suggestions are fetched while typing.
 const MIN_SUGGEST_CHARS = 2; // Minimum query length to fetch suggestions.
@@ -194,7 +240,7 @@ return (
         </button>
 
         {/* Right: compact icon group (no labels) */}
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="relative flex shrink-0 items-center gap-2">
           <button
             type="button"
             aria-label={themeDark ? 'Switch to light mode' : 'Switch to dark mode'}
@@ -249,7 +295,50 @@ return (
               </svg>
             )}
           </button>
-</div>
+          {menuOpen && (
+            <div
+              id="nav-menu"
+              role="menu"
+              className="absolute right-0 top-full z-30 mt-3 w-60 origin-top-right
+                           animate-[menudrop_0.18s_ease-out] overflow-hidden rounded-2xl border
+                           border-ink-border bg-ink-raised/95 p-1.5 shadow-2xl shadow-black/40
+                           backdrop-blur"
+            >
+              <ul>
+                {NAV_LINKS.map((item) => {
+                  const active = item.to
+                    ? (item.to === '/' ? pathname === '/' : pathname.startsWith(item.to))
+                    : false;
+                  const itemMarkup = (
+                    <>
+                      <span className={`flex h-5 w-5 shrink-0 items-center justify-center ${active ? 'text-brand-light' : 'text-muted/70'}`}>
+                        {MENU_ICONS[item.key]}
+                      </span>
+                      <span className="flex-1">{item.label}</span>
+                      {active && <span className="ml-auto h-1.5 w-1.5 rounded-full bg-brand-light" aria-hidden="true" />}
+                    </>
+                  );
+                  const cls = `flex items-center gap-3 rounded-lg px-2.5 py-2 text-sm transition-colors ${
+                    active ? 'bg-white/10 font-medium text-white' : 'text-muted hover:bg-white/5 hover:text-white'
+                  }`;
+                  return (
+                    <li key={item.key} className="mb-0.5 last:mb-0">
+                      {item.to ? (
+                        <Link to={item.to} role="menuitem" onClick={() => setMenuOpen(false)} className={cls}>
+                          {itemMarkup}
+                        </Link>
+                      ) : (
+                        <a href="#" role="menuitem" onClick={() => setMenuOpen(false)} className={cls}>
+                          {itemMarkup}
+                        </a>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          )}
+        </div>
       </nav>
 
       {/* Mobile search row — expands beneath the bar when the icon is tapped */}
@@ -275,48 +364,7 @@ return (
         </div>
       )}
 
-      {/* Slide-out dropdown menu with the primary links */}
-      {menuOpen && (
-        <div
-          id="nav-menu"
-          className="animate-[dropdown_0.2s_ease-out] border-t border-ink-border bg-ink/98 shadow-lg
-                     backdrop-blur"
-        >
-          <div className="mx-auto max-w-[1600px] px-4 py-3 sm:px-8">
-            <ul className="space-y-2">
-              {NAV_LINKS.map((link) => {
-                const active = link.to
-                  ? (link.to === '/' ? pathname === '/' : pathname.startsWith(link.to))
-                  : false;
-                return (
-                  <li key={link.key}>
-                    {link.to ? (
-                      <Link
-                        to={link.to}
-                        onClick={() => setMenuOpen(false)}
-                        className={`block rounded-md px-3 py-2.5 text-sm transition hover:bg-ink-raised ${
-                          active ? 'font-semibold text-white' : 'text-muted'
-                        }`}
-                      >
-                        {link.label}
-                      </Link>
-                    ) : (
-                      <a
-                        href="#"
-                        onClick={() => setMenuOpen(false)}
-                        className="block rounded-md px-3 py-2.5 text-sm text-muted transition
-                                   hover:bg-ink-raised hover:text-white"
-                      >
-                        {link.label}
-                      </a>
-                    )}
-                  </li>
-                );
-              })}
-            </ul>
-          </div>
-        </div>
-      )}
+      {/* Nav-hamburger menu is rendered inside the right icon group above. */}
 
       {/* Query suggestions panel — shown while typing (debounced) */}
       {showSuggestions && (

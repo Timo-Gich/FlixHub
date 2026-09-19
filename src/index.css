@@ -35,7 +35,7 @@
     scroll-behavior: smooth;
   }
 
-  /* Used by the mobile nav drawer. */
+  /* Used by the mobile search row and search dropdown panels. */
   @keyframes dropdown {
     from {
       opacity: 0;
@@ -44,6 +44,18 @@
     to {
       opacity: 1;
       transform: translateY(0);
+    }
+  }
+
+  /* Used by the nav hamburger dropdown. */
+  @keyframes menudrop {
+    from {
+      opacity: 0;
+      transform: translateY(-6px) scale(0.98);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
     }
   }
 

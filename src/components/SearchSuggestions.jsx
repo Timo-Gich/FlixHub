@@ -1,8 +1,8 @@
 import { getPosterUrl, formatYear } from '../services/tmdbService';
 
 /**
- * Compact query-suggestion (autocomplete) dropdown rendered beneath the navbar
- * while the user is typing. Clicking a suggestion selects that title.
+ * Compact query-suggestion dropdown rendered as a floating card beneath the
+ * navbar. Clicking a suggestion selects that title.
  * Props:
  *   - query       : current typed query (for the header label)
  *   - suggestions : array of TMDb movie objects
@@ -12,10 +12,11 @@ import { getPosterUrl, formatYear } from '../services/tmdbService';
  */
 export default function SearchSuggestions({ query, suggestions = [], loading, onSelect, onClose }) {
   return (
-    <div className="border-b border-ink-border bg-ink/98 shadow-lg backdrop-blur">
-      <div className="mx-auto max-w-[1600px] px-4 py-3 sm:px-8">
+    <div className="pointer-events-none fixed inset-x-0 top-[64px] z-40 flex justify-center px-4">
+      <div className="pointer-events-auto w-full max-w-[480px] overflow-hidden rounded-xl border
+                      border-ink-border bg-ink/95 shadow-2xl backdrop-blur animate-[dropdown_0.2s_ease-out]">
         {/* Header */}
-        <div className="mb-2 flex items-center justify-between gap-4">
+        <div className="flex items-center justify-between gap-4 border-b border-ink-border px-3 py-2">
           <p className="text-xs uppercase tracking-wide text-muted">
             {loading ? `Searching “${query}”…` : `Suggestions for “${query}”`}
           </p>
@@ -25,7 +26,8 @@ export default function SearchSuggestions({ query, suggestions = [], loading, on
             aria-label="Close suggestions"
             className="rounded p-1 text-muted transition hover:text-white"
           >
-            <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor"
+                 strokeWidth="2" strokeLinecap="round" aria-hidden="true">
               <line x1="18" y1="6" x2="6" y2="18" />
               <line x1="6" y1="6" x2="18" y2="18" />
             </svg>
@@ -33,22 +35,20 @@ export default function SearchSuggestions({ query, suggestions = [], loading, on
         </div>
 
         {loading ? (
-          <div className="space-y-2">
+          <div className="space-y-2 p-3">
             {Array.from({ length: 3 }).map((_, i) => (
-              <div key={i} className="h-10 animate-pulse rounded bg-ink-raised" />
+              <div key={i} className="h-12 animate-pulse rounded-md bg-ink-raised" />
             ))}
           </div>
         ) : suggestions.length === 0 ? (
-          <p className="py-3 text-sm text-muted">No matching suggestions.</p>
+          <p className="py-4 text-center text-sm text-muted">No matching suggestions.</p>
         ) : (
-          <ul className="divide-y divide-ink-border">
+          <ul className="max-h-96 divide-y divide-ink-border/60 overflow-y-auto p-2">
             {suggestions.map((movie) => {
               const imdb = movie.source === 'imdb';
               const poster = imdb ? movie.poster : getPosterUrl(movie.poster_path);
               const year = imdb
-                ? movie.year
-                  ? String(movie.year)
-                  : null
+                ? movie.year ? String(movie.year) : null
                 : formatYear(movie.release_date ?? movie.first_air_date);
               const title = movie.title || movie.name || 'Untitled';
               const type = imdb
@@ -60,7 +60,7 @@ export default function SearchSuggestions({ query, suggestions = [], loading, on
                   <button
                     type="button"
                     onClick={() => onSelect(movie)}
-                    className="flex w-full items-center gap-3 rounded-md px-2 py-1.5 text-left
+                    className="flex w-full items-center gap-3 rounded-lg px-2 py-1.5 text-left
                                transition hover:bg-ink-raised"
                   >
                     {poster ? (
@@ -86,7 +86,8 @@ export default function SearchSuggestions({ query, suggestions = [], loading, on
                         {year && ` · ${year}`}
                       </span>
                     </span>
-                    <svg viewBox="0 0 24 24" className="h-4 w-4 text-muted" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" className="h-4 w-4 text-muted" fill="none" stroke="currentColor"
+                         strokeWidth="2" strokeLinecap="round" aria-hidden="true">
                       <path d="M6 12h12M12 6v12" />
                     </svg>
                   </button>

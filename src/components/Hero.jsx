@@ -12,6 +12,33 @@ import { gradients } from '../data/movies';
 const MAX_SLIDES = 10; // Number of trending titles in the carousel.
 const ROTATE_MS = 10000; // Autoplay interval.
 
+// Map TMDb genres to a display "tone" so each hero title's type echoes its content.
+const GENRE_TONES = {
+  heavy: {
+    ids: [28, 12, 80, 53, 10752, 37], // Action, Adventure, Crime, Thriller, War, Western
+    cls: 'font-display-black uppercase leading-[0.92] tracking-tight',
+  },
+  condensed: {
+    ids: [878, 14, 9648, 27], // Sci-Fi, Fantasy, Mystery, Horror
+    cls: 'font-display-condensed uppercase leading-[0.9] tracking-[0.04em]',
+  },
+  serif: {
+    ids: [18, 10749, 36, 10402, 99, 10770], // Drama, Romance, History, Music, Documentary, TV Movie
+    cls: 'font-display-serif italic tracking-tight leading-[0.98]',
+  },
+  playful: {
+    ids: [16, 35, 10751], // Animation, Comedy, Family
+    cls: 'font-display-playful uppercase leading-[0.95] tracking-tight',
+  },
+};
+const toneFor = (movie) => {
+  const ids = movie?.genre_ids || [];
+  for (const group of Object.values(GENRE_TONES)) {
+    if (ids.some((gid) => group.ids.includes(gid))) return group.cls;
+  }
+  return GENRE_TONES.heavy.cls;
+};
+
 /**
  * Full-width, auto-rotating hero carousel backdropped by the top trending
  * movies from TMDb. Each slide shows its high-quality backdrop, title, a short
@@ -101,6 +128,7 @@ export default function Hero() {
         const year = formatYear(movie.release_date ?? movie.first_air_date);
         const title = movie.title || movie.name || 'Untitled';
         const overview = movie.overview || '';
+        const toneClass = toneFor(movie);
 
         return (
           <div
@@ -121,44 +149,55 @@ export default function Hero() {
                 aria-hidden="true"
                 loading="lazy"
                 onError={() => markBackdropBroken(movie.id)}
-                className="h-full w-full object-cover"
+                className={`h-full w-full object-cover will-change-transform ${
+                  isActive ? 'animate-[kenburns_22s_ease-out_forwards]' : ''
+                }`}
               />
             ) : (
               <div className={`h-full w-full bg-gradient-to-br ${gradients[i % gradients.length]}`} aria-hidden="true" />
             )}
 
-            {/* Readability overlays */}
-            <div className="absolute inset-0 z-10 bg-gradient-to-r from-ink/60 via-ink/30 to-transparent" aria-hidden="true" />
-            <div className="absolute inset-x-0 bottom-0 z-10 h-40 bg-gradient-to-t from-ink to-transparent" aria-hidden="true" />
+            {/* Depth + legibility overlays (gentle on the artwork, padded at the title) */}
+            <div className="absolute inset-0 z-10 bg-gradient-to-r from-ink/55 via-ink/25 to-transparent" aria-hidden="true" />
+            <div className="absolute inset-x-0 bottom-0 z-10 h-[62%] bg-gradient-to-t from-ink via-ink/35 to-transparent" aria-hidden="true" />
+            <div className="absolute inset-x-0 top-0 z-10 h-28 bg-gradient-to-b from-ink/70 to-transparent" aria-hidden="true" />
+            <div className="absolute inset-0 z-10 bg-[radial-gradient(ellipse_at_center,transparent_55%,rgba(0,0,0,0.4)_100%)]" aria-hidden="true" />
 
             {/* Content — rendered for the active slide only */}
             {isActive && (
-              <div className="absolute inset-x-0 bottom-0 z-20 mx-auto flex max-w-[1600px] flex-col gap-4
-                               px-4 pb-8 sm:px-8 sm:pb-12">
-                <span className="inline-flex w-fit items-center gap-2 rounded-full border border-brand/60
-                                 bg-brand/10 px-3 py-1 text-xs font-semibold tracking-wide text-brand-light">
+              <div className="absolute inset-x-0 bottom-0 z-20 mx-auto flex max-w-[1600px] flex-col gap-3
+                               px-4 pb-8 sm:px-8 sm:pb-12 animate-[rise_0.55s_ease-out_both]">
+                <span className="inline-flex w-fit items-center gap-2 rounded-full border border-white/25
+                                 bg-white/10 px-3 py-1 text-[11px] font-semibold uppercase
+                                 tracking-[0.18em] text-white backdrop-blur-sm">
                   <span className="h-1.5 w-1.5 rounded-full bg-brand-light" aria-hidden="true" />
-                  TRENDING NOW {i + 1} OF {slideCount}
+                  Trending now · {i + 1} of {slideCount}
                 </span>
 
-                <h1 className="max-w-3xl text-shadow-hero text-3xl font-black leading-tight text-white
-                               sm:text-4xl lg:text-5xl">
+                <span className="mt-1 h-1 w-16 rounded-full bg-gradient-to-r from-brand-light to-brand-dark/30"
+                      aria-hidden="true" />
+
+                <h1
+                  className={`text-shadow-hero max-w-4xl text-[clamp(2.25rem,7vw,5.25rem)] text-white ${toneClass}`}
+                >
                   {title}
                 </h1>
 
-                <p className="max-w-2xl text-shadow-hero line-clamp-2 text-sm text-foreground/90 sm:text-base lg:text-lg">
+                <p className="max-w-2xl text-shadow-hero line-clamp-2 pt-1 text-sm font-normal normal-case
+                             tracking-normal text-white/90 sm:pt-2 sm:text-base lg:text-lg">
                   {overview || 'No synopsis available for this title.'}
                 </p>
 
-                <div className="flex flex-wrap items-center gap-3">
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-2 pt-1">
                   {rating && (
-                    <span className="w-fit rounded bg-black/50 px-2 py-0.5 text-xs font-bold text-amber-400">
-                      ★ {rating} / 10
+                    <span className="inline-flex w-fit items-center gap-1.5 rounded bg-black/40 px-2 py-1
+                                     text-xs font-bold text-amber-300">
+                      <span className="text-sm leading-none">★</span> {rating} / 10
                     </span>
                   )}
-                  {year && <span className="text-sm text-foreground/80">{year}</span>}
+                  {year && <span className="text-sm font-semibold text-white">{year}</span>}
                   {movie.original_language && (
-                    <span className="text-sm text-muted">· {movie.original_language.toUpperCase()}</span>
+                    <span className="text-sm text-white/70">· {movie.original_language.toUpperCase()}</span>
                   )}
                 </div>
 
@@ -166,16 +205,16 @@ export default function Hero() {
                   <button
                     type="button"
                     onClick={() => navigate(watchUrl(movie))}
-                    className="rounded-md bg-brand px-7 py-3 text-sm font-bold text-white shadow-md
-                               shadow-brand/40 transition hover:bg-brand-dark focus:outline-none
+                    className="rounded-full bg-brand px-8 py-3 text-sm font-bold text-white shadow-lg
+                               shadow-black/30 transition hover:bg-brand-dark focus:outline-none
                                focus-visible:ring-2 focus-visible:ring-white/70 active:scale-[0.98]"
                   >
-                    ▶ Play
+                    <span className="mr-1.5">▶</span> Play now
                   </button>
                   <button
                     type="button"
-                    className="rounded-md bg-ink-raised/80 px-7 py-3 text-sm font-bold text-white ring-1
-                               ring-white/15 transition hover:bg-ink-raised focus:outline-none
+                    className="rounded-full bg-white/10 px-8 py-3 text-sm font-bold text-white ring-1
+                               ring-white/25 backdrop-blur-sm transition hover:bg-white/20 focus:outline-none
                                focus-visible:ring-2 focus-visible:ring-white/70 active:scale-[0.98]"
                   >
                     More Info

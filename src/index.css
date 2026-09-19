@@ -47,6 +47,12 @@
   /* Fonts */
   --font-sans: "Inter", "Segoe UI", system-ui, -apple-system, "Helvetica Neue",
     Arial, sans-serif;
+
+  /* Cinematic display faces — used by the hero title to echo each title's tone. */
+  --font-display-black: "Archivo Black", "Inter", system-ui, sans-serif;
+  --font-display-condensed: "Bebas Neue", "Inter", system-ui, sans-serif;
+  --font-display-serif: "Playfair Display", Georgia, "Times New Roman", serif;
+  --font-display-playful: "Fredoka", "Inter", system-ui, sans-serif;
 }
 
 /* Base layer */
@@ -76,6 +82,28 @@
     to {
       opacity: 1;
       transform: translateY(0) scale(1);
+    }
+  }
+
+  /* Slow Ken Burns drift for the active hero backdrop. */
+  @keyframes kenburns {
+    from {
+      transform: scale(1.02) translate3d(0, 0, 0);
+    }
+    to {
+      transform: scale(1.16) translate3d(-2%, -1.5%, 0);
+    }
+  }
+
+  /* Content entrance for the active hero slide. */
+  @keyframes rise {
+    from {
+      opacity: 0;
+      transform: translateY(24px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
     }
   }
 

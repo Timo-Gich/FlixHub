@@ -213,6 +213,24 @@ export function getRegionByCode(code) {
   );
 }
 
+/**
+ * Resolve an EPG region from a channel's ISO-2 country code (the code derived
+ * from its tvg-id). This lets deep-linked channels auto-derive a matching EPG
+ * stint instead of relying only on the user's selected region. UK channels use
+ * the ".uk" suffix, which we alias to the "GB" region. Returns null when the
+ * country isn't covered by EPG_REGIONS (e.g. "ww" worldwide feeds).
+ * @param {string} country
+ * @returns {{ code:string, label:string, folder:string }|null}
+ */
+export function getRegionForCountry(country) {
+  const cc = String(country || '').toLowerCase();
+  const alias = cc === 'uk' ? 'gb' : cc;
+  return (
+    EPG_REGIONS.find((r) => r.code.toLowerCase() === alias) ??
+    null
+  );
+}
+
 /** Build the globetvapp EPG XML URL for a region/folder. */
 export function epgUrlFor(region) {
   const folder = region?.folder || getRegionByCode(DEFAULT_EPG_REGION).folder;

@@ -19,6 +19,7 @@ import {
   fetchEPG,
   matchProgrammes,
   getRegionByCode,
+  getRegionForCountry,
 } from '../services/liveTvService';
 import { getFavoritesLive } from '../services/libraryService';
 
@@ -93,8 +94,10 @@ export default function LivePlayerPage() {
   const [channel, setChannel] = useState(null);
   const [missing, setMissing] = useState(false);
   const [status, setStatus] = useState('loading'); // loading | healthy | unavailable
-  const [region, setRegion] = useState(readRegion);
-  const [epg, setEpg] = useState({});
+  // The user's explicitly selected region (persisted by the /live browser),
+  // plus the region auto-derived from the channel's own country code.
+  const [userRegion] = useState(readRegion);
+  const [epgMaps, setEpgMaps] = useState({}); // regionCode -> XMLTV map
   // Bumped every minute so "now / next" stays current while the strip is open.
   const [clock, setClock] = useState(Date.now());
 
@@ -137,22 +140,62 @@ export default function LivePlayerPage() {
     return () => clearInterval(id);
   }, []);
 
-  // Fetch XMLTV for the selected region.
+  // Auto-derive a region from the channel's country (deep-linked channels then
+  // don't depend on the user having picked the matching region). User choice is
+  // still kept as a fallback so an explicit selection is never ignored.
+  const channelRegion = channel ? getRegionForCountry(channel.country) : null;
+  const regionCodes = channelRegion
+    ? [channelRegion.code, userRegion].filter(
+        (c) => c && c !== channelRegion.code,
+      )
+    : [userRegion];
+
+  // Fetch XMLTV for every candidate region and store each map separately.
   useEffect(() => {
-    setEpg({});
+    setEpgMaps({});
     let cancelled = false;
-    fetchEPG(region).then((map) => {
-      if (!cancelled) setEpg(map);
+    Promise.all(
+      regionCodes.map((code) =>
+        fetchEPG(code).then((map) => ({ code, map })),
+      ),
+    ).then((results) => {
+      if (cancelled) return;
+      const merged = {};
+      results.forEach((r) => {
+        merged[r.code] = r.map;
+      });
+      setEpgMaps(merged);
     });
     return () => {
       cancelled = true;
     };
-  }, [region]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [regionCodes.join(',')]);
 
-  const regionInfo = getRegionByCode(region);
-  const programs = channel
-    ? matchProgrammes(epg, channel.tvgId, channel.name, clock)
-    : { now: null, next: null, found: false };
+  // Resolve current + next programme, preferring the region that actually has
+  // data for this channel so auto-derived regions lift the hit rate for
+  // deep-linked channels.
+  const programs = (() => {
+    if (!channel) return { now: null, next: null, found: false, region: null };
+    const empty = { now: null, next: null, found: false, region: null };
+    for (const code of regionCodes) {
+      const map = epgMaps[code];
+      if (!map || !Object.keys(map).length) continue;
+      const res = matchProgrammes(map, channel.tvgId, channel.name, clock);
+      if (res.found && (res.now || res.next)) {
+        return { ...res, region: getRegionByCode(code) };
+      }
+    }
+    // No region had schedule data — surface the first non-empty attempt so the
+    // strip can still explain why (attributed to a real region).
+    for (const code of regionCodes) {
+      const map = epgMaps[code];
+      if (!map || !Object.keys(map).length) continue;
+      const res = matchProgrammes(map, channel.tvgId, channel.name, clock);
+      return { ...res, region: getRegionByCode(code) };
+    }
+    return empty;
+  })();
 
   const backToLive = '/live';
 
@@ -273,7 +316,9 @@ return (
                 </svg>
                 Now Playing
               </h2>
-              <span className="text-xs text-muted">EPG · {regionInfo.label}</span>
+              <span className="text-xs text-muted">
+                EPG · {programs.region?.label ?? 'Guide'}
+              </span>
             </div>
 
             {programs.now ? (

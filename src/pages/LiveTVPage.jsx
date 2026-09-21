@@ -23,6 +23,27 @@ const TAB_FAVORITES = '__favorites__';
 // at once made the whole app sluggish.
 const PAGE_SIZE = 48;
 
+// The active category/search are kept in sessionStorage so returning from a
+// channel player lands the user back on the same tab they were viewing.
+const LIVE_TAB_KEY = 'flixhub.liveTab';
+const LIVE_QUERY_KEY = 'flixhub.liveQuery';
+
+function readStoredTab() {
+  try {
+    return sessionStorage.getItem(LIVE_TAB_KEY) || TAB_ALL;
+  } catch {
+    return TAB_ALL;
+  }
+}
+
+function readStoredQuery() {
+  try {
+    return sessionStorage.getItem(LIVE_QUERY_KEY) || '';
+  } catch {
+    return '';
+  }
+}
+
 /**
  * /live — channel browser for continuous live TV.
  * Fetches the public iptv-org playlist and offers a region selector (drives the
@@ -33,8 +54,8 @@ export default function LiveTVPage() {
   const [channels, setChannels] = useState(null); // null = loading
   const [error, setError] = useState(false);
   const [region, setRegion] = useState(readRegion);
-  const [tab, setTab] = useState(TAB_ALL);
-  const [query, setQuery] = useState('');
+  const [tab, setTab] = useState(readStoredTab);
+  const [query, setQuery] = useState(readStoredQuery);
   const [favState, setFavState] = useState(() => getFavoritesLive());
   const [page, setPage] = useState(1);
 
@@ -62,6 +83,24 @@ export default function LiveTVPage() {
     }
   }, [region]);
 
+  // Remember the active tab & search across the session so returning from a
+  // channel player restores the view the user was on.
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(LIVE_TAB_KEY, tab);
+    } catch {
+      /* ignore storage errors */
+    }
+  }, [tab]);
+
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(LIVE_QUERY_KEY, query);
+    } catch {
+      /* ignore storage errors */
+    }
+  }, [query]);
+
   const loading = channels === null && !error;
 
   const categories = useMemo(() => {
@@ -73,6 +112,15 @@ export default function LiveTVPage() {
       .filter((c) => set.has(c))
       .concat([...set].sort((a, b) => a.localeCompare(b)));
   }, [channels]);
+
+  // If the restored tab no longer matches a real category (stale playlist or
+  // session), fall back to "All" once the category list is known.
+  useEffect(() => {
+    if (loading) return;
+    const valid =
+      tab === TAB_ALL || tab === TAB_FAVORITES || categories.includes(tab);
+    if (!valid) setTab(TAB_ALL);
+  }, [loading, tab, categories]);
 
   const favorites = useMemo(() => favState.map((e) => e.channel), [favState]);
 // Apply tab + search filtering client-side.

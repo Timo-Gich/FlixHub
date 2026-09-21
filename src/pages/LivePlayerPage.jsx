@@ -68,9 +68,11 @@ export default function LivePlayerPage() {
   const [channel, setChannel] = useState(null);
   const [missing, setMissing] = useState(false);
   const [status, setStatus] = useState('loading'); // loading | healthy | unavailable
-  // True once the stream has started playing — used to keep the health-probe
-  // timeout from killing an already-working channel.
+  // True once the stream has shown any activity (playing OR time has advanced) —
+  // used to keep the health-probe timeout/error from killing an already-working
+  // channel. Bumped to force a fresh player mount on "Try again".
   const startedRef = useRef(false);
+  const [retryKey, setRetryKey] = useState(0);
   // The user's explicitly selected region (persisted by the /live browser),
   // plus the region auto-derived from the channel's own country code.
   const [userRegion] = useState(readRegion);
@@ -114,7 +116,8 @@ export default function LivePlayerPage() {
       if (!startedRef.current) setStatus('unavailable');
     }, HEALTH_TIMEOUT_MS);
     return () => clearTimeout(timer);
-  }, [channel?.id, channel?.streamUrl]);
+    // retryKey restarts the window each time the user hits "Try again".
+  }, [channel?.id, channel?.streamUrl, retryKey]);
 
   // Periodic clock tick to advance the Now Playing strip.
   useEffect(() => {
@@ -181,16 +184,29 @@ export default function LivePlayerPage() {
 
   const backToLive = '/live';
 
-  // Player event handlers for the health probe.
-  const onPlaying = () => {
+  // Player event handlers for the health probe. "Started" means the player has
+  // shown any activity — either it's actually playing, or time has advanced
+  // (even if the video is still buffering on a black screen). Once that happens
+  // we never flip to the unavailable panel.
+  const markActive = () => {
     startedRef.current = true;
     setStatus('healthy');
   };
+  const onPlaying = markActive;
+  const onTimeUpdate = markActive;
   // Only surface "unavailable" from an error while we're still waiting for the
-  // stream to start. After playback begins, a transient hls.js hiccup shouldn't
+  // stream to show any activity. After that, a transient hls.js hiccup shouldn't
   // tear down the player — Vidstack handles recovery itself.
   const onError = () => {
     if (!startedRef.current) setStatus('unavailable');
+  };
+
+  // "Try again": remount the player to re-attempt the same stream (some channels
+  // only work on a second attempt, same as a manual refresh).
+  const retryStream = () => {
+    startedRef.current = false;
+    setStatus('loading');
+    setRetryKey((k) => k + 1);
   };
 
   // Route the stream through the serverless proxy (CORS + mixed-content + UA).
@@ -263,21 +279,34 @@ return (
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 px-6 text-center">
               <p className="text-2xl font-black text-white">This channel is currently unavailable</p>
               <p className="max-w-md text-sm text-muted">
-                Live streams go offline from time to time. Try another channel or come back in a moment.
+                Live streams go offline from time to time. Try again or come back in a moment.
               </p>
-              <Link to="/live" className="rounded-md bg-brand px-6 py-2.5 text-sm font-bold text-white transition hover:bg-brand-dark">
-                Try Another Channel
-              </Link>
+              <div className="flex flex-wrap items-center justify-center gap-3">
+                <button
+                  type="button"
+                  onClick={retryStream}
+                  className="rounded-md bg-brand px-6 py-2.5 text-sm font-bold text-white transition hover:bg-brand-dark"
+                >
+                  Try again
+                </button>
+                <Link
+                  to="/live"
+                  className="rounded-md border border-ink-border bg-ink-raised px-6 py-2.5 text-sm font-semibold text-white transition hover:border-brand hover:bg-brand"
+                >
+                  Try Another Channel
+                </Link>
+              </div>
             </div>
           )}
 
           {channel && status !== 'unavailable' && !missing && (
             <MediaPlayer
-              key={proxySrc}
+              key={`${proxySrc}#retry-${retryKey}`}
               src={proxySrc}
               playsInline
               autoPlay
               onPlaying={onPlaying}
+              onTimeUpdate={onTimeUpdate}
               onError={onError}
             >
               <MediaProvider />

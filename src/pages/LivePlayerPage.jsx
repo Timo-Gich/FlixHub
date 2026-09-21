@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import Footer from '../components/Footer';
 import {
@@ -68,6 +68,9 @@ export default function LivePlayerPage() {
   const [channel, setChannel] = useState(null);
   const [missing, setMissing] = useState(false);
   const [status, setStatus] = useState('loading'); // loading | healthy | unavailable
+  // True once the stream has started playing — used to keep the health-probe
+  // timeout from killing an already-working channel.
+  const startedRef = useRef(false);
   // The user's explicitly selected region (persisted by the /live browser),
   // plus the region auto-derived from the channel's own country code.
   const [userRegion] = useState(readRegion);
@@ -100,11 +103,16 @@ export default function LivePlayerPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [decoded]);
 
-  // Channel health probe: fail fast within the timeout if nothing plays.
+  // Channel health probe: fail fast within the timeout if nothing starts playing.
+  // A ref tracks whether playback actually began, so the timeout only fires while
+  // we're still waiting — it must never flip a healthy stream to "unavailable".
   useEffect(() => {
     if (!channel?.streamUrl) return;
+    startedRef.current = false;
     setStatus('loading');
-    const timer = setTimeout(() => setStatus('unavailable'), HEALTH_TIMEOUT_MS);
+    const timer = setTimeout(() => {
+      if (!startedRef.current) setStatus('unavailable');
+    }, HEALTH_TIMEOUT_MS);
     return () => clearTimeout(timer);
   }, [channel?.id, channel?.streamUrl]);
 
@@ -174,8 +182,16 @@ export default function LivePlayerPage() {
   const backToLive = '/live';
 
   // Player event handlers for the health probe.
-  const onPlaying = () => setStatus('healthy');
-  const onError = () => setStatus('unavailable');
+  const onPlaying = () => {
+    startedRef.current = true;
+    setStatus('healthy');
+  };
+  // Only surface "unavailable" from an error while we're still waiting for the
+  // stream to start. After playback begins, a transient hls.js hiccup shouldn't
+  // tear down the player — Vidstack handles recovery itself.
+  const onError = () => {
+    if (!startedRef.current) setStatus('unavailable');
+  };
 
   // Route the stream through the serverless proxy (CORS + mixed-content + UA).
   const proxySrc = channel ? buildStreamUrl(channel) : '';

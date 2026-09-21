@@ -8,6 +8,7 @@
 
 const WATCH_LATER_KEY = 'flixhub.watchLater';
 const HISTORY_KEY = 'flixhub.history';
+const FAVORITES_LIVE_KEY = 'flixhub.favoritesLive';
 const CHANGE_EVENT = 'flixhub:library';
 
 // Hard cap for history — oldest entries are trimmed past this.
@@ -147,4 +148,55 @@ export function removeFromHistory(id) {
 
 export function clearHistory() {
   writeJSON(HISTORY_KEY, []);
+}
+
+// --- Live TV Favorites -------------------------------------------------------
+
+/**
+ * Live TV favorites live in their own localStorage list so they can be surfaced
+ * in the "Favorites" tab of the Live TV browser without ever touching the Watch
+ * Later or History lists (those are reserved for on-demand movies / series).
+ */
+
+/**
+ * @returns {Array<{ channel: object, savedAt: number }>} newest saved first
+ */
+export function getFavoritesLive() {
+  return readJSON(FAVORITES_LIVE_KEY, []);
+}
+
+export function isFavLive(id) {
+  return getFavoritesLive().some((e) => e.channel?.id === id);
+}
+
+/**
+ * Add or remove a live channel from favorites. Stores a minimal snapshot of the
+ * channel (id, name, logo, category, country, streamUrl, tvgId) so a card can be
+ * rendered from favorites alone. Returns the new "saved" state.
+ */
+export function toggleFavLive(channel) {
+  if (!channel?.id) return false;
+  // Keep only the stable fields needed to render a card / re-open the player.
+  const snapshot = {
+    id: channel.id,
+    name: channel.name,
+    logo: channel.logo,
+    category: channel.category,
+    country: channel.country,
+    streamUrl: channel.streamUrl,
+    tvgId: channel.tvgId,
+  };
+  const items = getFavoritesLive();
+  const exists = items.some((e) => e.channel?.id === snapshot.id);
+  if (exists) {
+    writeJSON(FAVORITES_LIVE_KEY, items.filter((e) => e.channel?.id !== snapshot.id));
+    return false;
+  }
+  items.unshift({ channel: snapshot, savedAt: Date.now() });
+  writeJSON(FAVORITES_LIVE_KEY, items);
+  return true;
+}
+
+export function removeFavLive(id) {
+  writeJSON(FAVORITES_LIVE_KEY, getFavoritesLive().filter((e) => e.channel?.id !== id));
 }

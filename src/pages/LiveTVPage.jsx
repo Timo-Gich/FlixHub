@@ -1,0 +1,236 @@
+import { useEffect, useMemo, useState } from 'react';
+import Navbar from '../components/Navbar';
+import Footer from '../components/Footer';
+import LiveChannelCard from '../components/LiveChannelCard';
+import { fetchPlaylist, EPG_REGIONS } from '../services/liveTvService';
+import { getFavoritesLive, subscribeLibrary } from '../services/libraryService';
+
+const REGION_KEY = 'flixhub.liveRegion';
+
+function readRegion() {
+  try {
+    const saved = localStorage.getItem(REGION_KEY);
+    if (saved && EPG_REGIONS.some((r) => r.code === saved)) return saved;
+  } catch {
+    /* ignore storage errors */
+  }
+  return 'US';
+}
+
+const TAB_ALL = '__all__';
+const TAB_FAVORITES = '__favorites__';
+
+/**
+ * /live — channel browser for continuous live TV.
+ * Fetches the public iptv-org playlist and offers a region selector (drives the
+ * EPG country), a Favorites tab, category tabs derived from group-title, a
+ * client-side search box, and a responsive grid of live-channel cards.
+ */
+export default function LiveTVPage() {
+  const [channels, setChannels] = useState(null); // null = loading
+  const [error, setError] = useState(false);
+  const [region, setRegion] = useState(readRegion);
+  const [tab, setTab] = useState(TAB_ALL);
+  const [query, setQuery] = useState('');
+  const [favState, setFavState] = useState(() => getFavoritesLive());
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchPlaylist().then((list) => {
+      if (cancelled) return;
+      if (!list.length) setError(true);
+      setChannels(list);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Keep favorites in sync with the library service.
+  useEffect(() => subscribeLibrary(() => setFavState(getFavoritesLive())), []);
+
+  // Persist the chosen region so the player page can use it for EPG.
+  useEffect(() => {
+    try {
+      localStorage.setItem(REGION_KEY, region);
+    } catch {
+      /* ignore storage errors */
+    }
+  }, [region]);
+
+  const loading = channels === null && !error;
+
+  const categories = useMemo(() => {
+    const set = new Set();
+    (channels || []).forEach((c) => {
+      if (c.category) set.add(c.category);
+    });
+    return ['News', 'Sports', 'Movies', 'Music', 'Entertainment']
+      .filter((c) => set.has(c))
+      .concat([...set].sort((a, b) => a.localeCompare(b)));
+  }, [channels]);
+
+  const favorites = useMemo(() => favState.map((e) => e.channel), [favState]);
+// Apply tab + search filtering client-side.
+  const visible = useMemo(() => {
+    let list = channels || [];
+    if (tab === TAB_FAVORITES) list = favorites;
+    else if (tab !== TAB_ALL) list = list.filter((c) => c.category === tab);
+    const q = query.trim().toLowerCase();
+    if (q) list = list.filter((c) => (c.name || '').toLowerCase().includes(q));
+    return list;
+  }, [channels, tab, favorites, query]);
+
+  const tabs = [
+    { key: TAB_ALL, label: 'All' },
+    {
+      key: TAB_FAVORITES,
+      label: `Favorites${favorites.length ? ` (${favorites.length})` : ''}`,
+    },
+    ...categories.map((c) => ({ key: c, label: c })),
+  ];
+
+  const emptyVisible = !loading && !error && visible.length === 0;
+
+  const retry = () => {
+    setError(false);
+    setChannels(null);
+    fetchPlaylist().then((list) => {
+      if (!list.length) setError(true);
+      setChannels(list);
+    });
+  };
+return (
+    <div className="min-h-screen bg-ink text-foreground">
+      <Navbar />
+
+      <main className="mx-auto w-full max-w-[1600px] px-4 pt-24 sm:px-8">
+        {/* Header */}
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-brand text-white">
+                <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor"
+                     strokeWidth="1.6" aria-hidden="true">
+                  <rect x="2" y="7" width="20" height="15" rx="2" />
+                  <path d="M10 11.5v1.8a1 1 0 0 0 1.5.9l1.6-.9a1 1 0 0 0 0-1.8l-1.6-.9a1 1 0 0 0-1.5.9z" />
+                  <path d="M7 17h10" />
+                </svg>
+              </span>
+              <h1 className="text-2xl font-black text-white sm:text-3xl">Live TV</h1>
+            </div>
+            <p className="mt-1 text-sm text-muted">
+              Continuous channels — news, sports, movies, music and more. Not on demand.
+            </p>
+          </div>
+
+          {/* Region selector (drives EPG country) */}
+          <label className="flex items-center gap-2 text-sm text-muted">
+            <span className="hidden sm:inline">EPG region</span>
+            <select
+              value={region}
+              onChange={(e) => setRegion(e.target.value)}
+              className="rounded-md border border-ink-border bg-ink-raised px-3 py-2 text-sm text-foreground outline-none focus:ring-2 focus:ring-brand/40"
+            >
+              {EPG_REGIONS.map((r) => (
+                <option key={r.code} value={r.code}>
+                  {r.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+
+        {/* Search */}
+        <div className="relative mt-5 max-w-md">
+          <svg viewBox="0 0 24 24" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted"
+               fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <circle cx="11" cy="11" r="7" />
+            <path d="m21 21-4.3-4.3" />
+          </svg>
+          <input
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search channels by name…"
+            aria-label="Search channels"
+            className="w-full rounded-md border border-ink-border bg-ink-raised py-2.5 pl-9 pr-3 text-sm text-foreground placeholder:text-muted outline-none focus:border-brand/50 focus:ring-2 focus:ring-brand/40"
+          />
+        </div>
+
+        {/* Category tabs */}
+        <div className="scrollbar-hide mt-6 -mx-4 flex gap-2 overflow-x-auto px-4 pb-1 sm:-mx-8 sm:px-8">
+          {tabs.map((t) => {
+            const active = tab === t.key;
+            return (
+              <button
+                key={t.key}
+                type="button"
+                onClick={() => setTab(t.key)}
+                className={`shrink-0 rounded-full px-4 py-1.5 text-sm font-semibold transition ${
+                  active
+                    ? 'bg-brand text-white'
+                    : 'bg-ink-raised text-muted hover:bg-ink-border hover:text-white'
+                }`}
+              >
+                {t.label}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Content */}
+        <div className="mt-6 pb-4">
+          {loading && (
+            <div className="flex flex-col items-center justify-center py-24 text-muted">
+              <span className="h-10 w-10 animate-spin rounded-full border-4 border-brand border-t-transparent" aria-hidden="true" />
+              <p className="mt-4 text-sm">Loading channels…</p>
+            </div>
+          )}
+
+          {error && (
+            <div className="rounded-md border border-ink-border bg-ink-soft px-6 py-16 text-center">
+              <p className="text-3xl font-black text-white">Couldn’t load channels</p>
+              <p className="mx-auto mt-2 max-w-md text-sm text-muted">
+                The live TV playlist is temporarily unreachable. Check your connection and try again.
+              </p>
+              <button
+                type="button"
+                onClick={retry}
+                className="mt-6 inline-block rounded-md bg-brand px-6 py-2.5 text-sm font-bold text-white transition hover:bg-brand-dark"
+              >
+                Try again
+              </button>
+            </div>
+          )}
+
+          {tab === TAB_FAVORITES && !error && favorites.length === 0 && !loading && (
+            <div className="rounded-md border border-ink-border bg-ink-soft px-6 py-16 text-center">
+              <p className="text-3xl font-black text-white">No favorite channels yet</p>
+              <p className="mx-auto mt-2 max-w-md text-sm text-muted">
+                Tap the ♥ on any live channel to pin it here and jump straight back in.
+              </p>
+            </div>
+          )}
+
+          {tab !== TAB_FAVORITES && !error && emptyVisible && (
+            <div className="rounded-md border border-ink-border bg-ink-soft px-6 py-16 text-center">
+              <p className="text-3xl font-black text-white">No channels found</p>
+              <p className="mx-auto mt-2 max-w-md text-sm text-muted">Try a different category or search term.</p>
+            </div>
+          )}
+
+          {!loading && !error && !emptyVisible && (
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+              {visible.map((ch) => (
+                <LiveChannelCard key={ch.id} channel={ch} />
+              ))}
+            </div>
+          )}
+        </div>
+      </main>
+
+      <Footer />
+    </div>
+  );
+}

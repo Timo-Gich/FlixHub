@@ -1,3 +1,4 @@
+import { Suspense, lazy } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { Analytics } from '@vercel/analytics/react';
 import HomePage from './pages/HomePage';
@@ -13,6 +14,12 @@ import MovieDetailPage from './pages/MovieDetailPage';
 import ImdbDetailPage from './pages/ImdbDetailPage';
 import ImdbWatchPage from './pages/ImdbWatchPage';
 import InfoPage from './pages/InfoPage';
+import BottomNav from './components/BottomNav';
+
+// Live TV pages are loaded on demand so the heavy Vidstack player stays out of
+// the initial bundle for the movies/series browsing routes.
+const LiveTVPage = lazy(() => import('./pages/LiveTVPage'));
+const LivePlayerPage = lazy(() => import('./pages/LivePlayerPage'));
 
 /**
  * Application root. Installs client-side routing so the VidKing player can live
@@ -41,7 +48,14 @@ export default function App() {
   return (
     <BrowserRouter>
       <VercelAnalytics />
-      <Routes>
+      <Suspense
+        fallback={
+          <div className="flex min-h-screen items-center justify-center bg-ink">
+            <span className="h-10 w-10 animate-spin rounded-full border-4 border-brand border-t-transparent" aria-hidden="true" />
+          </div>
+        }
+      >
+        <Routes>
         <Route path="/" element={<HomePage />} />
         <Route path="/watch/:id" element={<WatchPage />} />
         <Route path="/movie/:id" element={<MovieDetailPage />} />
@@ -54,6 +68,8 @@ export default function App() {
         <Route path="/movies" element={<MoviesPage />} />
         <Route path="/series" element={<SeriesPage />} />
         <Route path="/new-popular" element={<NewAndPopularPage />} />
+        <Route path="/live" element={<LiveTVPage />} />
+        <Route path="/live/:channelId" element={<LivePlayerPage />} />
         <Route path="/about" element={<InfoPage />} />
         <Route path="/careers" element={<InfoPage />} />
         <Route path="/press" element={<InfoPage />} />
@@ -65,6 +81,11 @@ export default function App() {
         <Route path="/accessibility" element={<InfoPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
+      </Suspense>
+
+      {/* Mobile bottom navigation (md:hidden) + spacer so content isn't obscured */}
+      <BottomNav />
+      <div className="h-14 md:hidden" aria-hidden="true" />
     </BrowserRouter>
   );
 }

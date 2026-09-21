@@ -11,6 +11,7 @@ const NAV_LINKS = [
   { key: 'home', label: 'Home', to: '/' },
   { key: 'movies', label: 'Movies', to: '/movies' },
   { key: 'series', label: 'Series', to: '/series' },
+  { key: 'live', label: 'Live TV', to: '/live' },
   { key: 'popular', label: 'New & Popular', to: '/new-popular' },
   { key: 'mylist', label: 'Watchlist', to: '/watch-later' },
   { key: 'history', label: 'History', to: '/history' },
@@ -37,6 +38,13 @@ const MENU_ICONS = {
          strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <rect x="2" y="7" width="20" height="14" rx="2" />
       <path d="m17 2-5 5-5-5" />
+    </svg>
+  ),
+  live: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"
+         strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect x="2" y="7" width="20" height="15" rx="2" />
+      <path d="M17 7l4-4M8 7V4M6 2l-3 3" />
     </svg>
   ),
   popular: (

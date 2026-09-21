@@ -14,6 +14,7 @@ const FOOTER_COLUMNS = [
       ['Home', '/'],
       ['Movies', '/movies'],
       ['Series', '/series'],
+      ['Live TV', '/live'],
       ['New & Popular', '/new-popular'],
       ['Watchlist', '/watch-later'],
     ],

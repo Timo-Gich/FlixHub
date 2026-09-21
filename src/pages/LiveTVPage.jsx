@@ -133,7 +133,7 @@ return (
               <h1 className="text-2xl font-black text-white sm:text-3xl">Live TV</h1>
             </div>
             <p className="mt-1 text-sm text-muted">
-              Continuous channels — news, sports, movies, music and more. Not on demand.
+              Enjoy your favourite shows, live as they happen.
             </p>
           </div>
 

@@ -25,6 +25,7 @@ let playlistCache = null;
  * @property {string} country   - ISO-2 country code derived from tvg-id (may be '')
  * @property {string} streamUrl - the .m3u8 stream URL
  * @property {string} tvgId     - the tvg-id attribute
+ * @property {string} userAgent - optional http-user-agent required by the source
  */
 
 /**
@@ -68,6 +69,7 @@ function parseExtinf(line) {
     tvgId: read('tvg-id'),
     logo: read('tvg-logo'),
     groupTitle: read('group-title'),
+    userAgent: read('http-user-agent'),
     name,
   };
 }
@@ -96,7 +98,7 @@ export async function fetchPlaylist(opts = {}) {
       const line = lines[i].trim();
       if (!line || !extinfRe.test(line)) continue;
 
-      const { tvgId, logo, groupTitle, name } = parseExtinf(line);
+      const { tvgId, logo, groupTitle, userAgent, name } = parseExtinf(line);
       if (!name) continue;
 
       // The stream URL is the next non-# line (skips #EXTVLCOPT / #EXT...).
@@ -138,6 +140,7 @@ export async function fetchPlaylist(opts = {}) {
         country,
         streamUrl,
         tvgId,
+        userAgent: userAgent || '',
       });
     }
 
@@ -151,6 +154,23 @@ export async function fetchPlaylist(opts = {}) {
 /** Drop the in-memory playlist cache (e.g. for a manual "try again"). */
 export function resetPlaylistCache() {
   playlistCache = null;
+}
+
+// Public IPTV sources are proxied through a serverless function (api/stream.mjs)
+// to get past CORS and mixed-content restrictions and to forward any required
+// User-Agent. This builds the player src for a channel.
+const STREAM_PROXY = '/api/stream';
+
+/**
+ * @param {LiveChannel} channel
+ * @returns {string} proxied URL the player should load.
+ */
+export function buildStreamUrl(channel) {
+  const url = channel?.streamUrl || '';
+  if (!url) return url;
+  let out = `${STREAM_PROXY}?url=${encodeURIComponent(url)}`;
+  if (channel?.userAgent) out += `&ua=${encodeURIComponent(channel.userAgent)}`;
+  return out;
 }
 
 // --- EPG (XMLTV) -------------------------------------------------------------

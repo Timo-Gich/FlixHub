@@ -19,6 +19,9 @@ function readRegion() {
 
 const TAB_ALL = '__all__';
 const TAB_FAVORITES = '__favorites__';
+// Render a bounded grid and reveal more on demand — rendering all ~11k channels
+// at once made the whole app sluggish.
+const PAGE_SIZE = 48;
 
 /**
  * /live — channel browser for continuous live TV.
@@ -33,6 +36,7 @@ export default function LiveTVPage() {
   const [tab, setTab] = useState(TAB_ALL);
   const [query, setQuery] = useState('');
   const [favState, setFavState] = useState(() => getFavoritesLive());
+  const [page, setPage] = useState(1);
 
   useEffect(() => {
     let cancelled = false;
@@ -91,6 +95,15 @@ export default function LiveTVPage() {
   ];
 
   const emptyVisible = !loading && !error && visible.length === 0;
+
+  // Reset pagination whenever the grid's input set changes.
+  useEffect(() => {
+    setPage(1);
+  }, [tab, query, favState, channels]);
+
+  const shownCount = Math.min(page * PAGE_SIZE, visible.length);
+  const paged = visible.slice(0, shownCount);
+  const hasMore = shownCount < visible.length;
 
   const retry = () => {
     setError(false);
@@ -222,9 +235,21 @@ return (
 
           {!loading && !error && !emptyVisible && (
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
-              {visible.map((ch) => (
+              {paged.map((ch) => (
                 <LiveChannelCard key={ch.id} channel={ch} />
               ))}
+            </div>
+          )}
+
+          {!loading && !error && hasMore && (
+            <div className="mt-8 flex justify-center">
+              <button
+                type="button"
+                onClick={() => setPage((p) => p + 1)}
+                className="rounded-md border border-ink-border bg-ink-raised px-6 py-2.5 text-sm font-semibold text-white transition hover:border-brand hover:bg-brand"
+              >
+                Load more {Math.min(PAGE_SIZE, visible.length - shownCount)}
+              </button>
             </div>
           )}
         </div>

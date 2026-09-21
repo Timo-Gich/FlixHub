@@ -4,13 +4,11 @@ import Footer from '../components/Footer';
 import {
   MediaPlayer,
   MediaProvider,
-  useMediaProvider,
 } from '@vidstack/react';
 import {
   DefaultVideoLayout,
   defaultLayoutIcons,
 } from '@vidstack/react/player/layouts/default';
-import Hls from 'hls.js';
 import '@vidstack/react/player/styles/base.css';
 import '@vidstack/react/player/styles/default/theme.css';
 import '@vidstack/react/player/styles/default/layouts/video.css';
@@ -20,13 +18,15 @@ import {
   matchProgrammes,
   getRegionByCode,
   getRegionForCountry,
+  buildStreamUrl,
 } from '../services/liveTvService';
 import { getFavoritesLive } from '../services/libraryService';
 
 const REGION_KEY = 'flixhub.liveRegion';
 // Public IPTV streams go offline a lot — if the player hasn't produced any media
-// within this window we surface a friendly "unavailable" state.
-const HEALTH_TIMEOUT_MS = 8000;
+// within this window we surface a friendly "unavailable" state. Generous window
+// to also absorb serverless-proxy cold starts and slow first segments.
+const HEALTH_TIMEOUT_MS = 12000;
 const PROG_REFRESH_MS = 60000;
 
 function readRegion() {
@@ -53,32 +53,6 @@ function formatClock(ms) {
   return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
-/**
- * Small child mounted inside <MediaPlayer> that hands the HLS provider our
- * locally-installed hls.js constructor and a common stream config. Best-effort:
- * if the provider isn't ready yet Vidstack keeps its default jsDelivr hls.js.
- */
-function HlsBootstrapper() {
-  const provider = useMediaProvider();
-  useEffect(() => {
-    if (!provider) return;
-    // Give the player a browser-like User-Agent — some public streams reject
-    // empty/unknown clients, which would otherwise be flagged "unavailable".
-    provider.config = {
-      xhrSetup: (xhr) => {
-        try {
-          xhr.setRequestHeader(
-            'User-Agent',
-            navigator.userAgent || 'Mozilla/5.0',
-          );
-        } catch {
-          /* ignore header errors */
-        }
-      },
-    };
-  }, [provider]);
-  return null;
-}
 /**
  * /live/:channelId — a self-hosted HLS player for a single live channel.
  *
@@ -202,6 +176,9 @@ export default function LivePlayerPage() {
   // Player event handlers for the health probe.
   const onPlaying = () => setStatus('healthy');
   const onError = () => setStatus('unavailable');
+
+  // Route the stream through the serverless proxy (CORS + mixed-content + UA).
+  const proxySrc = channel ? buildStreamUrl(channel) : '';
 return (
     <div className="min-h-screen bg-ink text-foreground">
       {/* Top bar */}
@@ -280,8 +257,8 @@ return (
 
           {channel && status !== 'unavailable' && !missing && (
             <MediaPlayer
-              key={channel.streamUrl}
-              src={channel.streamUrl}
+              key={proxySrc}
+              src={proxySrc}
               playsInline
               autoPlay
               onPlaying={onPlaying}
@@ -289,7 +266,6 @@ return (
             >
               <MediaProvider />
               <DefaultVideoLayout icons={defaultLayoutIcons} noScrubber={false} />
-              <HlsBootstrapper />
             </MediaPlayer>
           )}
 

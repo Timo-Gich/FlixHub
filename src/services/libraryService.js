@@ -185,6 +185,7 @@ export function toggleFavLive(channel) {
     country: channel.country,
     streamUrl: channel.streamUrl,
     tvgId: channel.tvgId,
+    userAgent: channel.userAgent || '',
   };
   const items = getFavoritesLive();
   const exists = items.some((e) => e.channel?.id === snapshot.id);

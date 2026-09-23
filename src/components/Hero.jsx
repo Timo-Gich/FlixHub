@@ -179,10 +179,10 @@ export default function Hero() {
             )}
 
             {/* Depth + legibility overlays (gentle on the artwork, padded at the title) */}
-            <div className="absolute inset-0 z-10 bg-gradient-to-r from-ink/55 via-ink/25 to-transparent" aria-hidden="true" />
-            <div className="absolute inset-x-0 bottom-0 z-10 h-[62%] bg-gradient-to-t from-ink via-ink/35 to-transparent" aria-hidden="true" />
-            <div className="absolute inset-x-0 top-0 z-10 h-28 bg-gradient-to-b from-ink/70 to-transparent" aria-hidden="true" />
-            <div className="absolute inset-0 z-10 bg-[radial-gradient(ellipse_at_center,transparent_55%,rgba(0,0,0,0.4)_100%)]" aria-hidden="true" />
+            <div className="absolute inset-0 z-10 bg-gradient-to-r from-ink/40 via-ink/15 to-transparent" aria-hidden="true" />
+            <div className="absolute inset-x-0 bottom-0 z-10 h-[55%] bg-gradient-to-t from-ink/70 via-ink/15 to-transparent" aria-hidden="true" />
+            <div className="absolute inset-x-0 top-0 z-10 h-28 bg-gradient-to-b from-ink/40 to-transparent" aria-hidden="true" />
+            <div className="absolute inset-0 z-10 bg-[radial-gradient(ellipse_at_center,transparent_60%,rgba(0,0,0,0.25)_100%)]" aria-hidden="true" />
 
             {/* Content — rendered for the active slide only */}
             {isActive && (

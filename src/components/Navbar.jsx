@@ -17,6 +17,10 @@ const NAV_LINKS = [
   { key: 'history', label: 'History', to: '/history' },
 ];
 
+// Session in-app back stack (module scope so it survives component remounts
+// during normal navigation without being reset on every page render).
+let backStack = [];
+
 // Monochrome line-style icons used for each hamburger-menu item (consistent set).
 const MENU_ICONS = {
   home: (
@@ -137,11 +141,43 @@ export default function Navbar() {
   const navigate = useNavigate();
   const { pathname } = useLocation();
 
-  // Show a back arrow on every page except Home so users can return up a level.
-  const showBack = pathname !== '/';
+  // Routes that are self-contained players with their own contextual "Back"
+  // button (in the player bar). The global arrow is hidden there so each
+  // screen ends up with exactly one back affordance.
+  const PLAYER_PREFIXES = ['/watch', '/live/'];
+  const isPlayerPath = (p) => PLAYER_PREFIXES.some((seg) => p.startsWith(seg));
+
+  // Keep an in-app stack of previously visited routes so "back" stays inside
+  // the app (never exiting to an external referrer) and doesn't depend on the
+  // browser's history length, which also counts pages outside this router.
+  const backingRef = useRef(false);
+  const initRef = useRef(false);
+  const prevPathRef = useRef('/');
+
+  useEffect(() => {
+    if (backingRef.current) {
+      // We just returned via the arrow — the target was already popped, so
+      // don't re-seed the stack with the page we came back to.
+      backingRef.current = false;
+      prevPathRef.current = pathname;
+      return;
+    }
+    if (initRef.current) {
+      backStack.push(prevPathRef.current);
+      // Bound session growth so a long browsing session can't balloon memory.
+      if (backStack.length > 60) backStack.shift();
+    }
+    initRef.current = true;
+    prevPathRef.current = pathname;
+  }, [pathname]);
+
+  // Show a back arrow on every page except Home and the full-screen players.
+  const showBack = pathname !== '/' && !isPlayerPath(pathname);
   const goBack = () => {
-    if (window.history.length > 1) navigate(-1);
-    else navigate('/');
+    const target = backStack.pop();
+    backingRef.current = true;
+    if (target && target !== pathname) navigate(target);
+    else navigate('/', { replace: true }); // deep link / fresh session -> Home
   };
 
   useEffect(() => {

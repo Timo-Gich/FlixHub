@@ -1,6 +1,7 @@
-import { Suspense, lazy } from 'react';
+import { Suspense, lazy, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { Analytics } from '@vercel/analytics/react';
+import { isPlayerPath, saveScroll, readScroll } from './services/scrollMem';
 import HomePage from './pages/HomePage';
 import WatchPage from './pages/WatchPage';
 import WatchLaterPage from './pages/WatchLaterPage';
@@ -44,10 +45,39 @@ function VercelAnalytics() {
   );
 }
 
+/**
+ * Restores / remembers each route's vertical scroll position so "back" lands
+ * the user where they left off (a standard pattern in streaming apps).
+ * Full-screen players are excluded — they ignore scroll restoration.
+ */
+function ScrollMem() {
+  const { pathname } = useLocation();
+
+  // On arrival, restore this page's saved offset (0 for players / first visit).
+  useEffect(() => {
+    window.scrollTo(0, isPlayerPath(pathname) ? 0 : readScroll(pathname));
+  }, [pathname]);
+
+  // While on a page, follow its scrolling; persist the final offset on leave.
+  useEffect(() => {
+    if (isPlayerPath(pathname)) return;
+    const onScroll = () => saveScroll(pathname);
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => {
+      window.removeEventListener('scroll', onScroll);
+      saveScroll(pathname); // capture the position we're leaving from
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pathname]);
+
+  return null;
+}
+
 export default function App() {
   return (
     <BrowserRouter>
       <VercelAnalytics />
+      <ScrollMem />
       <Suspense
         fallback={
           <div className="flex min-h-screen items-center justify-center bg-ink">

@@ -105,18 +105,34 @@ export function getHistory() {
  */
 export function logPlayed(movie, opts = {}) {
   if (!movie?.id) return;
-  let items = getHistory().filter((e) => e.movie.id !== movie.id);
-  items.unshift({
+  const items = getHistory();
+  // Pull out any existing entry for this title so a re-watch moves it to the
+  // front (and keeps episode metadata) without discarding saved progress.
+  const existing = items.find((e) => e.movie.id === movie.id);
+  // Re-logging the exact same episode (or a movie) should keep the progress
+  // bar; switching to a different episode resets it so it tracks the new one.
+  const sameEpisode =
+    existing &&
+    existing.type === (opts.type || undefined) &&
+    existing.season === opts.season &&
+    existing.episode === opts.episode;
+  const merged = {
     movie: snapshot(movie),
     watchedAt: Date.now(),
-    progressSeconds: 0,
+    progressSeconds: sameEpisode ? existing.progressSeconds || 0 : 0,
     durationSeconds: Math.round((movie.runtime || 0) * 60),
     type: opts.type,
     season: opts.season,
     episode: opts.episode,
-  });
-  if (items.length > MAX_HISTORY) items = items.slice(0, MAX_HISTORY);
-  writeJSON(HISTORY_KEY, items);
+  };
+  // Keep a prior (non-zero) duration when the fresh title reports none (e.g.
+  // most TV series have no `runtime`), so Continue Watching still knows a length.
+  if (!merged.durationSeconds && existing?.durationSeconds) {
+    merged.durationSeconds = existing.durationSeconds;
+  }
+  let next = [merged, ...items.filter((e) => e.movie.id !== movie.id)];
+  if (next.length > MAX_HISTORY) next = next.slice(0, MAX_HISTORY);
+  writeJSON(HISTORY_KEY, next);
 }
 
 /**

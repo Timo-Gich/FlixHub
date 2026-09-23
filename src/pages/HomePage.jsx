@@ -5,27 +5,33 @@ import MovieRow from '../components/MovieRow';
 import MovieCard from '../components/MovieCard';
 import Footer from '../components/Footer';
 import { fetchTrendingMovies, fetchPopularMovies } from '../services/tmdbService';
-import { getHistory } from '../services/libraryService';
+import { getHistory, subscribeLibrary } from '../services/libraryService';
 
-const CONTINUE_LIMIT = 12;
+const FINISH_THRESHOLD = 0.98;
 
 /**
  * Home page: the fixed navbar, a full-width trending hero carousel, a
- * "Continue Watching" row (from watch history, newest first), a couple of
- * self-fetching content rows, and the footer.
+ * "Continue Watching" row (from watch history — unfinished first, then
+ * finished titles, so nothing is ever hidden), a couple of self-fetching
+ * content rows, and the footer.
  */
 export default function HomePage() {
-  // History is read on mount; navigation remounts this page so it refreshes.
-  const [history] = useState(() => getHistory());
-  // "Continue Watching" = history items that aren't finished, newest first.
-  const FINISH_THRESHOLD = 0.98;
-  const continueWatching = history
-    .filter((entry) => {
-      const dur = entry.durationSeconds || 0;
-      if (dur > 0 && (entry.progressSeconds || 0) >= dur * FINISH_THRESHOLD) return false;
-      return true;
-    })
-    .slice(0, CONTINUE_LIMIT);
+  // Keep history in state, refreshed live whenever the library changes.
+  const [history, setHistory] = useState(() => getHistory());
+  useEffect(() => subscribeLibrary(() => setHistory(getHistory())), []);
+
+  // A title counts as "finished" once progress reaches 98% of its duration.
+  const isFinished = (entry) => {
+    const dur = entry.durationSeconds || 0;
+    return dur > 0 && (entry.progressSeconds || 0) >= dur * FINISH_THRESHOLD;
+  };
+
+  // "Continue Watching" shows recent, in-progress titles first, followed by
+  // finished ones — every history entry stays visible in the row.
+  const continueWatching = [
+    ...history.filter((entry) => !isFinished(entry)),
+    ...history.filter(isFinished),
+  ];
 
   // Desktop scroll arrows for the Continue Watching row: they only appear when
   // there is actually something to scroll in their direction, and update as the

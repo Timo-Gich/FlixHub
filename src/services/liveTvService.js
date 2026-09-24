@@ -1,71 +1,19 @@
 // ----------------------------------------------------------------------------
 // Live TV data layer: M3U playlist + XMLTV (EPG) fetching and parsing.
 //
-// - LIVE_SOURCES     : the selectable channel providers shown on /live. Each
-//                      entry points at one or more M3U playlists, which may be
-//                      remote URLs or relative static paths served from public/
-//                      (e.g. "/playlists/kenya.m3u") — one plain fetch() handles
-//                      both, so the loader never branches on protocol.
-// - fetchPlaylist()  : pulls the selected source's playlist, parses the
-//                      #EXTM3U format and returns LiveChannel[].
+// - fetchPlaylist()  : pulls the public iptv-org category playlist
+//                      (https://iptv-org.github.io/iptv/index.category.m3u),
+//                      parses the #EXTM3U format and returns LiveChannel[].
 // - fetchEPG(region) : pulls XMLTV for the selected region from the globetvapp
 //                      EPG repo and returns a map of programmes keyed by tvg-id
 //                      so the player can resolve "now" / "next" for any channel.
 // ----------------------------------------------------------------------------
 
-/**
- * Available live sources. `world-iptv` is the default / first entry and must
- * stay first; `kenya` follows it; future sources (fast/pluto/samsung) will be
- * appended after kenya. Entries without `urls` yet are kept out of the UI.
- */
-export const LIVE_SOURCES = [
-  {
-    id: 'world-iptv',
-    label: 'World IP TV',
-    description: 'Global channels from the public iptv-org index',
-    urls: ['https://iptv-org.github.io/iptv/index.category.m3u'],
-  },
-  {
-    id: 'kenya',
-    label: 'Kenya',
-    description: 'Kenyan TV and radio channels',
-    urls: ['/playlists/kenya.m3u'],
-  },
-  // Future FAST-style sources will be appended here, e.g.
-  // { id: 'fast', label: 'FAST', description: 'Free ad-supported channels', urls: ['...'] }
-];
+export const PLAYLIST_URL = 'https://iptv-org.github.io/iptv/index.category.m3u';
 
-/** URL of the default (first) live source — kept for convenience/back-compat. */
-export const PLAYLIST_URL = LIVE_SOURCES[0].urls[0];
-
-// Sources that namespace their channel ids in /live/:channelId so they can't
-// collide with World IP TV ids. The eventual FAST sources map here too
-// (pluto, samsung, ...).
-const SOURCE_PREFIX = { kenya: 'ke' };
-
-// In-memory per-source cache so the browser page and the player page don't
-// re-download the (large) playlists on every navigation. Cleared on failure.
-const playlistCaches = new Map(); // sourceId -> LiveChannel[]
-
-/**
- * Resolve which source a /live/:channelId reference belongs to.
- * Non-default sources prefix their ids like `ke:CitizenTV.ke`; this splits off
- * that prefix and returns the matching source id plus the unprefixed id to match.
- * References without a known prefix fall back to the default (world-iptv) source.
- * @param {string} [ref]
- * @returns {{ sourceId: string, channelId: string }}
- */
-export function parseChannelRef(ref = '') {
-  const idx = ref.indexOf(':');
-  const prefix = idx === -1 ? '' : ref.slice(0, idx).toLowerCase();
-  if (prefix) {
-    const src = LIVE_SOURCES.find(
-      (s) => SOURCE_PREFIX[s.id] && SOURCE_PREFIX[s.id].toLowerCase() === prefix,
-    );
-    if (src) return { sourceId: src.id, channelId: ref.slice(idx + 1) };
-  }
-  return { sourceId: 'world-iptv', channelId: ref };
-}
+// In-memory cache so the browser page and the player page don't re-download the
+// (large) playlist on every navigation. Cleared automatically if it fails.
+let playlistCache = null;
 
 /**
  * A single live channel parsed from the playlist.
@@ -127,24 +75,16 @@ function parseExtinf(line) {
 }
 
 /**
- * Fetch and parse the playlist for a given live source.
- * One plain `fetch(url)` handles both absolute URLs and relative static paths
- * (e.g. "/playlists/kenya.m3u" served from public/), so no protocol branching
- * is needed for local playlists. Never throws — returns [] on any failure so
- * the UI can render a friendly error state instead of crashing.
- * @param {string} [sourceId='world-iptv'] - id from LIVE_SOURCES
+ * Fetch and parse the category playlist.
+ * Never throws — returns [] on any upstream / parse failure so the UI can
+ * render a friendly error state instead of crashing.
  * @param {{ signal?: AbortSignal }} [opts]
  * @returns {Promise<LiveChannel[]>}
  */
-export async function fetchPlaylist(sourceId = 'world-iptv', opts = {}) {
-  const src = LIVE_SOURCES.find((s) => s.id === sourceId);
-  const id = src ? src.id : 'world-iptv';
-  const url = src?.urls?.[0] || PLAYLIST_URL;
-
-  const cached = playlistCaches.get(id);
-  if (cached) return cached;
+export async function fetchPlaylist(opts = {}) {
+  if (playlistCache) return playlistCache;
   try {
-    const res = await fetch(url, { signal: opts.signal });
+    const res = await fetch(PLAYLIST_URL, { signal: opts.signal });
     if (!res.ok) return [];
     const text = await res.text();
 
@@ -153,9 +93,6 @@ export async function fetchPlaylist(sourceId = 'world-iptv', opts = {}) {
     const extinfRe = /^#EXTINF:/;
     const skipRe = /^#/;
     const lines = text.split(/\r?\n/);
-    // Non-default sources namespace their channel ids (`ke:...`, and later
-    // `pluto:`, `samsung:`, ...) so they can never collide with World IP TV ids.
-    const prefix = SOURCE_PREFIX[id];
 
     for (let i = 0; i < lines.length; i += 1) {
       const line = lines[i].trim();
@@ -178,11 +115,10 @@ export async function fetchPlaylist(sourceId = 'world-iptv', opts = {}) {
       const country = countryFromTvgId(tvgId);
       // Prefer a stable id from tvg-id; fall back to a slug of the name + index.
       const baseId = tvgId && tvgId.trim() ? tvgId.trim() : `${name}-${i}`;
-      const namespaced = prefix ? `${prefix}:${baseId}` : baseId;
-      let channelId = namespaced;
+      let id = baseId;
       let n = 2;
-      while (seen.has(channelId)) channelId = `${namespaced}-${n++}`;
-      seen.add(channelId);
+      while (seen.has(id)) id = `${baseId}-${n++}`;
+      seen.add(id);
 
       const category = groupTitle || 'General';
       // iptv-org can list the same stream twice with different tvg-ids; those
@@ -197,7 +133,7 @@ export async function fetchPlaylist(sourceId = 'world-iptv', opts = {}) {
       if (existing) continue;
 
       channels.push({
-        id: channelId,
+        id,
         name,
         logo: logo || '',
         category,
@@ -208,21 +144,16 @@ export async function fetchPlaylist(sourceId = 'world-iptv', opts = {}) {
       });
     }
 
-    playlistCaches.set(id, channels);
+    playlistCache = channels;
     return channels;
   } catch {
     return [];
   }
 }
 
-/**
- * Drop the in-memory playlist cache for one source (or all when omitted),
- * e.g. for a manual "try again".
- * @param {string} [sourceId]
- */
-export function resetPlaylistCache(sourceId) {
-  if (sourceId) playlistCaches.delete(sourceId);
-  else playlistCaches.clear();
+/** Drop the in-memory playlist cache (e.g. for a manual "try again"). */
+export function resetPlaylistCache() {
+  playlistCache = null;
 }
 
 // Public IPTV sources are proxied through a serverless function (api/stream.mjs)

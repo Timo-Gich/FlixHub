@@ -19,6 +19,7 @@ import {
   getRegionByCode,
   getRegionForCountry,
   buildStreamUrl,
+  parseChannelRef,
 } from '../services/liveTvService';
 import { getFavoritesLive } from '../services/libraryService';
 
@@ -85,17 +86,25 @@ export default function LivePlayerPage() {
     let cancelled = false;
     setMissing(false);
     setChannel(null);
-    fetchPlaylist().then((list) => {
+    // Channel ids from non-default sources are namespaced (e.g. `ke:CitizenTV.ke`),
+    // so resolve the owning source before fetching its playlist. World IP TV ids
+    // carry no prefix and default to the primary source.
+    const { sourceId, channelId } = parseChannelRef(decoded);
+    fetchPlaylist(sourceId).then((list) => {
       if (cancelled) return;
       const found =
-        list.find((c) => c.id === decoded || c.tvgId === decoded) ?? null;
+        list.find(
+          (c) => c.id === decoded || c.id === channelId || c.tvgId === channelId,
+        ) ?? null;
       if (found) {
         setChannel(found);
         return;
       }
       const fav = getFavoritesLive()
         .map((e) => e.channel)
-        .find((c) => c.id === decoded || c.tvgId === decoded);
+        .find(
+          (c) => c.id === decoded || c.id === channelId || c.tvgId === channelId,
+        );
       setChannel(fav ?? null);
       if (!fav) setMissing(true);
     });

@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import LiveChannelCard from '../components/LiveChannelCard';
-import { fetchPlaylist, EPG_REGIONS } from '../services/liveTvService';
+import { fetchPlaylist, EPG_REGIONS, LIVE_SOURCES } from '../services/liveTvService';
 import { getFavoritesLive, subscribeLibrary } from '../services/libraryService';
 
 const REGION_KEY = 'flixhub.liveRegion';
@@ -15,6 +15,18 @@ function readRegion() {
     /* ignore storage errors */
   }
   return 'US';
+}
+
+const SOURCE_KEY = 'flixhub.liveSource';
+
+function readSource() {
+  try {
+    const saved = localStorage.getItem(SOURCE_KEY);
+    if (saved && LIVE_SOURCES.some((s) => s.id === saved)) return saved;
+  } catch {
+    /* ignore storage errors */
+  }
+  return 'world-iptv';
 }
 
 const TAB_ALL = '__all__';
@@ -46,14 +58,16 @@ function readStoredQuery() {
 
 /**
  * /live — channel browser for continuous live TV.
- * Fetches the public iptv-org playlist and offers a region selector (drives the
- * EPG country), a Favorites tab, category tabs derived from group-title, a
+ * Offers a source selector (World IP TV, Kenya, …), a region selector (drives
+ * the EPG country), a Favorites tab, category tabs derived from group-title
+ * (skipped for single-group sources like Kenya, which render one flat grid), a
  * client-side search box, and a responsive grid of live-channel cards.
  */
 export default function LiveTVPage() {
   const [channels, setChannels] = useState(null); // null = loading
   const [error, setError] = useState(false);
   const [region, setRegion] = useState(readRegion);
+  const [source, setSource] = useState(readSource);
   const [tab, setTab] = useState(readStoredTab);
   const [query, setQuery] = useState(readStoredQuery);
   const [favState, setFavState] = useState(() => getFavoritesLive());
@@ -61,7 +75,9 @@ export default function LiveTVPage() {
 
   useEffect(() => {
     let cancelled = false;
-    fetchPlaylist().then((list) => {
+    setError(false);
+    setChannels(null);
+    fetchPlaylist(source).then((list) => {
       if (cancelled) return;
       if (!list.length) setError(true);
       setChannels(list);
@@ -69,7 +85,7 @@ export default function LiveTVPage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [source]);
 
   // Keep favorites in sync with the library service.
   useEffect(() => subscribeLibrary(() => setFavState(getFavoritesLive())), []);
@@ -82,6 +98,26 @@ export default function LiveTVPage() {
       /* ignore storage errors */
     }
   }, [region]);
+
+  // Persist the chosen source so it survives navigation / reloads.
+  useEffect(() => {
+    try {
+      localStorage.setItem(SOURCE_KEY, source);
+    } catch {
+      /* ignore storage errors */
+    }
+  }, [source]);
+
+  // Switching sources resets to a fresh view — "All" tab, no search, top of grid.
+  const prevSourceRef = useRef(source);
+  useEffect(() => {
+    if (prevSourceRef.current !== source) {
+      prevSourceRef.current = source;
+      setTab(TAB_ALL);
+      setQuery('');
+      setPage(1);
+    }
+  }, [source]);
 
   // Remember the active tab & search across the session so returning from a
   // channel player restores the view the user was on.
@@ -117,10 +153,13 @@ export default function LiveTVPage() {
   // session), fall back to "All" once the category list is known.
   useEffect(() => {
     if (loading) return;
+    const flat = source === 'kenya';
     const valid =
-      tab === TAB_ALL || tab === TAB_FAVORITES || categories.includes(tab);
+      tab === TAB_ALL ||
+      tab === TAB_FAVORITES ||
+      (!flat && categories.includes(tab));
     if (!valid) setTab(TAB_ALL);
-  }, [loading, tab, categories]);
+  }, [loading, tab, categories, source]);
 
   const favorites = useMemo(() => favState.map((e) => e.channel), [favState]);
 // Apply tab + search filtering client-side.
@@ -133,13 +172,17 @@ export default function LiveTVPage() {
     return list;
   }, [channels, tab, favorites, query]);
 
+  // Kenya (and other single-group sources) skip the category row entirely and
+  // show every channel in one flat grid — avoids a filter with a single option.
+  const categoryTabs =
+    source === 'kenya' ? [] : categories.map((c) => ({ key: c, label: c }));
   const tabs = [
     { key: TAB_ALL, label: 'All' },
     {
       key: TAB_FAVORITES,
       label: `Favorites${favorites.length ? ` (${favorites.length})` : ''}`,
     },
-    ...categories.map((c) => ({ key: c, label: c })),
+    ...categoryTabs,
   ];
 
   const emptyVisible = !loading && !error && visible.length === 0;
@@ -156,7 +199,7 @@ export default function LiveTVPage() {
   const retry = () => {
     setError(false);
     setChannels(null);
-    fetchPlaylist().then((list) => {
+    fetchPlaylist(source).then((list) => {
       if (!list.length) setError(true);
       setChannels(list);
     });
@@ -185,21 +228,39 @@ return (
             </p>
           </div>
 
-          {/* Region selector (drives EPG country) */}
-          <label className="flex items-center gap-2 text-sm text-muted">
-            <span className="hidden sm:inline">EPG region</span>
-            <select
-              value={region}
-              onChange={(e) => setRegion(e.target.value)}
-              className="rounded-md border border-ink-border bg-ink-raised px-3 py-2 text-sm text-foreground outline-none focus:ring-2 focus:ring-brand/40"
-            >
-              {EPG_REGIONS.map((r) => (
-                <option key={r.code} value={r.code}>
-                  {r.label}
-                </option>
-              ))}
-            </select>
-          </label>
+          {/* Source + region selectors */}
+          <div className="flex flex-wrap items-center gap-2">
+            {LIVE_SOURCES.filter((s) => s.urls && s.urls.length).map((s) => (
+              <button
+                key={s.id}
+                type="button"
+                onClick={() => setSource(s.id)}
+                aria-pressed={source === s.id}
+                title={s.description}
+                className={`shrink-0 rounded-full px-3 py-1.5 text-sm font-semibold transition ${
+                  source === s.id
+                    ? 'bg-brand text-white'
+                    : 'bg-ink-raised text-muted hover:bg-ink-border hover:text-white'
+                }`}
+              >
+                {s.label}
+              </button>
+            ))}
+            <label className="flex items-center gap-2 text-sm text-muted">
+              <span className="hidden sm:inline">EPG region</span>
+              <select
+                value={region}
+                onChange={(e) => setRegion(e.target.value)}
+                className="rounded-md border border-ink-border bg-ink-raised px-3 py-2 text-sm text-foreground outline-none focus:ring-2 focus:ring-brand/40"
+              >
+                {EPG_REGIONS.map((r) => (
+                  <option key={r.code} value={r.code}>
+                    {r.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
         </div>
 
         {/* Search */}

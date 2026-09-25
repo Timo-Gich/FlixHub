@@ -47,6 +47,7 @@
   /* Fonts */
   --font-sans: "Inter", "Segoe UI", system-ui, -apple-system, "Helvetica Neue",
     Arial, sans-serif;
+  --font-display: "Oswald", "Inter", "Segoe UI", system-ui, sans-serif;
 }
 
 /* Base layer */

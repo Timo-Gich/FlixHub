@@ -211,26 +211,46 @@ export default function TVDetailPage() {
           <section aria-label="Episodes" className="mx-auto w-full max-w-[1600px] px-4 py-6 sm:px-8">
             <div className="flex flex-wrap items-center gap-3">
               <h2 className="text-lg font-bold text-white">Episodes — Season {selectedSeason}</h2>
-              <label className="inline-flex items-center gap-2 text-sm text-muted">
+              <label className="inline-flex items-center gap-2.5 text-sm font-semibold uppercase tracking-wide text-muted">
                 Season
-                <select
-                  value={selectedSeason ?? ''}
-                  onChange={(e) => {
-                    const next = Number(e.target.value);
-                    setSeason(next);
-                    // Remember it so reopening the page (e.g. from the player's
-                    // Back button) returns to this season, not Season 1.
-                    saveLastSeason(id, next);
-                  }}
-                  className="rounded-md border border-ink-border bg-ink-raised px-3 py-1.5
-                             text-sm text-foreground outline-none focus:ring-2 focus:ring-brand/40"
-                >
-                  {seasons.map((s) => (
-                    <option key={s.season_number} value={s.season_number}>
-                      Season {s.season_number} {s.episode_count ? `(${s.episode_count} eps)` : ''}
-                    </option>
-                  ))}
-                </select>
+                <span className="relative">
+                  <select
+                    value={selectedSeason ?? ''}
+                    onChange={(e) => {
+                      const next = Number(e.target.value);
+                      setSeason(next);
+                      // Remember it so reopening the page (e.g. from the player's
+                      // Back button) returns to this season, not Season 1.
+                      saveLastSeason(id, next);
+                    }}
+                    style={{ fontFamily: 'var(--font-display)' }}
+                    className="appearance-none cursor-pointer rounded-full border border-ink-border bg-ink-raised py-1.5 pl-3.5 pr-9 text-sm font-semibold tracking-wide text-foreground shadow-md shadow-black/30 outline-none transition
+                               hover:border-brand/60 focus:border-brand focus:ring-2 focus:ring-brand/40 active:scale-[0.98]"
+                  >
+                    {seasons.map((s) => (
+                      <option
+                        key={s.season_number}
+                        value={s.season_number}
+                        className="bg-ink-raised text-foreground"
+                      >
+                        Season {s.season_number}
+                        {s.episode_count ? ` · ${s.episode_count} eps` : ''}
+                      </option>
+                    ))}
+                  </select>
+                  <svg
+                    viewBox="0 0 24 24"
+                    className="pointer-events-none absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden="true"
+                  >
+                    <path d="M9 6l6 6M9 6l-6 6" />
+                  </svg>
+                </span>
               </label>
             </div>
 

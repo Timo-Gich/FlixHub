@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
@@ -11,9 +11,61 @@ import {
   fetchTVSeason,
   getBackdropUrl,
   getPosterUrl,
+  getImageUrl,
   formatRating,
   formatYear,
 } from '../services/tmdbService';
+import { saveLastSeason, getLastSeason, getWatchedEpisodes } from '../services/seasonMem';
+
+/**
+ * Small responsive thumbnail for an episode row. Shows the episode's still frame
+ * (TMDb still_path) when available, gracefully falling back to a plain "E{n}"
+ * block. When the episode is the highlighted one, a bright play button overlays
+ * the thumb so the "next up" row is unmistakable.
+ */
+function EpisodeThumb({ stillPath, episodeNumber, highlighted, watched }) {
+  const [failed, setFailed] = useState(false);
+  const imgUrl = !failed && stillPath ? getImageUrl(stillPath, 500) : null;
+  return (
+    <span
+      className={`relative flex h-16 w-28 shrink-0 items-center justify-center overflow-hidden rounded-md ${
+        highlighted ? 'ring-2 ring-brand' : 'ring-1 ring-ink-border'
+      }`}
+    >
+      {imgUrl ? (
+        <img
+          src={imgUrl}
+          alt=""
+          loading="lazy"
+          onError={() => setFailed(true)}
+          className="absolute inset-0 h-full w-full object-cover"
+        />
+      ) : (
+        <span className="flex h-full w-full items-center justify-center bg-brand/15 text-xs font-black text-brand-light">
+          E{episodeNumber}
+        </span>
+      )}
+      {highlighted && (
+        <span className="absolute inset-0 flex items-center justify-center bg-black/45">
+          <span className="flex h-8 w-8 items-center justify-center rounded-full bg-brand shadow-lg shadow-brand/40">
+            <svg viewBox="0 0 24 24" className="ml-0.5 h-4 w-4 fill-white" aria-hidden="true">
+              <path d="M8 5v14l11-7z" />
+            </svg>
+          </span>
+        </span>
+      )}
+      {watched && !highlighted && (
+        <span
+          title="Watched"
+          aria-label="Watched"
+          className="absolute bottom-1 right-1 flex h-4 w-4 items-center justify-center rounded-full bg-brand text-[10px] font-bold text-white"
+        >
+          ✓
+        </span>
+      )}
+    </span>
+  );
+}
 
 /**
  * /tv/:id — VidBox-style series detail page. Uses the shared DetailHero (same
@@ -28,22 +80,37 @@ export default function TVDetailPage() {
   const { data: series, loading, error, reload } = useMovieData(() => fetchTVDetails(id), [id]);
   const seasons = (series?.seasons ?? []).filter((s) => s.season_number > 0 && s.episode_count > 0);
 
-  // Optional deep-link from "Continue Watching" (?season=N&episode=M) so the
-  // episode list opens on the right season and highlights where to resume.
+  // Optional deep-link params so the episode list can open on a specific season
+  // and highlight a single episode. Two kinds of link land here:
+  //   - Continue Watching → ?season=N&episode=M      → labels it "Resume"
+  //   - Player "Back"     → ?season=N&episode=M&n=1  → labels it "Next up"
   const [searchParams] = useSearchParams();
-  const resumeSeason = searchParams.get('season');
-  const resumeEpisode = searchParams.get('episode');
+  const linkSeason = searchParams.get('season');
+  const linkEpisode = searchParams.get('episode');
+  // `n=1` marks a link as pointing at the *next* episode to watch (auto-advanced
+  // from the player), so we highlight it as "Next up" rather than "Resume".
+  const isNextLink = searchParams.get('n') === '1';
 
   const [season, setSeason] = useState(null);
   useEffect(() => {
     if (series && season === null) {
-      // Prefer the deep-linked season when it exists.
-      const requested = resumeSeason != null ? Number(resumeSeason) : null;
+      // 1) A deep-linked season (Continue Watching / player "next").
+      const requested = linkSeason != null ? Number(linkSeason) : null;
       const match = requested != null ? seasons.find((s) => s.season_number === requested) : null;
       if (match) {
         setSeason(match.season_number);
         return;
       }
+      // 2) The last season the user had selected for this series, so closing the
+      //    player doesn't drop them back to Season 1.
+      const remembered = getLastSeason(id);
+      const rememberedMatch =
+        remembered != null ? seasons.find((s) => s.season_number === remembered) : null;
+      if (rememberedMatch) {
+        setSeason(rememberedMatch.season_number);
+        return;
+      }
+      // 3) Fall back to the first season.
       const first = seasons[0];
       if (first) setSeason(first.season_number);
     }
@@ -56,9 +123,36 @@ export default function TVDetailPage() {
     [id, selectedSeason],
   );
   const episodes = seasonData?.episodes ?? [];
-  // Which episode (if any) the user left off on, to highlight as the resume point.
-  const resumeEpisodeNum = resumeEpisode != null ? Number(resumeEpisode) : null;
-  const showResumeHighlight = resumeSeason != null && Number(resumeSeason) === selectedSeason;
+  // Which episode (if any) to highlight on the currently selected season. Home's
+  // Continue Watching passes a "resume" point; the player's Back button passes
+  // the auto-advanced "next" episode so it's obvious what to play next.
+  const linkEpisodeNum = linkEpisode != null ? Number(linkEpisode) : null;
+  const showEpisodeHighlight = linkSeason != null && Number(linkSeason) === selectedSeason;
+
+  // Episodes already watched for the currently selected season (checked off in
+  // the list alongside the next-up / resume highlight).
+  const watchedInSeason =
+    (getWatchedEpisodes(id)[String(selectedSeason)] ?? []);
+
+  // The auto-advanced "Next up" is the very last episode of the series when it
+  // sits on the final season's last episode — show an "all caught up" state.
+  const lastSeasonForFinale = seasons[seasons.length - 1];
+  const isSeriesFinale =
+    lastSeasonForFinale != null &&
+    Number(linkSeason) === lastSeasonForFinale.season_number &&
+    linkEpisodeNum === lastSeasonForFinale.episode_count;
+
+  // When arriving via a deep link that highlights an episode, bring it into view
+  // (the restored scroll position can otherwise leave it off-screen).
+  const highlightRef = useRef(null);
+  useEffect(() => {
+    if (!showEpisodeHighlight || !highlightRef.current) return;
+    const raf = requestAnimationFrame(() => {
+      highlightRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+    return () => cancelAnimationFrame(raf);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [episodes, showEpisodeHighlight, linkEpisodeNum, selectedSeason]);
 
   const title = series?.name || 'Series';
   const rating = formatRating(series?.vote_average);
@@ -73,8 +167,11 @@ export default function TVDetailPage() {
   const genres = series?.genres ?? [];
   const overview = series?.overview;
   const hasValidId = id !== undefined && !Number.isNaN(Number(id));
-  // Default "Play" starts the first episode of season 1.
-  const playHref = hasValidId ? `/watch/tv/${id}/1/1` : null;
+  // Hero "Play" starts the first episode of the currently selected season (or
+  // Season 1 before the season selector has initialised), so the hero stays in
+  // sync with the episode list below it.
+  const playSeason = selectedSeason ?? 1;
+  const playHref = hasValidId ? `/watch/tv/${id}/${playSeason}/1` : null;
 
   return (
     <div className="min-h-screen bg-ink text-foreground">
@@ -124,7 +221,13 @@ export default function TVDetailPage() {
                 Season
                 <select
                   value={selectedSeason ?? ''}
-                  onChange={(e) => setSeason(Number(e.target.value))}
+                  onChange={(e) => {
+                    const next = Number(e.target.value);
+                    setSeason(next);
+                    // Remember it so reopening the page (e.g. from the player's
+                    // Back button) returns to this season, not Season 1.
+                    saveLastSeason(id, next);
+                  }}
                   className="rounded-md border border-ink-border bg-ink-raised px-3 py-1.5
                              text-sm text-foreground outline-none focus:ring-2 focus:ring-brand/40"
                 >
@@ -154,34 +257,60 @@ export default function TVDetailPage() {
             {!seasonLoading && !seasonError && episodes.length > 0 && (
               <ul className="mt-4 divide-y divide-ink-border">
                 {episodes.map((ep) => {
-                  const isResume = showResumeHighlight && ep.episode_number === resumeEpisodeNum;
+                  const isHighlighted = showEpisodeHighlight && ep.episode_number === linkEpisodeNum;
+                  const isWatchedEp = watchedInSeason.includes(ep.episode_number);
                   return (
                     <li
                       key={ep.id}
+                      ref={isHighlighted ? highlightRef : null}
                       className={`py-3 ${
-                        isResume ? 'rounded-md bg-brand/10 px-3 ring-1 ring-brand/50' : ''
+                        isHighlighted ? 'rounded-md bg-brand/10 px-3 ring-2 ring-brand' : ''
                       }`}
                     >
                       <Link
                         to={`/watch/tv/${id}/${selectedSeason}/${ep.episode_number}`}
                         className="group flex gap-4 hover:bg-ink-raised"
                       >
-                        <span
-                          className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-md text-xs font-black ${
-                            isResume ? 'bg-brand text-white' : 'bg-brand/15 text-brand-light'
-                          }`}
-                        >
-                          E{ep.episode_number}
-                        </span>
+                        <EpisodeThumb
+                          stillPath={ep.still_path}
+                          episodeNumber={ep.episode_number}
+                          highlighted={isHighlighted}
+                          watched={isWatchedEp}
+                        />
                         <span className="flex min-w-0 flex-1 flex-col">
                           <span className="flex items-center gap-2 text-sm font-semibold text-foreground">
                             {ep.name || `Episode ${ep.episode_number}`}
-                            {isResume && (
-                              <span className="rounded bg-brand px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">
-                                Resume
+                            {isHighlighted && (
+                              isNextLink ? (
+                                <span className="rounded bg-brand px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">
+                                  Next up
+                                </span>
+                              ) : (
+                                <span className="rounded bg-brand px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">
+                                  Resume
+                                </span>
+                              )
+                            )}
+                            {!isHighlighted && isWatchedEp && (
+                              <span title="Watched" aria-label="Watched" className="font-bold text-brand-light">
+                                ✓
                               </span>
                             )}
                           </span>
+                          {isHighlighted && isNextLink && (
+                            isSeriesFinale ? (
+                              <span className="mt-1 text-xs font-bold text-brand-light">
+                                🎉 You're all caught up — no next episode
+                              </span>
+                            ) : (
+                              <span className="mt-1 inline-flex items-center gap-1 text-xs font-bold text-brand-light">
+                                <svg viewBox="0 0 24 24" className="h-3 w-3 fill-current" aria-hidden="true">
+                                  <path d="M8 5v14l11-7z" />
+                                </svg>
+                                Play next episode
+                              </span>
+                            )
+                          )}
                           {ep.overview && (
                             <span className="mt-1 line-clamp-2 text-xs text-muted">{ep.overview}</span>
                           )}

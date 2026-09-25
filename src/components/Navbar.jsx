@@ -197,6 +197,43 @@ export default function Navbar() {
     }
   }, [theme]);
 
+  // Global search shortcut: "/" or Ctrl/Cmd+K focuses the desktop search pill on
+  // md+ screens, or reveals the mobile search bar on small screens. Ignored while
+  // the user is already typing in a field.
+  useEffect(() => {
+    const isTypingTarget = (target) => {
+      const tag = target?.tagName;
+      return (
+        tag === 'INPUT' ||
+        tag === 'TEXTAREA' ||
+        tag === 'SELECT' ||
+        target?.isContentEditable
+      );
+    };
+    const onKeyDown = (e) => {
+      const isSlash = e.key === '/';
+      const isSearchShortcut =
+        e.key === '/' || ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k');
+      if (!isSearchShortcut || isTypingTarget(e.target)) return;
+      e.preventDefault();
+      const desktop = document.getElementById('desktop-search');
+      // The desktop pill's wrapper is hidden below md, so only focus it when visible.
+      const desktopVisible =
+        desktop && desktop.closest('form') && getComputedStyle(desktop.closest('form')).display !== 'none';
+      if (desktopVisible) {
+        desktop.focus();
+        desktop.select?.();
+        return;
+      }
+      setMobileSearchOpen(true);
+      setMenuOpen(false);
+      // Focus the mobile input once it has rendered on the next frame.
+      setTimeout(() => document.getElementById('mobile-search-input')?.focus(), 60);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
+
   // Debounced query suggestions — fires only after the user pauses typing.
   useEffect(() => {
     const term = query.trim();

@@ -24,6 +24,8 @@ const NOTE_FADE_MS = 1000; // Fade-out duration (matches the CSS transition).
  *   - rawId       : true → treat id as a raw (non-numeric) id like "tt…"
  *   - nowLabel    : text for the top bar ("Now playing · …")
  *   - backHref    : route the Back button links to
+ *   - prevHref    : (TV) link for the Previous-episode button, or null
+ *   - nextHref    : (TV) link for the Next-episode button, or null
  *   - iframeTitle : accessibility title for the iframe
  *   - notice      : ReactNode shown as the ad-blocker notice
  */
@@ -36,6 +38,8 @@ export default function VideoPlayer({
   rawId,
   nowLabel,
   backHref,
+  prevHref,
+  nextHref,
   iframeTitle,
   notice,
 }) {
@@ -97,6 +101,58 @@ export default function VideoPlayer({
           </svg>
           Back
         </Link>
+        {(prevHref || nextHref) && (
+          <span
+            role="group"
+            aria-label="Episode navigation"
+            className="inline-flex items-center gap-1"
+          >
+            {prevHref && (
+              <Link
+                to={prevHref}
+                aria-label="Previous episode"
+                title="Previous episode"
+                className="inline-flex w-fit items-center justify-center rounded-md bg-ink-raised px-2 py-1.5
+                           text-white ring-1 ring-ink-border transition hover:bg-brand hover:text-white"
+              >
+                <svg
+                  viewBox="0 0 24 24"
+                  className="h-4 w-4"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M19 12H5M12 19l-7-7 7-7" />
+                </svg>
+              </Link>
+            )}
+            {nextHref && (
+              <Link
+                to={nextHref}
+                aria-label="Next episode"
+                title="Next episode"
+                className="inline-flex w-fit items-center justify-center rounded-md bg-ink-raised px-2 py-1.5
+                           text-white ring-1 ring-ink-border transition hover:bg-brand hover:text-white"
+              >
+                <svg
+                  viewBox="0 0 24 24"
+                  className="-scale-x-100 h-4 w-4"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M19 12H5M12 19l-7-7 7-7" />
+                </svg>
+              </Link>
+            )}
+          </span>
+        )}
         <span className="min-w-0 flex-1 truncate text-sm text-muted">{nowLabel}</span>
         <ServerDropdown
           servers={activeServers}

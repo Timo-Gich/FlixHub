@@ -4,6 +4,7 @@ import VideoPlayer from '../components/VideoPlayer';
 import { fetchTVDetails } from '../services/tmdbService';
 import { useMovieData } from '../hooks/useMovieData';
 import { logPlayed, updateWatchProgress } from '../services/libraryService';
+import { saveLastSeason, markEpisodeWatched } from '../services/seasonMem';
 
 /**
  * /watch/tv/:id/:season/:episode - TV player with a server selector.
@@ -25,10 +26,16 @@ export default function WatchTVPage() {
     [id],
   );
 
-  // Auto-log to history (plays => type tv, with season/episode) once known.
+  // Auto-log to history (plays => type tv, with season/episode) once known, and
+  // remember which season the user is watching so the detail page's Back link
+  // reopens the same season even without a deep-link query param.
   useEffect(() => {
     if (details?.id && hasValidId) {
       logPlayed(details, { type: 'tv', season: Number(season), episode: Number(episode) });
+      saveLastSeason(id, Number(season));
+      // Mark the current episode as watched so the series page can show a check
+      // on episodes the user has already seen.
+      markEpisodeWatched(id, Number(season), Number(episode));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [details?.id, hasValidId]);
@@ -55,12 +62,86 @@ export default function WatchTVPage() {
   }, [details?.id, hasValidId]);
 
   const title = details?.name || 'Series';
+  // Auto-advance to the *next* episode so the Back button opens the right season
+  // and highlights exactly what to play next. Uses the series' season metadata
+  // (episode counts) already fetched in `details` to know the season boundary:
+  //   - mid-season            → same season, next episode
+  //   - last episode of a season with a following season → next season, ep 1
+  //   - series finale         → point at the current episode (nothing after it)
+  const seasonNum = Number(season);
+  const episodeNum = Number(episode);
+  const nextTarget = (() => {
+    if (Number.isNaN(seasonNum) || Number.isNaN(episodeNum)) return null;
+    const seasonList =
+      details?.seasons?.filter((s) => s.season_number > 0 && s.episode_count > 0) ?? [];
+    const current = seasonList.find((s) => s.season_number === seasonNum);
+    const currentCount = current?.episode_count ?? 0;
+    if (currentCount > 0 && episodeNum < currentCount) {
+      return { season: seasonNum, episode: episodeNum + 1 };
+    }
+    const nextSeason = seasonList
+      .filter((s) => s.season_number > seasonNum)
+      .sort((a, b) => a.season_number - b.season_number)[0];
+    if (nextSeason) {
+      return { season: nextSeason.season_number, episode: 1 };
+    }
+    // No later season (or metadata still loading) — don't skip ahead.
+    return { season: seasonNum, episode: episodeNum };
+  })();
+
+  // The *previous* episode, mirroring nextTarget (rolls back across seasons).
+  const prevTarget = (() => {
+    if (Number.isNaN(seasonNum) || Number.isNaN(episodeNum)) return null;
+    const seasonList =
+      details?.seasons?.filter((s) => s.season_number > 0 && s.episode_count > 0) ?? [];
+    const current = seasonList.find((s) => s.season_number === seasonNum);
+    const currentCount = current?.episode_count ?? 0;
+    if (currentCount > 0 && episodeNum > 1) {
+      return { season: seasonNum, episode: episodeNum - 1 };
+    }
+    const prevSeason = seasonList
+      .filter((s) => s.season_number < seasonNum)
+      .sort((a, b) => b.season_number - a.season_number)[0];
+    if (prevSeason) {
+      return { season: prevSeason.season_number, episode: prevSeason.episode_count };
+    }
+    return null; // very first episode of the series — no previous
+  })();
+
+  // Whether a real "next" episode exists (mid-season or another season coming).
+  const hasNextEpisode = (() => {
+    const seasonList =
+      details?.seasons?.filter((s) => s.season_number > 0 && s.episode_count > 0) ?? [];
+    const current = seasonList.find((s) => s.season_number === seasonNum);
+    const currentCount = current?.episode_count ?? 0;
+    if (currentCount > 0 && episodeNum < currentCount) return true;
+    return seasonList.some((s) => s.season_number > seasonNum);
+  })();
+
+  // In-player prev/next buttons jump straight to the neighbouring episode without
+  // leaving the player (null when unavailable, e.g. no previous or a finale).
+  const prevHref =
+    prevTarget != null
+      ? `/watch/tv/${id}/${prevTarget.season}/${prevTarget.episode}`
+      : null;
+  const nextHref =
+    hasNextEpisode && nextTarget != null
+      ? `/watch/tv/${id}/${nextTarget.season}/${nextTarget.episode}`
+      : null;
+
+  // `n=1` tells the detail page this deep-link is the auto-advanced "Next up"
+  // episode (so it labels the highlight accordingly rather than "Resume").
+  const backHref =
+    nextTarget != null
+      ? `/tv/${id}?season=${nextTarget.season}&episode=${nextTarget.episode}&n=1`
+      : hasValidId
+        ? `/tv/${id}`
+        : '/series';
   const nowLabel = hasValidId
     ? detailsLoading
       ? `Now playing - S${season} E${episode} ...`
       : `Now playing - ${title} - S${season} E${episode}`
     : 'Player';
-  const backHref = hasValidId ? `/tv/${id}` : '/series';
   const iframeTitle = hasValidId ? `${title} S${season} E${episode} player` : 'Player';
   const notice = (
     <p>
@@ -77,6 +158,8 @@ export default function WatchTVPage() {
       episode={episode}
       nowLabel={nowLabel}
       backHref={backHref}
+      prevHref={prevHref}
+      nextHref={nextHref}
       iframeTitle={iframeTitle}
       notice={notice}
     />

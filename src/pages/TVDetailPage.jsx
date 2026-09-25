@@ -23,7 +23,7 @@ import { saveLastSeason, getLastSeason, getWatchedEpisodes } from '../services/s
  * block. When the episode is the highlighted one, a bright play button overlays
  * the thumb so the "next up" row is unmistakable.
  */
-function EpisodeThumb({ stillPath, episodeNumber, highlighted, watched }) {
+function EpisodeThumb({ stillPath, season, episodeNumber, highlighted }) {
   const [failed, setFailed] = useState(false);
   const imgUrl = !failed && stillPath ? getImageUrl(stillPath, 500) : null;
   return (
@@ -41,10 +41,13 @@ function EpisodeThumb({ stillPath, episodeNumber, highlighted, watched }) {
           className="absolute inset-0 h-full w-full object-cover"
         />
       ) : (
-        <span className="flex h-full w-full items-center justify-center bg-brand/15 text-xs font-black text-brand-light">
-          E{episodeNumber}
-        </span>
+        <span className="absolute inset-0 flex h-full w-full items-center justify-center bg-brand/15" />
       )}
+      {/* Season + episode — a single top-left label so each row is clearly
+          distinct (S2 E3) whether or not a still frame is available. */}
+      <span className="absolute left-1 top-1 flex rounded bg-black/60 px-1 text-[10px] font-bold leading-none text-white">
+        {season != null && <>S{season} </>}E{episodeNumber}
+      </span>
       {highlighted && (
         <span className="absolute inset-0 flex items-center justify-center bg-black/45">
           <span className="flex h-8 w-8 items-center justify-center rounded-full bg-brand shadow-lg shadow-brand/40">
@@ -52,15 +55,6 @@ function EpisodeThumb({ stillPath, episodeNumber, highlighted, watched }) {
               <path d="M8 5v14l11-7z" />
             </svg>
           </span>
-        </span>
-      )}
-      {watched && !highlighted && (
-        <span
-          title="Watched"
-          aria-label="Watched"
-          className="absolute bottom-1 right-1 flex h-4 w-4 items-center justify-center rounded-full bg-brand text-[10px] font-bold text-white"
-        >
-          ✓
         </span>
       )}
     </span>
@@ -273,9 +267,9 @@ export default function TVDetailPage() {
                       >
                         <EpisodeThumb
                           stillPath={ep.still_path}
+                          season={selectedSeason}
                           episodeNumber={ep.episode_number}
                           highlighted={isHighlighted}
-                          watched={isWatchedEp}
                         />
                         <span className="flex min-w-0 flex-1 flex-col">
                           <span className="flex items-center gap-2 text-sm font-semibold text-foreground">

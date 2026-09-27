@@ -1,4 +1,5 @@
 import { getPosterUrl, formatRating, formatYear } from '../services/tmdbService';
+import BookmarkButton from './BookmarkButton';
 
 /**
  * A single search result row: small poster + title + year/rating. Clicking it
@@ -17,11 +18,11 @@ function ResultRow({ movie, onSelect }) {
     : movie.media_type === 'tv' ? 'TV Show' : 'Movie';
 
   return (
-    <li>
+    <li className="flex items-stretch gap-1 pr-1">
       <button
         type="button"
         onClick={() => onSelect?.(movie)}
-        className="group flex w-full gap-3 overflow-hidden rounded-md border border-ink-border
+        className="group flex min-w-0 flex-1 gap-3 overflow-hidden rounded-md border border-ink-border
                    bg-ink-soft text-left transition hover:border-brand"
       >
         {poster ? (
@@ -39,7 +40,7 @@ function ResultRow({ movie, onSelect }) {
             <span className="text-xs font-black text-white/40">{title[0]?.toUpperCase() || '?'}</span>
           </span>
         )}
-        <span className="flex min-w-0 flex-col justify-center pr-3">
+        <span className="flex min-w-0 flex-col justify-center pr-2">
           <span className="line-clamp-2 text-sm font-semibold text-foreground">{title}</span>
           <span className="mt-1 text-xs text-muted">
             {type}
@@ -49,6 +50,9 @@ function ResultRow({ movie, onSelect }) {
           </span>
         </span>
       </button>
+      <span className="flex shrink-0 items-center">
+        <BookmarkButton movie={movie} />
+      </span>
     </li>
   );
 }

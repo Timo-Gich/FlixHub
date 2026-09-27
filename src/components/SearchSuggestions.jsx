@@ -1,4 +1,5 @@
 import { getPosterUrl, formatYear } from '../services/tmdbService';
+import BookmarkButton from './BookmarkButton';
 
 /**
  * Compact query-suggestion dropdown rendered as a floating card beneath the
@@ -56,11 +57,11 @@ export default function SearchSuggestions({ query, suggestions = [], loading, on
                 : movie.media_type === 'tv' ? 'TV Show' : 'Movie';
               const key = imdb ? `imdb-${movie.imdbId}` : `${movie.media_type}-${movie.id}`;
               return (
-                <li key={key}>
+                <li key={key} className="flex items-center gap-1 pr-1">
                   <button
                     type="button"
                     onClick={() => onSelect(movie)}
-                    className="flex w-full items-center gap-3 rounded-lg px-2 py-1.5 text-left
+                    className="flex min-w-0 flex-1 items-center gap-3 rounded-lg px-2 py-1.5 text-left
                                transition hover:bg-ink-raised"
                   >
                     {poster ? (
@@ -86,11 +87,8 @@ export default function SearchSuggestions({ query, suggestions = [], loading, on
                         {year && ` · ${year}`}
                       </span>
                     </span>
-                    <svg viewBox="0 0 24 24" className="h-4 w-4 text-muted" fill="none" stroke="currentColor"
-                         strokeWidth="2" strokeLinecap="round" aria-hidden="true">
-                      <path d="M6 12h12M12 6v12" />
-                    </svg>
                   </button>
+                  <BookmarkButton movie={movie} />
                 </li>
               );
             })}

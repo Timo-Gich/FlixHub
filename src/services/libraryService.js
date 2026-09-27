@@ -138,13 +138,22 @@ export function logPlayed(movie, opts = {}) {
 /**
  * Update how far a movie was watched (in seconds). Only ever stores increases,
  * so a quick visit or scrubbing backwards never reduces progress.
+ *
+ * When `opts.season`/`opts.episode` are provided (TV), the write only lands on
+ * the history entry for that exact episode. This stops one episode's leftover
+ * timer from stamping its seconds onto the next episode's entry (they share the
+ * same series id).
  */
-export function updateWatchProgress(id, seconds, durationSeconds) {
+export function updateWatchProgress(id, seconds, durationSeconds, opts = {}) {
   if (id == null) return;
+  const { season, episode } = opts;
   const items = getHistory();
   let changed = false;
   const next = items.map((e) => {
-    if (e.movie.id === id && seconds > (e.progressSeconds || 0)) {
+    if (e.movie.id !== id) return e;
+    // Skip if this tick belongs to a different episode of the series.
+    if (season != null && (e.season !== season || e.episode !== episode)) return e;
+    if (seconds > (e.progressSeconds || 0)) {
       changed = true;
       return {
         ...e,

@@ -6,6 +6,11 @@ import { useMovieData } from '../hooks/useMovieData';
 import { logPlayed, updateWatchProgress } from '../services/libraryService';
 import { saveLastSeason, markEpisodeWatched } from '../services/seasonMem';
 
+// Only treat an episode as "started" after this much real watch time (in
+// seconds). Opening an episode (or tapping Next to peek) must not move the
+// resume point / watched marker before the viewer actually watches it.
+const LOG_BEFORE_LOG = 10;
+
 /**
  * /watch/tv/:id/:season/:episode - TV player with a server selector.
  * Back goes to the series detail page; plays are logged to history with
@@ -26,40 +31,56 @@ export default function WatchTVPage() {
     [id],
   );
 
-  // Auto-log to history (plays => type tv, with season/episode) once known, and
-  // remember which season the user is watching so the detail page's Back link
+  // Which episode this player instance represents, so history/progress writes are
+  // scoped to it and can never leak onto another episode of the same series.
+  const seasonNumber = Number(season);
+  const episodeNumber = Number(episode);
+
+  // Remember which season the user is watching so the detail page's Back link
   // reopens the same season even without a deep-link query param.
   useEffect(() => {
     if (details?.id && hasValidId) {
-      logPlayed(details, { type: 'tv', season: Number(season), episode: Number(episode) });
-      saveLastSeason(id, Number(season));
-      // Mark the current episode as watched so the series page can show a check
-      // on episodes the user has already seen.
-      markEpisodeWatched(id, Number(season), Number(episode));
+      saveLastSeason(id, seasonNumber);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [details?.id, hasValidId]);
+  }, [details?.id, hasValidId, seasonNumber]);
 
-  // Track approx. watch progress (time spent) for Continue Watching.
+  // Track approx. watch progress (time spent) for Continue Watching. The first
+  // commit to history + the "watched" marker is deferred until the viewer has
+  // actually been watching for a little while (LOG_BEFORE_LOG), so merely opening
+  // an episode or tapping the Next button doesn't move the resume point.
   const progressRef = useRef(0);
+  const loggedRef = useRef(false);
   useEffect(() => {
     if (!details?.id || !hasValidId) return;
     const durationSeconds = Math.round((details?.episode_run_time?.[0] || 30) * 60);
     progressRef.current = 0;
+    loggedRef.current = false;
     const write = () => {
       progressRef.current += 5;
-      updateWatchProgress(details.id, progressRef.current, durationSeconds);
+      if (progressRef.current >= LOG_BEFORE_LOG && !loggedRef.current) {
+        loggedRef.current = true;
+        logPlayed(details, { type: 'tv', season: seasonNumber, episode: episodeNumber });
+        markEpisodeWatched(id, seasonNumber, episodeNumber);
+      }
+      updateWatchProgress(details.id, progressRef.current, durationSeconds, {
+        season: seasonNumber,
+        episode: episodeNumber,
+      });
     };
     const idHandle = setInterval(write, 5000);
     const cleanup = () => {
       clearInterval(idHandle);
       if (progressRef.current > 0) {
-        updateWatchProgress(details.id, progressRef.current, durationSeconds);
+        updateWatchProgress(details.id, progressRef.current, durationSeconds, {
+          season: seasonNumber,
+          episode: episodeNumber,
+        });
       }
     };
     return cleanup;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [details?.id, hasValidId]);
+  }, [details?.id, hasValidId, seasonNumber, episodeNumber]);
 
   const title = details?.name || 'Series';
   // Auto-advance to the *next* episode so the Back button opens the right season

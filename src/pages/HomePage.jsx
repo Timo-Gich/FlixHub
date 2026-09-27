@@ -5,9 +5,7 @@ import MovieRow from '../components/MovieRow';
 import MovieCard from '../components/MovieCard';
 import Footer from '../components/Footer';
 import { fetchTrendingMovies, fetchPopularMovies } from '../services/tmdbService';
-import { getHistory, subscribeLibrary } from '../services/libraryService';
-
-const FINISH_THRESHOLD = 0.98;
+import { getHistory, subscribeLibrary, FINISH_THRESHOLD } from '../services/libraryService';
 
 /**
  * Home page: the fixed navbar, a full-width trending hero carousel, a

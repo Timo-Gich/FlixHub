@@ -14,6 +14,10 @@ const CHANGE_EVENT = 'flixhub:library';
 // Hard cap for history — oldest entries are trimmed past this.
 export const MAX_HISTORY = 200;
 
+// A watch counts as "finished" once progress reaches ~98% of its duration. Used
+// by Continue Watching ordering and the player's Back-link auto-advance decision.
+export const FINISH_THRESHOLD = 0.98;
+
 function readJSON(key, fallback) {
   try {
     const raw = localStorage.getItem(key);

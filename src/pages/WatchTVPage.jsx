@@ -1,9 +1,9 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import VideoPlayer from '../components/VideoPlayer';
 import { fetchTVDetails } from '../services/tmdbService';
 import { useMovieData } from '../hooks/useMovieData';
-import { logPlayed, updateWatchProgress } from '../services/libraryService';
+import { logPlayed, updateWatchProgress, FINISH_THRESHOLD } from '../services/libraryService';
 import { saveLastSeason, markEpisodeWatched } from '../services/seasonMem';
 
 // Only treat an episode as "started" after this much real watch time (in
@@ -36,7 +36,7 @@ export default function WatchTVPage() {
   const seasonNumber = Number(season);
   const episodeNumber = Number(episode);
 
-  // Remember which season the user is watching so the detail page's Back link
+  // Remembers which season the user is watching so the detail page's Back link
   // reopens the same season even without a deep-link query param.
   useEffect(() => {
     if (details?.id && hasValidId) {
@@ -45,19 +45,27 @@ export default function WatchTVPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [details?.id, hasValidId, seasonNumber]);
 
+  // Approx. episode length (seconds) — used for progress and to decide whether
+  // the current episode was finished (so Back can auto-advance to the next).
+  const durationSeconds = Math.round((details?.episode_run_time?.[0] || 30) * 60);
+
   // Track approx. watch progress (time spent) for Continue Watching. The first
   // commit to history + the "watched" marker is deferred until the viewer has
   // actually been watching for a little while (LOG_BEFORE_LOG), so merely opening
   // an episode or tapping the Next button doesn't move the resume point.
   const progressRef = useRef(0);
   const loggedRef = useRef(false);
+  // Reactive elapsed-watch seconds so the Back link can reflect whether the user
+  // finished the episode. Updated on each tick (a ~5s re-render is negligible).
+  const [watchedSeconds, setWatchedSeconds] = useState(0);
   useEffect(() => {
     if (!details?.id || !hasValidId) return;
-    const durationSeconds = Math.round((details?.episode_run_time?.[0] || 30) * 60);
     progressRef.current = 0;
     loggedRef.current = false;
+    setWatchedSeconds(0);
     const write = () => {
       progressRef.current += 5;
+      setWatchedSeconds(progressRef.current);
       if (progressRef.current >= LOG_BEFORE_LOG && !loggedRef.current) {
         loggedRef.current = true;
         logPlayed(details, { type: 'tv', season: seasonNumber, episode: episodeNumber });
@@ -81,6 +89,11 @@ export default function WatchTVPage() {
     return cleanup;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [details?.id, hasValidId, seasonNumber, episodeNumber]);
+
+  // True once the viewer has watched ~98% of the episode's duration. Before that,
+  // Back re-opens the current episode (Resume) instead of skipping ahead.
+  const finished =
+    durationSeconds > 0 && watchedSeconds / durationSeconds >= FINISH_THRESHOLD;
 
   const title = details?.name || 'Series';
   // Auto-advance to the *next* episode so the Back button opens the right season
@@ -150,14 +163,15 @@ export default function WatchTVPage() {
       ? `/watch/tv/${id}/${nextTarget.season}/${nextTarget.episode}`
       : null;
 
-  // `n=1` tells the detail page this deep-link is the auto-advanced "Next up"
-  // episode (so it labels the highlight accordingly rather than "Resume").
-  const backHref =
-    nextTarget != null
-      ? `/tv/${id}?season=${nextTarget.season}&episode=${nextTarget.episode}&n=1`
-      : hasValidId
-        ? `/tv/${id}`
-        : '/series';
+  // Back button target. Only auto-advance to the *next* episode (and highlight it
+  // as "Next up", `n=1`) once the current episode has actually been finished;
+  // otherwise re-open the current episode so the detail page highlights the exact
+  // spot the user is still watching (Resume).
+  const backHref = hasValidId
+    ? finished
+      ? `/tv/${id}?season=${nextTarget?.season ?? seasonNumber}&episode=${nextTarget?.episode ?? episodeNumber}&n=1`
+      : `/tv/${id}?season=${seasonNumber}&episode=${episodeNumber}`
+    : '/series';
   const nowLabel = hasValidId
     ? detailsLoading
       ? `Now playing - S${season} E${episode} ...`

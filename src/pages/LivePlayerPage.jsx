@@ -5,6 +5,7 @@ import {
   MediaPlayer,
   MediaProvider,
 } from '@vidstack/react';
+import Hls from 'hls.js';
 import {
   DefaultVideoLayout,
   defaultLayoutIcons,
@@ -18,7 +19,6 @@ import {
   matchProgrammes,
   getRegionByCode,
   getRegionForCountry,
-  buildStreamUrl,
 } from '../services/liveTvService';
 import { getFavoritesLive } from '../services/libraryService';
 
@@ -28,6 +28,22 @@ const REGION_KEY = 'flixhub.liveRegion';
 // to also absorb serverless-proxy cold starts and slow first segments.
 const HEALTH_TIMEOUT_MS = 12000;
 const PROG_REFRESH_MS = 60000;
+
+// Aggressive hls.js tuning for low-latency live streams (see usage below).
+const HLS_CONFIG = {
+  maxBufferLength: 15,
+  maxMaxBufferLength: 30,
+  backBufferLength: 10,
+  initialLiveManifestSize: 1,
+  lowLatencyMode: true,
+  maxLiveSyncPlaybackRate: 1.1,
+  enableWorker: true,
+};
+
+// Timing tunables for the live-stream networking strategy (see handlers below).
+const FALLBACK_WINDOW_MS = 5000;
+const SOURCE_FAIL_FAST_MS = 5000;
+const STALL_RELOAD_DELAY_MS = 3000;
 
 function readRegion() {
   try {
@@ -73,6 +89,24 @@ export default function LivePlayerPage() {
   // channel. Bumped to force a fresh player mount on "Try again".
   const startedRef = useRef(false);
   const [retryKey, setRetryKey] = useState(0);
+  // --- Live networking strategy state (see handlers below) ---
+  const [sourceMode, setSourceMode] = useState('direct'); // 'direct' | 'proxy'
+  const sourceModeRef = useRef('direct');
+  const directFailedRef = useRef(false);
+  const attemptStartedAtRef = useRef(0);
+  const stallTimerRef = useRef(null);
+  const stallArmedRef = useRef(false);
+  const autoReloadedRef = useRef(false);
+  const [stallReloadKey, setStallReloadKey] = useState(0);
+
+  // src strategy: hit the raw stream first, fall back to the serverless proxy.
+  const playerSrc = (() => {
+    if (!channel?.streamUrl) return '';
+    if (sourceMode !== 'proxy') return channel.streamUrl;
+    const q = new URLSearchParams({ url: channel.streamUrl });
+    if (channel.userAgent) q.set('ua', channel.userAgent);
+    return `/api/proxy?${q.toString()}`;
+  })();
   // The user's explicitly selected region (persisted by the /live browser),
   // plus the region auto-derived from the channel's own country code.
   const [userRegion] = useState(readRegion);
@@ -117,7 +151,32 @@ export default function LivePlayerPage() {
     }, HEALTH_TIMEOUT_MS);
     return () => clearTimeout(timer);
     // retryKey restarts the window each time the user hits "Try again".
-  }, [channel?.id, channel?.streamUrl, retryKey]);
+  }, [channel?.id, channel?.streamUrl, retryKey, sourceMode, stallReloadKey]);
+
+  // Keep the ref used by the fallback logic in sync with the state.
+  useEffect(() => {
+    sourceModeRef.current = sourceMode;
+  }, [sourceMode]);
+
+  // Reset the networking strategy on each fresh load (new channel or a manual
+  // Try again) so we always try the direct URL first again.
+  useEffect(() => {
+    if (!channel?.streamUrl) return;
+    setSourceMode('direct');
+    directFailedRef.current = false;
+    autoReloadedRef.current = false;
+    stallArmedRef.current = false;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [channel?.streamUrl, retryKey]);
+
+  // Restart the early-failure window each time the src changes (direct -> proxy)
+  // so the proxy attempt gets its own fresh window before it is judged.
+  useEffect(() => {
+    if (!playerSrc) return;
+    attemptStartedAtRef.current = performance.now();
+    if (!playerSrc.startsWith('/api/proxy')) directFailedRef.current = false;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [playerSrc]);
 
   // Periodic clock tick to advance the Now Playing strip.
   useEffect(() => {
@@ -184,33 +243,99 @@ export default function LivePlayerPage() {
 
   const backToLive = '/live';
 
-  // Player event handlers for the health probe. "Started" means the player has
-  // shown any activity — either it's actually playing, or time has advanced
-  // (even if the video is still buffering on a black screen). Once that happens
-  // we never flip to the unavailable panel.
+  // -------------------------------------------------------------------------
+  // Live-stream networking + resilience strategy.
+  //  1. Attack the raw stream first (lowest latency).
+  //  2. If hls.js reports a NETWORK_ERROR / CORS-ish failure within 5s of the
+  //     attempt starting and nothing has begun playing, transparently switch to
+  //     the /api/proxy endpoint (fetches server-side, bypassing CORS + mixed-content).
+  //  3. If the stream stalls, silently reload it once after 3s; if it still
+  //     never produces A/V after that reload, surface the unavailable panel.
+  //  4. Once playback is active we never tear the player down on a transient hiccup.
+  // -------------------------------------------------------------------------
+
   const markActive = () => {
     startedRef.current = true;
     setStatus('healthy');
   };
-  const onPlaying = markActive;
-  const onTimeUpdate = markActive;
-  // Only surface "unavailable" from an error while we're still waiting for the
-  // stream to show any activity. After that, a transient hls.js hiccup shouldn't
-  // tear down the player — Vidstack handles recovery itself.
-  const onError = () => {
-    if (!startedRef.current) setStatus('unavailable');
+
+  const clearStallTimer = () => {
+    if (stallTimerRef.current) {
+      clearTimeout(stallTimerRef.current);
+      stallTimerRef.current = null;
+    }
+    stallArmedRef.current = false;
   };
 
-  // "Try again": remount the player to re-attempt the same stream (some channels
+  const onPlaying = () => {
+    clearStallTimer();
+    autoReloadedRef.current = false; // a new stall episode may reload again
+    markActive();
+  };
+  // Time advancing means we are definitely not stalled.
+  const onTimeUpdate = () => {
+    clearStallTimer();
+    markActive();
+  };
+
+  // Stall handling: after ~3s of buffering with no progress, reload the current
+  // src once. A second stall (after the one auto-reload) with no playback yet
+  // means the stream is genuinely stuck.
+  const onWaiting = () => {
+    if (stallTimerRef.current || stallArmedRef.current) return;
+    stallArmedRef.current = true;
+    stallTimerRef.current = setTimeout(() => {
+      stallTimerRef.current = null;
+      stallArmedRef.current = false;
+      if (!autoReloadedRef.current) {
+        autoReloadedRef.current = true;
+        setStallReloadKey((k) => k + 1); // silent reload of the current src
+      } else if (!startedRef.current) {
+        setStatus('unavailable');
+      }
+    }, STALL_RELOAD_DELAY_MS);
+  };
+
+  // Switch the current attempt from direct to /api/proxy. Returns true when it
+  // actually switched, so callers keep waiting instead of surfacing an error.
+  const tryProxyFallback = () => {
+    if (startedRef.current) return false; // already playing - leave it
+    if (sourceModeRef.current !== 'direct' || directFailedRef.current) return false;
+    if (performance.now() - attemptStartedAtRef.current > FALLBACK_WINDOW_MS) return false;
+    directFailedRef.current = true;
+    setSourceMode('proxy');
+    return true;
+  };
+
+  // Only fail fast once the current attempt (direct OR proxy) has had a real
+  // chance; a just-switched proxy gets its own window before we give up.
+  const shouldFailFast = () =>
+    startedRef.current
+      ? false
+      : performance.now() - attemptStartedAtRef.current >= SOURCE_FAIL_FAST_MS;
+
+  // hls.js surfaced an error (data is HLS.ErrorData).
+  const onHlsError = (data) => {
+    if (!data) return;
+    if (tryProxyFallback()) return; // direct failed -> retry via proxy
+    if (shouldFailFast()) setStatus('unavailable');
+  };
+
+  // Native media error (also the path Vidstack uses when a source fails).
+  const onError = () => {
+    if (tryProxyFallback()) return; // direct failed -> retry via proxy
+    if (shouldFailFast()) setStatus('unavailable');
+  };
+
+  // Try again: remount the player to re-attempt the same stream (some channels
   // only work on a second attempt, same as a manual refresh).
   const retryStream = () => {
+    clearStallTimer();
     startedRef.current = false;
     setStatus('loading');
+    setStallReloadKey((k) => k + 1);
     setRetryKey((k) => k + 1);
   };
-
-  // Route the stream through the serverless proxy (CORS + mixed-content + UA).
-  const proxySrc = channel ? buildStreamUrl(channel) : '';
 return (
     <div className="min-h-screen bg-ink text-foreground">
       {/* Top bar */}
@@ -301,15 +426,17 @@ return (
 
           {channel && status !== 'unavailable' && !missing && (
             <MediaPlayer
-              key={`${proxySrc}#retry-${retryKey}`}
-              src={proxySrc}
+              key={`${playerSrc}#retry-${retryKey}#stall-${stallReloadKey}`}
+              src={playerSrc}
               playsInline
               autoPlay
               onPlaying={onPlaying}
               onTimeUpdate={onTimeUpdate}
               onError={onError}
+              onHlsError={onHlsError}
+              onWaiting={onWaiting}
             >
-              <MediaProvider />
+              <MediaProvider library={Hls} config={HLS_CONFIG} />
               <DefaultVideoLayout icons={defaultLayoutIcons} noScrubber={false} />
             </MediaPlayer>
           )}

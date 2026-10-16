@@ -78,6 +78,37 @@ export default function LiveTVPage() {
     return { winStart: s, winEnd: s + GUIDE_HOURS * 3600000 };
   }, []);
   const epgReqRef = useRef(0);
+  const tabRailRef = useRef(null);
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(false);
+
+  const updateRailArrows = () => {
+    const el = tabRailRef.current;
+    if (!el) return;
+    setCanScrollLeft(el.scrollLeft > 4);
+    setCanScrollRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 4);
+  };
+
+  useEffect(() => {
+    updateRailArrows();
+    window.addEventListener('resize', updateRailArrows);
+    return () => window.removeEventListener('resize', updateRailArrows);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [channels]);
+
+  const scrollRail = (dir) => {
+    const el = tabRailRef.current;
+    if (!el) return;
+    el.scrollBy({ left: dir * Math.max(240, el.clientWidth * 0.6), behavior: 'smooth' });
+  };
+
+  // Keep the active tab visible when it changes.
+  useEffect(() => {
+    const el = tabRailRef.current;
+    if (!el) return;
+    const active = el.querySelector('[data-active="true"]');
+    if (active) active.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
+  }, [tab]);
 
   useEffect(() => {
     let cancelled = false;
@@ -139,9 +170,10 @@ export default function LiveTVPage() {
     (channels || []).forEach((c) => {
       if (c.category) set.add(c.category);
     });
-    return ['News', 'Sports', 'Movies', 'Music', 'Entertainment']
-      .filter((c) => set.has(c))
-      .concat([...set].sort((a, b) => a.localeCompare(b)));
+    // Dedupe: priority cats first, then the rest alphabetically.
+    const priority = ['News', 'Sports', 'Movies', 'Music', 'Entertainment'].filter((c) => set.has(c));
+    const rest = [...set].filter((c) => !priority.includes(c)).sort((a, b) => a.localeCompare(b));
+    return [...priority, ...rest];
   }, [channels]);
 
   // If the restored tab no longer matches a real category (stale playlist or
@@ -182,25 +214,39 @@ export default function LiveTVPage() {
   }, [tab, query, favState, channels, region]);
 
   const viewKey = `${tab}|${query}|${(channels || []).length}|${region}`;
+  // EPG is strictly progressive enhancement: it loads lazily AFTER the
+  // channel list renders, never blocks it, and times out fast (8s per
+  // region) so a slow XMLTV host can't hang the page.
   useEffect(() => {
     if (!visible.length) { setEpgStatus('idle'); return; }
     const myReq = epgReqRef.current + 1;
     epgReqRef.current = myReq;
-    setEpgStatus('loading');
-    const counts = new Map();
-    visible.slice(0, 400).forEach((c) => {
-      if (!c.country) return;
-      const r = getRegionForCountry(c.country);
-      if (r) counts.set(r.code, (counts.get(r.code) || 0) + 1);
-    });
-    const top = [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 2).map(([code]) => code);
-    const codes = [...new Set([region, ...top])].filter(Boolean);
-    fetchEPGForRegions(codes).then((maps) => {
-      if (epgReqRef.current !== myReq) return;
-      setEpgMaps(maps);
-      const anyData = Object.values(maps).some((m) => m && Object.keys(m).length);
-      setEpgStatus(anyData ? 'ready' : 'empty');
-    });
+    let cancelled = false;
+    // Defer so first paint (channels) always wins over guide data.
+    const timer = setTimeout(() => {
+      if (cancelled) return;
+      setEpgStatus((s) => (s === 'idle' ? 'loading' : s));
+      const counts = new Map();
+      visible.slice(0, 400).forEach((c) => {
+        if (!c.country) return;
+        const r = getRegionForCountry(c.country);
+        if (r) counts.set(r.code, (counts.get(r.code) || 0) + 1);
+      });
+      const top = [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 1).map(([code]) => code);
+      const codes = [...new Set([region, ...top])].filter(Boolean);
+      const withTimeout = (p, ms) => Promise.race([
+        p,
+        new Promise((resolve) => setTimeout(() => resolve({ __timeout: true }), ms)),
+      ]);
+      withTimeout(fetchEPGForRegions(codes), 15000).then((maps) => {
+        if (cancelled || epgReqRef.current !== myReq) return;
+        if (maps && maps.__timeout) { setEpgStatus('empty'); return; }
+        setEpgMaps(maps || {});
+        const anyData = Object.values(maps || {}).some((m) => m && Object.keys(m).length);
+        setEpgStatus(anyData ? 'ready' : 'empty');
+      });
+    }, 800);
+    return () => { cancelled = true; clearTimeout(timer); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [viewKey]);
 
@@ -208,7 +254,10 @@ export default function LiveTVPage() {
     const map = new Map();
     if (!visible.length || epgStatus === 'loading') return map;
     const codes = Object.keys(epgMaps);
-    visible.slice(0, 400).forEach((ch) => {
+    if (!codes.length) return map;
+    // Cap matching work: exact tvg-id lookups are cheap, but the
+    // normalized-name fallback scans all EPG keys per channel — 120 max.
+    visible.slice(0, 120).forEach((ch) => {
       for (const code of codes) {
         const m = epgMaps[code];
         if (!m || !Object.keys(m).length) continue;
@@ -334,14 +383,45 @@ return (
           />
         </div>
 
-        {/* Category tabs */}
-        <div className="scrollbar-hide mt-6 -mx-4 flex gap-2 overflow-x-auto px-4 pb-1 sm:-mx-8 sm:px-8">
+        {/* Category tabs — scrollable rail with edge arrows */}
+        <div className="relative mt-6">
+          {canScrollLeft && (
+            <button
+              type="button"
+              onClick={() => scrollRail(-1)}
+              aria-label="Scroll categories left"
+              className="absolute -left-1 top-1/2 z-10 hidden h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full border border-ink-border bg-ink-raised/95 text-white shadow-lg backdrop-blur transition hover:bg-brand sm:flex"
+            >
+              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="m15 18-6-6 6-6" />
+              </svg>
+            </button>
+          )}
+          {canScrollRight && (
+            <button
+              type="button"
+              onClick={() => scrollRail(1)}
+              aria-label="Scroll categories right"
+              className="absolute -right-1 top-1/2 z-10 hidden h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full border border-ink-border bg-ink-raised/95 text-white shadow-lg backdrop-blur transition hover:bg-brand sm:flex"
+            >
+              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="m9 18 6-6-6-6" />
+              </svg>
+            </button>
+          )}
+          <div
+            ref={tabRailRef}
+            onScroll={updateRailArrows}
+            className="scrollbar-hide flex gap-2 overflow-x-auto scroll-smooth px-1 pb-1"
+            style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+          >
           {tabs.map((t) => {
             const active = tab === t.key;
             return (
               <button
                 key={t.key}
                 type="button"
+                data-active={active}
                 onClick={() => setTab(t.key)}
                 className={`shrink-0 rounded-full px-4 py-1.5 text-sm font-semibold transition ${
                   active
@@ -353,6 +433,7 @@ return (
               </button>
             );
           })}
+          </div>
         </div>
 
         {/* Content */}

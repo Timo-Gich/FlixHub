@@ -396,6 +396,7 @@ export function matchProgrammes(epgMap, tvgId, channelName, refTime = Date.now()
 
 const EPG_TTL_MS = 6 * 60 * 60 * 1000;
 const EPG_LS_PREFIX = 'flixhub.epg.';
+const EPG_CACHE_VERSION = 'v2';
 const epgMemCache = new Map(); // regionCode -> { map, fetchedAt }
 
 function readEpgLS(code) {
@@ -404,6 +405,12 @@ function readEpgLS(code) {
     if (!raw) return null;
     const parsed = JSON.parse(raw);
     if (!parsed || !parsed.map || !parsed.fetchedAt) return null;
+    // Drop caches written by older code (pre-versioning could hold multi-MB
+    // blobs that jank or exceed quota on re-write).
+    if (parsed.v !== EPG_CACHE_VERSION) {
+      try { localStorage.removeItem(EPG_LS_PREFIX + String(code).toUpperCase()); } catch { /* ignore */ }
+      return null;
+    }
     if (Date.now() - parsed.fetchedAt > EPG_TTL_MS) return null;
     return parsed;
   } catch {
@@ -412,12 +419,14 @@ function readEpgLS(code) {
 }
 
 function writeEpgLS(code, map) {
+  // localStorage quota is ~5MB and some XMLTV files are 3MB+ *as parsed
+  // JSON* — writing them risks QuotaExceededError AND long JSON.stringify
+  // jank. Only persist small guides (<400KB serialized); everything else
+  // stays in the in-memory cache for the session.
   try {
-    // XMLTV maps can be large; guard against quota errors silently.
-    localStorage.setItem(
-      EPG_LS_PREFIX + String(code).toUpperCase(),
-      JSON.stringify({ map, fetchedAt: Date.now() }),
-    );
+    const serialized = JSON.stringify({ v: EPG_CACHE_VERSION, map, fetchedAt: Date.now() });
+    if (serialized.length > 400 * 1024) return;
+    localStorage.setItem(EPG_LS_PREFIX + String(code).toUpperCase(), serialized);
   } catch {
     /* ignore storage errors */
   }

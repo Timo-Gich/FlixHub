@@ -15,8 +15,11 @@ import '@vidstack/react/player/styles/default/theme.css';
 import '@vidstack/react/player/styles/default/layouts/video.css';
 import {
   fetchPlaylist,
-  fetchEPG,
-  matchProgrammes,
+  fetchEPGForRegions,
+  getNowNextAcrossRegions,
+  getUpcoming,
+  programmeProgress,
+  formatRange as formatProgRange,
   getRegionByCode,
   getRegionForCountry,
 } from '../services/liveTvService';
@@ -68,14 +71,8 @@ function formatClock(ms) {
   const d = new Date(ms);
   return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
-
 /**
- * /live/:channelId — a self-hosted HLS player for a single live channel.
- *
- * Resolves the channel from the cached playlist (or favorites), renders a
- * Vidstack player driven by hls.js, watches for an early failure (offline
- * streams) to show a friendly "unavailable" state, and shows the current +
- * next programme from XMLTV EPG in a "Now Playing" strip.
+ * /live/:channelId — self-hosted HLS player + EPG rail (Now/Up next).
  */
 export default function LivePlayerPage() {
   const { channelId } = useParams();
@@ -194,21 +191,13 @@ export default function LivePlayerPage() {
       )
     : [userRegion];
 
-  // Fetch XMLTV for every candidate region and store each map separately.
+  // Fetch XMLTV (cached) for every candidate region.
   useEffect(() => {
     setEpgMaps({});
     let cancelled = false;
-    Promise.all(
-      regionCodes.map((code) =>
-        fetchEPG(code).then((map) => ({ code, map })),
-      ),
-    ).then((results) => {
+    fetchEPGForRegions(regionCodes).then((maps) => {
       if (cancelled) return;
-      const merged = {};
-      results.forEach((r) => {
-        merged[r.code] = r.map;
-      });
-      setEpgMaps(merged);
+      setEpgMaps(maps);
     });
     return () => {
       cancelled = true;
@@ -220,26 +209,11 @@ export default function LivePlayerPage() {
   // data for this channel so auto-derived regions lift the hit rate for
   // deep-linked channels.
   const programs = (() => {
-    if (!channel) return { now: null, next: null, found: false, region: null };
-    const empty = { now: null, next: null, found: false, region: null };
-    for (const code of regionCodes) {
-      const map = epgMaps[code];
-      if (!map || !Object.keys(map).length) continue;
-      const res = matchProgrammes(map, channel.tvgId, channel.name, clock);
-      if (res.found && (res.now || res.next)) {
-        return { ...res, region: getRegionByCode(code) };
-      }
-    }
-    // No region had schedule data — surface the first non-empty attempt so the
-    // strip can still explain why (attributed to a real region).
-    for (const code of regionCodes) {
-      const map = epgMaps[code];
-      if (!map || !Object.keys(map).length) continue;
-      const res = matchProgrammes(map, channel.tvgId, channel.name, clock);
-      return { ...res, region: getRegionByCode(code) };
-    }
-    return empty;
+    if (!channel) return { now: null, next: null, found: false, region: null, entries: [] };
+    return getNowNextAcrossRegions(epgMaps, channel, clock);
   })();
+  const upcoming = getUpcoming(programs.entries || [], programs.now || programs.next, 4);
+  const nowPct = programmeProgress(programs.now, clock);
 
   const backToLive = '/live';
 
@@ -449,10 +423,10 @@ return (
           )}
         </div>
 
-        {/* Now Playing strip */}
+        {/* Programme guide rail */}
         {channel && (
-          <div className="mt-4 rounded-lg border border-ink-border bg-ink-raised p-4">
-            <div className="flex items-center justify-between gap-3">
+          <div className="mt-4 overflow-hidden rounded-lg border border-ink-border bg-ink-raised">
+            <div className="flex items-center justify-between gap-3 border-b border-ink-border px-4 py-3">
               <h2 className="flex items-center gap-2 text-sm font-bold uppercase tracking-wide text-brand-light">
                 <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor"
                      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -469,29 +443,67 @@ return (
               </span>
             </div>
 
-            {programs.now ? (
-              <div className="mt-3">
-                <p className="flex flex-wrap items-baseline gap-2">
-                  <span className="text-base font-semibold text-white">{programs.now.title}</span>
-                  <span className="text-xs text-muted">
-                    {formatClock(programs.now.startMs)} – {formatClock(programs.now.stopMs)}
-                  </span>
-                </p>
-                {programs.next && (
-                  <p className="mt-2 flex flex-wrap items-baseline gap-2 border-t border-ink-border pt-2 text-sm">
-                    <span className="text-muted">Up next</span>
-                    <span className="font-medium text-white/90">{programs.next.title}</span>
+            <div className="p-4">
+              {programs.now ? (
+                <div>
+                  <p className="flex flex-wrap items-baseline gap-2">
+                    <span className="inline-flex items-center gap-1.5 rounded bg-brand px-1.5 py-0.5 text-[10px] font-black uppercase tracking-wide text-white">
+                      <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-white" /> Now
+                    </span>
+                    <span className="text-base font-semibold text-white">{programs.now.title}</span>
+                    <span className="text-xs text-muted">
+                      {formatProgRange(programs.now.startMs, programs.now.stopMs)}
+                    </span>
+                  </p>
+                  {nowPct != null && (
+                    <span className="mt-3 block h-1.5 w-full overflow-hidden rounded-full bg-white/10">
+                      <span className="block h-full rounded-full bg-brand" style={{ width: `${Math.round(nowPct * 100)}%` }} />
+                    </span>
+                  )}
+                  {upcoming.length > 0 && (
+                    <div className="mt-3 border-t border-ink-border pt-3">
+                      <p className="text-xs font-bold uppercase tracking-wide text-muted">Up next</p>
+                      <ul className="mt-2 space-y-2">
+                        {upcoming.map((u) => (
+                          <li key={u.startMs} className="flex items-center justify-between gap-3 text-sm">
+                            <span className="truncate font-medium text-white/90">{u.title}</span>
+                            <span className="shrink-0 text-xs text-muted">{formatClock(u.startMs)}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              ) : programs.next ? (
+                <div>
+                  <p className="flex flex-wrap items-baseline gap-2">
+                    <span className="rounded bg-white/10 px-1.5 py-0.5 text-[10px] font-black uppercase tracking-wide text-white/80">Next</span>
+                    <span className="text-base font-semibold text-white">{programs.next.title}</span>
                     <span className="text-xs text-muted">{formatClock(programs.next.startMs)}</span>
                   </p>
-                )}
-              </div>
-            ) : (
-              <p className="mt-3 text-sm text-muted">
-                {programs.found
-                  ? 'Programme schedule is not available at this time.'
-                  : 'No programme guide found for this channel in the selected region.'}
-              </p>
-            )}
+                  {upcoming.length > 0 && (
+                    <ul className="mt-3 space-y-2 border-t border-ink-border pt-3">
+                      {upcoming.map((u) => (
+                        <li key={u.startMs} className="flex items-center justify-between gap-3 text-sm">
+                          <span className="truncate font-medium text-white/90">{u.title}</span>
+                          <span className="shrink-0 text-xs text-muted">{formatClock(u.startMs)}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              ) : (
+                <p className="text-sm text-muted">
+                  {programs.found
+                    ? 'Programme schedule is not available at this time.'
+                    : 'No programme guide found for this channel in the selected region.'}
+                </p>
+              )}
+              <Link to="/live"
+                className="mt-4 inline-flex items-center gap-1.5 text-xs font-semibold text-brand-light hover:text-white">
+                ← Open full TV guide
+              </Link>
+            </div>
           </div>
         )}
       </main>

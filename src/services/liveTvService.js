@@ -388,3 +388,165 @@ export function matchProgrammes(epgMap, tvgId, channelName, refTime = Date.now()
 
   return { now, next, timeMs: refTime, found };
 }
+
+// --- EPG cache + guide helpers (Live TV redesign) ---------------------------
+// In-memory + localStorage cache so the /live guide doesn't re-download large
+// XMLTV files on every navigation. 6h TTL keeps "now/next" fresh without
+// hammering the upstream repo.
+
+const EPG_TTL_MS = 6 * 60 * 60 * 1000;
+const EPG_LS_PREFIX = 'flixhub.epg.';
+const epgMemCache = new Map(); // regionCode -> { map, fetchedAt }
+
+function readEpgLS(code) {
+  try {
+    const raw = localStorage.getItem(EPG_LS_PREFIX + String(code).toUpperCase());
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || !parsed.map || !parsed.fetchedAt) return null;
+    if (Date.now() - parsed.fetchedAt > EPG_TTL_MS) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function writeEpgLS(code, map) {
+  try {
+    // XMLTV maps can be large; guard against quota errors silently.
+    localStorage.setItem(
+      EPG_LS_PREFIX + String(code).toUpperCase(),
+      JSON.stringify({ map, fetchedAt: Date.now() }),
+    );
+  } catch {
+    /* ignore storage errors */
+  }
+}
+
+/**
+ * Fetch EPG for one region with memory + localStorage caching.
+ * @returns {Promise<Record<string, Array>>}
+ */
+export async function fetchEPGCached(regionCode = DEFAULT_EPG_REGION, opts = {}) {
+  const code = String(regionCode || DEFAULT_EPG_REGION).toUpperCase();
+  const mem = epgMemCache.get(code);
+  if (mem && Date.now() - mem.fetchedAt < EPG_TTL_MS) return mem.map;
+  const ls = readEpgLS(code);
+  if (ls) {
+    epgMemCache.set(code, ls);
+    return ls.map;
+  }
+  const map = await fetchEPG(code, opts);
+  if (map && Object.keys(map).length) {
+    const entry = { map, fetchedAt: Date.now() };
+    epgMemCache.set(code, entry);
+    writeEpgLS(code, map);
+  }
+  return map || {};
+}
+
+/**
+ * Fetch several regions with limited concurrency (max 2 at a time).
+ * @param {string[]} codes
+ * @returns {Promise<Record<string, Record<string, Array>>>>} code -> epgMap
+ */
+export async function fetchEPGForRegions(codes = [], opts = {}) {
+  const uniq = [...new Set((codes || []).map((c) => String(c || '').toUpperCase()).filter(Boolean))];
+  const out = {};
+  const queue = [...uniq];
+  const workers = Array.from({ length: Math.min(2, queue.length || 1) }, async () => {
+    while (queue.length) {
+      const code = queue.shift();
+      try {
+        out[code] = await fetchEPGCached(code, opts);
+      } catch {
+        out[code] = {};
+      }
+    }
+  });
+  await Promise.all(workers);
+  return out;
+}
+
+/**
+ * Resolve now/next for a channel across several region maps, preferring the
+ * first region that actually has schedule data.
+ */
+export function getNowNextAcrossRegions(epgMaps, channel, refTime = Date.now()) {
+  if (!channel) return { now: null, next: null, found: false, region: null, entries: [] };
+  for (const code of Object.keys(epgMaps || {})) {
+    const map = epgMaps[code];
+    if (!map || !Object.keys(map).length) continue;
+    const res = matchProgrammes(map, channel.tvgId, channel.name, refTime);
+    if (res.found && (res.now || res.next)) {
+      return { ...res, region: getRegionByCode(code), entries: mapEntriesFor(map, channel) };
+    }
+  }
+  for (const code of Object.keys(epgMaps || {})) {
+    const map = epgMaps[code];
+    if (!map || !Object.keys(map).length) continue;
+    const res = matchProgrammes(map, channel.tvgId, channel.name, refTime);
+    return { ...res, region: getRegionByCode(code), entries: mapEntriesFor(map, channel) };
+  }
+  return { now: null, next: null, found: false, region: null, entries: [] };
+}
+
+function mapEntriesFor(map, channel) {
+  const baseId = String(channel?.tvgId || '').split('@')[0];
+  if (map[channel?.tvgId]) return map[channel.tvgId];
+  if (baseId && map[baseId]) return map[baseId];
+  return [];
+}
+
+/** Progress 0..1 of a programme at refTime. Null when unknown. */
+export function programmeProgress(prog, refTime = Date.now()) {
+  if (!prog || !Number.isFinite(prog.startMs) || !Number.isFinite(prog.stopMs)) return null;
+  const total = prog.stopMs - prog.startMs;
+  if (total <= 0) return null;
+  return Math.min(1, Math.max(0, (refTime - prog.startMs) / total));
+}
+
+/** Next N upcoming programmes after `from` for the guide rail. */
+export function getUpcoming(entries = [], from = null, limit = 4) {
+  const ref = from ? from.stopMs ?? from.startMs ?? Date.now() : Date.now();
+  return (entries || [])
+    .filter((e) => e.startMs >= ref - 60000)
+    .filter((e) => (from ? e !== from : true))
+    .sort((a, b) => a.startMs - b.startMs)
+    .slice(0, limit);
+}
+
+/** Programmes overlapping [winStart, winEnd) for one guide row. */
+export function sliceWindow(entries = [], winStart = 0, winEnd = 0) {
+  return (entries || [])
+    .filter((e) => e.stopMs > winStart && e.startMs < winEnd)
+    .sort((a, b) => a.startMs - b.startMs);
+}
+
+/**
+ * Pick featured "On Now" channels: has logo + has a current programme,
+ * preferring editorial categories. Returns at most `limit`.
+ */
+export function pickFeaturedOnNow(channels = [], epgByChannel = new Map(), limit = 8) {
+  const prefer = ['News', 'Sports', 'Movies', 'Entertainment', 'Music'];
+  const scored = [];
+  for (const ch of channels) {
+    const info = epgByChannel.get(ch.id);
+    if (!info?.now || !ch.logo) continue;
+    const catIdx = prefer.indexOf(ch.category);
+    scored.push({ ch, info, score: catIdx === -1 ? prefer.length : catIdx });
+  }
+  scored.sort((a, b) => a.score - b.score);
+  return scored.slice(0, limit);
+}
+
+export function formatClock(ms) {
+  if (!ms || !Number.isFinite(ms)) return '';
+  return new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+export function formatRange(startMs, stopMs) {
+  const a = formatClock(startMs);
+  const b = formatClock(stopMs);
+  return a && b ? `${a} – ${b}` : a || b || '';
+}

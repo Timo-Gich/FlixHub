@@ -28,6 +28,8 @@ export default async function handler(req, res) {
   const parsed = new URL(req.url ?? '', `https://${req.headers.host || 'localhost'}`);
   const target = parsed.searchParams.get('url') || '';
   const ua = parsed.searchParams.get('ua') || '';
+  const referer = parsed.searchParams.get('referer') || '';
+  const origin = parsed.searchParams.get('origin') || '';
 
   if (!target) {
     res.setHeader('Content-Type', 'text/plain; charset=utf-8');
@@ -41,6 +43,8 @@ export default async function handler(req, res) {
       Accept: '*/*',
       'Accept-Language': 'en-US,en;q=0.9',
     };
+    if (referer) headers.Referer = referer;
+    if (origin) headers.Origin = origin;
     const upstream = await fetch(target, { headers, redirect: 'follow' });
 
     const contentType = upstream.headers.get('content-type') || '';
@@ -48,7 +52,7 @@ export default async function handler(req, res) {
 
     // Manifest? Rewrite child URLs through the proxy.
     if (isManifest(target, contentType, buffer)) {
-      const rewritten = rewriteManifest(buffer.toString('utf8'), target, ua);
+      const rewritten = rewriteManifest(buffer.toString('utf8'), target, { ua, referer, origin });
       res.setHeader('Content-Type', contentType || 'application/vnd.apple.mpegurl');
       return res.status(upstream.status).send(rewritten);
     }
@@ -73,9 +77,12 @@ function isManifest(url, contentType, buffer) {
 }
 
 /** Rewrite bare URL lines in an .m3u8 to absolute URLs through /api/stream. */
-function rewriteManifest(text, baseUrl, ua) {
+function rewriteManifest(text, baseUrl, { ua, referer, origin } = {}) {
   const prefix = '/api/stream';
   const uaParam = ua ? `&ua=${encodeURIComponent(ua)}` : '';
+  const refParam = referer ? `&referer=${encodeURIComponent(referer)}` : '';
+  const originParam = origin ? `&origin=${encodeURIComponent(origin)}` : '';
+  const extra = `${uaParam}${refParam}${originParam}`;
   const lines = text.split(/\r?\n/);
   const out = [];
   for (const line of lines) {
@@ -87,7 +94,7 @@ function rewriteManifest(text, baseUrl, ua) {
     }
     try {
       const absolute = new URL(trimmed, baseUrl).toString();
-      out.push(`${prefix}?url=${encodeURIComponent(absolute)}${uaParam}`);
+      out.push(`${prefix}?url=${encodeURIComponent(absolute)}${extra}`);
     } catch {
       out.push(line); // leave un-parseable lines as-is
     }

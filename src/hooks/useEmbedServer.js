@@ -90,7 +90,7 @@ export default function useEmbedServer({
     requested.usesImdb && !imdbLoading && !imdbId ? list[0] : requested;
 
   let source = null;
-  if (validId && idValidForType) {
+  if (validId && idValidForType && server.kind !== 'hls') {
     source =
       type === 'tv'
         ? server.tv(id, imdbId, season, episode)
@@ -103,6 +103,7 @@ export default function useEmbedServer({
       available: !s.usesImdb || (imdbLoading ? null : Boolean(imdbId)),
     })),
     activeServerId: server.id,
+    activeKind: server.kind === 'hls' ? 'hls' : 'iframe',
     selectServer: setPreferred,
     source,
     imdbId,

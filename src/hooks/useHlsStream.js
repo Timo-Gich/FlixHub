@@ -38,6 +38,9 @@ export default function useHlsStream({ type, id, season, episode, enabled }) {
         const text = await r.text();
         let data = null;
         try { data = text ? JSON.parse(text) : null; } catch { data = null; }
+        if (process.env.NODE_ENV !== 'production') {
+          console.log('[Server7/useHlsStream] resolve status:', r.status, 'has streamUrl:', Boolean(data?.streamUrl));
+        }
         if (!r.ok) throw new Error(friendlyResolveError(r.status, data));
         if (!data?.streamUrl) throw new Error(friendlyResolveError(404, data));
         return data;
@@ -51,6 +54,7 @@ export default function useHlsStream({ type, id, season, episode, enabled }) {
           + (d.userAgent ? `&ua=${encodeURIComponent(d.userAgent)}` : '')
           + (d.referer ? `&referer=${encodeURIComponent(d.referer)}` : '')
           + (d.origin ? `&origin=${encodeURIComponent(d.origin)}` : '');
+        console.log('[Server7/useHlsStream] finalSrc ->', finalSrc.slice(0, 120) + '...');
         setStreamUrl(finalSrc);
         setHeaders({ userAgent: d.userAgent, referer: d.referer, origin: d.origin });
         setTracks(Array.isArray(d.subtitles) ? d.subtitles : []);

@@ -6,7 +6,7 @@
  *     any request with a Range header, media (video/audio) destinations,
  *     Vite dev paths, or third-party / external player scripts.
  */
-const CACHE = 'flixhub-v2';
+const CACHE = 'flixhub-v3';
 const CORE = ['/', '/manifest.webmanifest', '/icons/icon-192.png', '/icons/icon-512.png'];
 const DEV_PREFIXES = ['/src/', '/@', '/.vite/'];
 
@@ -29,17 +29,19 @@ self.addEventListener('fetch', (event) => {
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
 
-  // 1. Same-origin /api/* — resolver JSON + Range-streamed media proxy.
-  //    Caching 206 Partial Content or JSON here corrupts playback, so bypass.
-  if (url.origin === self.location.origin && url.pathname.startsWith('/api/')) return;
-  // 2. Media fetches (video/audio elements, MSE, Range seeks) — never cache.
-  if (req.destination === 'video' || req.destination === 'audio') return;
-  if (req.headers.has('range')) return;
-  if (/\.(m3u8|m4s|mp4|webm|ts)(\?|$)/i.test(url.pathname)) return;
-  // 3. Third-party anything (TMDb, VidLink, CDNs, fonts, external players).
-  if (url.origin !== self.location.origin) return;
-  // 4. Vite dev / hot-reload.
-  if (DEV_PREFIXES.some((p) => url.pathname.startsWith(p))) return;
+  // Explicit network-only bypass: /api/* (resolver JSON + Range media proxy),
+  // any Range request, media destinations, media extensions, third-party,
+  // and Vite dev paths. respondWith(fetch()) guarantees the SW never serves
+  // stale cache or opaque responses for these.
+  const isApi = url.pathname.includes('/api/');
+  const isMediaDest = req.destination === 'video' || req.destination === 'audio';
+  const isMediaExt = /\.(m3u8|m4s|mp4|webm|ts)(\?|$)/i.test(url.pathname);
+  const isThirdParty = url.origin !== self.location.origin;
+  const isDev = DEV_PREFIXES.some((p) => url.pathname.startsWith(p));
+  if (isApi || isMediaDest || req.headers.has('range') || isMediaExt || isThirdParty || isDev) {
+    event.respondWith(fetch(req));
+    return;
+  }
 
   event.respondWith(fromCacheOrNetwork(req));
 });

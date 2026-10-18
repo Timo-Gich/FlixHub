@@ -26,14 +26,15 @@ export default function HlsPlayer({ src, title, tracks = [], onFallbackServer })
   const attemptAt = useRef(performance.now());
 
   const key = useMemo(() => `${src}#${retryKey}`, [src, retryKey]);
-  // /api/stream URLs carry no extension: tell Vidstack it's MP4 so it
-  // skips HLS probing and plays the proxied progressive file directly.
+  // /api/stream URLs carry no extension: force explicit MP4 type so Vidstack
+  // never probes for HLS and plays the proxied progressive file directly.
   const isProxyMp4 = (src || '').includes('/api/stream');
   const mediaSrc = useMemo(() => {
     if (!src) return null;
     if (isProxyMp4) return { src, type: 'video/mp4' };
     return src;
   }, [src, isProxyMp4]);
+  console.log('[Server7/HlsPlayer] src passed to MediaPlayer:', typeof mediaSrc === 'object' ? `${mediaSrc.type} :: ${(mediaSrc.src || '').slice(0, 100)}...` : (mediaSrc || '').slice(0, 100));
 
   const failFast = () => !startedRef.current && performance.now() - attemptAt.current >= FAIL_FAST_MS;
 
@@ -42,19 +43,44 @@ export default function HlsPlayer({ src, title, tracks = [], onFallbackServer })
   };
 
   return (
-    <div className="absolute inset-0 bg-black">
+    <div className="hls-server7 absolute inset-0 bg-black">
       {status !== 'unavailable' && src && (
         <MediaPlayer
           key={key}
           src={mediaSrc}
+          viewType="video"
+          streamType="on-demand"
           title={title}
           playsInline
           autoPlay
+          muted={false}
+          onCanPlay={() => { startedRef.current = true; setStatus('healthy'); }}
           onPlaying={() => { startedRef.current = true; setStatus('healthy'); }}
-          onError={handleError}
-          onHlsError={(d) => { if (d?.fatal) handleError(); }}
+          onPlay={() => { startedRef.current = true; setStatus('healthy'); }}
+          onLoadedMetadata={() => { startedRef.current = true; setStatus('healthy'); }}
+          onError={(e) => { console.warn('[Server7/HlsPlayer] media error:', e?.detail || e); handleError(); }}
+          onHlsError={(d) => { console.warn('[Server7/HlsPlayer] hls error:', d?.code, d?.fatal); if (d?.fatal) handleError(); }}
         >
-          <MediaProvider library={isProxyMp4 ? undefined : Hls} config={HLS_CONFIG} />
+          {/* Proxied MP4: NO HLS library — native playback only. */}
+          <MediaProvider config={HLS_CONFIG} />
+          {/* click-to-play fallback: autoplay is often blocked, and the
+              overlay spinner otherwise sits on top forever looking "stuck" */}
+          {status === 'loading' && (
+            <button
+              type="button"
+              aria-label="Play video"
+              onClick={() => {
+                const v = document.querySelector('.hls-server7 video');
+                if (v) v.play().catch(() => {});
+                setStatus('healthy');
+              }}
+              className="absolute inset-0 z-20 flex cursor-pointer items-center justify-center bg-black/40"
+            >
+              <span className="flex h-16 w-16 items-center justify-center rounded-full bg-brand text-white shadow-xl transition hover:scale-105">
+                <svg viewBox="0 0 24 24" className="h-8 w-8" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z" /></svg>
+              </span>
+            </button>
+          )}
           {tracks.slice(0, 20).map((t, i) => (
             <Track
               key={`${t.url}-${i}`}

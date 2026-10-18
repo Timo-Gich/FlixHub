@@ -1,11 +1,12 @@
 /* FlixHub service worker — offline shell + app installability (PWA).
  * Strategy:
- *   • Same-origin GET requests (static assets + navigations) are cache-first
+ *   • Same-origin static GETs (HTML/CSS/local JS/images/fonts) are cache-first
  *     with a background refresh, so the app shell works offline.
- *   • Third-party / API traffic (TMDb, VidKing) is NEVER intercepted.
- *   • Vite dev paths are bypassed so the dev server stays fresh.
+ *   • NEVER intercept: /api/* (resolve + Range-streamed media proxy),
+ *     any request with a Range header, media (video/audio) destinations,
+ *     Vite dev paths, or third-party / external player scripts.
  */
-const CACHE = 'flixhub-v1';
+const CACHE = 'flixhub-v2';
 const CORE = ['/', '/manifest.webmanifest', '/icons/icon-192.png', '/icons/icon-512.png'];
 const DEV_PREFIXES = ['/src/', '/@', '/.vite/'];
 
@@ -28,9 +29,16 @@ self.addEventListener('fetch', (event) => {
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
 
-  // Never cache third-party (TMDb API, VidKing player) requests.
+  // 1. Same-origin /api/* — resolver JSON + Range-streamed media proxy.
+  //    Caching 206 Partial Content or JSON here corrupts playback, so bypass.
+  if (url.origin === self.location.origin && url.pathname.startsWith('/api/')) return;
+  // 2. Media fetches (video/audio elements, MSE, Range seeks) — never cache.
+  if (req.destination === 'video' || req.destination === 'audio') return;
+  if (req.headers.has('range')) return;
+  if (/\.(m3u8|m4s|mp4|webm|ts)(\?|$)/i.test(url.pathname)) return;
+  // 3. Third-party anything (TMDb, VidLink, CDNs, fonts, external players).
   if (url.origin !== self.location.origin) return;
-  // Keep the dev server / hot-reload fresh.
+  // 4. Vite dev / hot-reload.
   if (DEV_PREFIXES.some((p) => url.pathname.startsWith(p))) return;
 
   event.respondWith(fromCacheOrNetwork(req));
@@ -51,20 +59,33 @@ async function precacheCore() {
   );
 }
 
-/* Cache-first with background refresh; falls back to network if uncached. */
+/* Cache-first with background refresh; only stores safe static responses:
+ * same-origin HTML/CSS/JS/images/fonts with 200 + no Range. Never stores
+ * partial (206), opaque, or media payloads. */
 async function fromCacheOrNetwork(req) {
   const cache = await caches.open(CACHE);
   const cached = await cache.match(req);
   if (cached) {
+    // Revalidate in background, but never store a 206 / partial response.
     try {
       const fresh = await fetch(req);
-      if (fresh.ok) cache.put(req, fresh.clone());
+      if (fresh.ok && fresh.status === 200) {
+        const ct = (fresh.headers.get('content-type') || '').toLowerCase();
+        if (/text\/html|text\/css|javascript|json|image\/|font\//.test(ct)) {
+          cache.put(req, fresh.clone());
+        }
+      }
     } catch {
       /* offline — keep serving the cached copy */
     }
     return cached;
   }
   const network = await fetch(req);
-  if (network.ok && network.type === 'basic') cache.put(req, network.clone());
+  if (network.ok && network.status === 200 && network.type === 'basic') {
+    const ct = (network.headers.get('content-type') || '').toLowerCase();
+    if (/text\/html|text\/css|javascript|json|image\/|font\//.test(ct)) {
+      cache.put(req, network.clone());
+    }
+  }
   return network;
 }

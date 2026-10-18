@@ -105,10 +105,11 @@ function normExtractor(d) {
     }
     entries.sort((a, b) => (parseInt(b.label, 10) || 0) - (parseInt(a.label, 10) || 0));
     if (entries[0]) {
-      const corsOk = Array.isArray(d?.stream?.flags) && d.stream.flags.includes('cors-allowed');
+      // Always proxy: CDN lacks CORS headers (ERR_BLOCKED_BY_ORB otherwise).
+      // /api/stream streams with Range passthrough, no buffering.
       return {
         streamUrl: entries[0].url, userAgent: ua, referer, origin, subtitles,
-        proxy: corsOk ? false : true, quality: entries[0].label,
+        proxy: true, quality: entries[0].label,
         qualities: entries,
       };
     }

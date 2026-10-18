@@ -26,6 +26,14 @@ export default function HlsPlayer({ src, title, tracks = [], onFallbackServer })
   const attemptAt = useRef(performance.now());
 
   const key = useMemo(() => `${src}#${retryKey}`, [src, retryKey]);
+  // /api/stream URLs carry no extension: tell Vidstack it's MP4 so it
+  // skips HLS probing and plays the proxied progressive file directly.
+  const isProxyMp4 = (src || '').includes('/api/stream');
+  const mediaSrc = useMemo(() => {
+    if (!src) return null;
+    if (isProxyMp4) return { src, type: 'video/mp4' };
+    return src;
+  }, [src, isProxyMp4]);
 
   const failFast = () => !startedRef.current && performance.now() - attemptAt.current >= FAIL_FAST_MS;
 
@@ -38,7 +46,7 @@ export default function HlsPlayer({ src, title, tracks = [], onFallbackServer })
       {status !== 'unavailable' && src && (
         <MediaPlayer
           key={key}
-          src={src}
+          src={mediaSrc}
           title={title}
           playsInline
           autoPlay
@@ -46,7 +54,7 @@ export default function HlsPlayer({ src, title, tracks = [], onFallbackServer })
           onError={handleError}
           onHlsError={(d) => { if (d?.fatal) handleError(); }}
         >
-          <MediaProvider library={Hls} config={HLS_CONFIG} />
+          <MediaProvider library={isProxyMp4 ? undefined : Hls} config={HLS_CONFIG} />
           {tracks.slice(0, 20).map((t, i) => (
             <Track
               key={`${t.url}-${i}`}

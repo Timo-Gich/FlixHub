@@ -28,7 +28,7 @@ export default async function handler(req, res) {
     try {
       const path = type === 'movie'
         ? `${RESOLVER_BASE}/movie/${encodeURIComponent(id)}`
-        : `${RESOLVER_BASE}/tv/${encodeURIComponent(id)}/${season}/${episode}`;
+        : `${RESOLVER_BASE}/series/${encodeURIComponent(id)}/${season}/${episode}`;
       const r = await fetch(path, { headers: { Accept: 'application/json', 'User-Agent': UA } });
       if (r.ok) {
         const out = normExtractor(await r.json().catch(() => null));
@@ -70,14 +70,56 @@ export default async function handler(req, res) {
 
 function normExtractor(d) {
   if (!d || typeof d !== 'object') return null;
-  const url = d.streamUrl || d.url || d.playlist || d?.sources?.[0]?.url || null;
-  if (!url) return null;
-  const h = d.headers || {};
+  // Railway resolver shape: { headers, playlist: null|string, stream: {
+  //   qualities: { 360: {type,url}, ... }, captions: [{language,url}] } }
+  // VidLink currently returns progressive MP4s (not .m3u8) with
+  // flags: ["cors-allowed"], so they play direct without /api/stream.
+  const h = d.headers || d?.stream?.headers || {};
+  const ua = h['user-agent'] || h['User-Agent'] || h['UserAgent'] || UA;
+  const referer = h.referer || h.Referer || 'https://vidlink.pro/';
+  const origin = h.origin || h.Origin || 'https://vidlink.pro';
+  const subtitles = normSubs(d.subtitles || d.captions || d?.stream?.captions || []);
+
+  // 1) Explicit HLS playlist text/URL wins when present.
+  const pl = d.playlist || d?.stream?.playlist || null;
+  if (typeof pl === 'string' && pl) {
+    const isText = pl.trimStart().startsWith('#EXTM3U');
+    if (!isText) {
+      return {
+        streamUrl: pl, userAgent: ua, referer, origin, subtitles,
+        proxy: /\.m3u8($|\?)/i.test(pl),
+      };
+    }
+    // Raw playlist text (no URL) — no direct src to return; fall through.
+  }
+
+  // 2) Quality map: prefer any .m3u8 rendition, else highest numeric MP4.
+  const qualities = d?.stream?.qualities || d?.qualities || null;
+  if (qualities && typeof qualities === 'object') {
+    const entries = Object.entries(qualities)
+      .filter(([, q]) => q && typeof q.url === 'string' && q.url)
+      .map(([label, q]) => ({ label, url: q.url, type: (q.type || '').toLowerCase() }));
+    const m3u8 = entries.find((e) => /\.m3u8($|\?)/i.test(e.url) || e.type === 'm3u8' || e.type === 'hls');
+    if (m3u8) {
+      return { streamUrl: m3u8.url, userAgent: ua, referer, origin, subtitles, proxy: true, quality: m3u8.label };
+    }
+    entries.sort((a, b) => (parseInt(b.label, 10) || 0) - (parseInt(a.label, 10) || 0));
+    if (entries[0]) {
+      const corsOk = Array.isArray(d?.stream?.flags) && d.stream.flags.includes('cors-allowed');
+      return {
+        streamUrl: entries[0].url, userAgent: ua, referer, origin, subtitles,
+        proxy: corsOk ? false : true, quality: entries[0].label,
+        qualities: entries,
+      };
+    }
+  }
+
+  // 3) Generic fallbacks (other extractor shapes).
+  const url = d.streamUrl || d.url || d?.stream?.url || d?.sources?.[0]?.url || null;
+  if (!url || typeof url !== 'string') return null;
   return {
-    streamUrl: url, userAgent: h['user-agent'] || h['User-Agent'] || UA,
-    referer: h.referer || h.Referer || 'https://vidlink.pro/',
-    origin: h.origin || h.Origin || 'https://vidlink.pro',
-    subtitles: normSubs(d.subtitles || d.captions || []),
+    streamUrl: url, userAgent: ua, referer, origin, subtitles,
+    proxy: /\.m3u8($|\?)/i.test(url),
   };
 }
 
@@ -96,7 +138,13 @@ function normConsumet(w) {
 
 function normSubs(l) {
   if (!Array.isArray(l)) return [];
-  return l.map((s) => ({ lang: s?.lang || s?.label || 'Subtitles', url: s?.url || s?.file || '' })).filter((s) => s.url);
+  return l
+    .map((s) => ({
+      lang: s?.lang || s?.label || s?.language || s?.name || 'Subtitles',
+      url: s?.url || s?.file || '',
+      type: s?.type || '',
+    }))
+    .filter((s) => s.url);
 }
 
 function pickEp(info, season, episode) {

@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from 'react';
-import { MediaPlayer, MediaProvider } from '@vidstack/react';
+import { MediaPlayer, MediaProvider, Track } from '@vidstack/react';
 import Hls from 'hls.js';
 import { DefaultVideoLayout, defaultLayoutIcons } from '@vidstack/react/player/layouts/default';
 import '@vidstack/react/player/styles/base.css';
@@ -19,7 +19,7 @@ const HLS_CONFIG = {
 
 const FAIL_FAST_MS = 8000;
 
-export default function HlsPlayer({ src, title, onFallbackServer }) {
+export default function HlsPlayer({ src, title, tracks = [], onFallbackServer }) {
   const [status, setStatus] = useState('loading');
   const [retryKey, setRetryKey] = useState(0);
   const startedRef = useRef(false);
@@ -47,6 +47,16 @@ export default function HlsPlayer({ src, title, onFallbackServer }) {
           onHlsError={(d) => { if (d?.fatal) handleError(); }}
         >
           <MediaProvider library={Hls} config={HLS_CONFIG} />
+          {tracks.slice(0, 20).map((t, i) => (
+            <Track
+              key={`${t.url}-${i}`}
+              src={t.url}
+              kind="subtitles"
+              label={t.lang || `Subtitles ${i + 1}`}
+              srclang={(t.lang || 'en').slice(0, 2).toLowerCase()}
+              type={/\.vtt($|\?)/i.test(t.url || '') ? 'vtt' : 'srt'}
+            />
+          ))}
           <DefaultVideoLayout icons={defaultLayoutIcons} />
         </MediaPlayer>
       )}

@@ -199,7 +199,7 @@ export default function VideoPlayer({
             )}
             {!hls.loading && hls.streamUrl && (
               <Suspense fallback={null}>
-                <HlsPlayer src={hls.streamUrl} title={iframeTitle} onFallbackServer={() => selectServer('server1')} />
+                <HlsPlayer src={hls.streamUrl} title={iframeTitle} tracks={hls.tracks} onFallbackServer={() => selectServer('server1')} />
               </Suspense>
             )}
           </>

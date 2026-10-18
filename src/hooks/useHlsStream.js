@@ -15,6 +15,8 @@ function friendlyResolveError(status, payload) {
 export default function useHlsStream({ type, id, season, episode, enabled }) {
   const [streamUrl, setStreamUrl] = useState('');
   const [headers, setHeaders] = useState({});
+  const [tracks, setTracks] = useState([]);
+  const [quality, setQuality] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [attempt, setAttempt] = useState(0);
@@ -42,12 +44,20 @@ export default function useHlsStream({ type, id, season, episode, enabled }) {
       })
       .then((d) => {
         if (ctrl.signal.aborted) return;
-        const proxied = `/api/stream?url=${encodeURIComponent(d.streamUrl)}`
-          + (d.userAgent ? `&ua=${encodeURIComponent(d.userAgent)}` : '')
-          + (d.referer ? `&referer=${encodeURIComponent(d.referer)}` : '')
-          + (d.origin ? `&origin=${encodeURIComponent(d.origin)}` : '');
-        setStreamUrl(proxied);
+        // Railway/VidLink returns progressive MP4 with cors-allowed flags:
+        // play direct (proxying multi-hundred-MB MP4s through Vercel would
+        // hit the ~4.5MB serverless cap). Only .m3u8 goes via /api/stream.
+        const useProxy = d.proxy !== false && /\.m3u8($|\?)/i.test(d.streamUrl || '');
+        const finalSrc = useProxy
+          ? `/api/stream?url=${encodeURIComponent(d.streamUrl)}`
+            + (d.userAgent ? `&ua=${encodeURIComponent(d.userAgent)}` : '')
+            + (d.referer ? `&referer=${encodeURIComponent(d.referer)}` : '')
+            + (d.origin ? `&origin=${encodeURIComponent(d.origin)}` : '')
+          : d.streamUrl;
+        setStreamUrl(finalSrc);
         setHeaders({ userAgent: d.userAgent, referer: d.referer, origin: d.origin });
+        setTracks(Array.isArray(d.subtitles) ? d.subtitles : []);
+        setQuality(d.quality || '');
         setLoading(false);
       })
       .catch((e) => {
@@ -59,5 +69,5 @@ export default function useHlsStream({ type, id, season, episode, enabled }) {
     return () => ctrl.abort();
   }, [type, id, season, episode, enabled, attempt]);
 
-  return { streamUrl, headers, loading, error, retry };
+  return { streamUrl, headers, tracks, quality, loading, error, retry };
 }

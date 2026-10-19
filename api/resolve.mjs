@@ -1,9 +1,12 @@
 /**
  * GET /api/resolve?type=movie&id=<tmdbId>
  * GET /api/resolve?type=tv&id=<tmdbId>&season=<n>&episode=<n>
- * -> { streamUrl, userAgent, referer, origin, subtitles[] }
- * Env: RESOLVER_BASE_URL (VidLink-reverse), CONSUMET_BASE_URL (fallback).
- * Play the result via /api/stream (forwards headers + rewrites manifest).
+ * -> { streamUrl, userAgent, referer, origin, subtitles[], quality, qualities[] }
+ * Env: RESOLVER_BASE_URL (VidLink-reverse on Railway), CONSUMET_BASE_URL (fallback).
+ *
+ * IMPORTANT: video bytes are proxied by RAILWAY (/proxy route on the same
+ * host), NOT by Vercel /api/stream. bcdn nginx throttles Vercel's shared
+ * egress IPs (429) but trusts Railway's IP. Vercel only resolves metadata.
  */
 const RESOLVER_BASE = (process.env.RESOLVER_BASE_URL || '').replace(/\/$/, '');
 const CONSUMET_BASE = (process.env.CONSUMET_BASE_URL || 'https://api.consumet.org').replace(/\/$/, '');
@@ -31,7 +34,7 @@ export default async function handler(req, res) {
         : `${RESOLVER_BASE}/series/${encodeURIComponent(id)}/${season}/${episode}`;
       const r = await fetch(path, { headers: { Accept: 'application/json', 'User-Agent': UA } });
       if (r.ok) {
-        const out = normExtractor(await r.json().catch(() => null));
+        const out = normExtractor(await r.json().catch(() => null), RESOLVER_BASE);
         if (out) {
           res.setHeader('Cache-Control', 'public, max-age=3600, stale-while-revalidate=86400');
           return res.status(200).json(out);
@@ -68,32 +71,39 @@ export default async function handler(req, res) {
   return res.status(501).json({ error: 'Direct HLS is not configured yet. Set RESOLVER_BASE_URL to enable it.' });
 }
 
-function normExtractor(d) {
+function normExtractor(d, resolverBase) {
   if (!d || typeof d !== 'object') return null;
   // Railway resolver shape: { headers, playlist: null|string, stream: {
   //   qualities: { 360: {type,url}, ... }, captions: [{language,url}] } }
-  // VidLink currently returns progressive MP4s (not .m3u8) with
-  // flags: ["cors-allowed"], so they play direct without /api/stream.
+  // VidLink returns progressive MP4s with requiresProxy: true. Video bytes
+  // MUST go through Railway's /proxy (same trusted IP that fetched the
+  // signed URLs) — Vercel egress is 429-throttled by bcdn nginx.
   const h = d.headers || d?.stream?.headers || {};
   const ua = h['user-agent'] || h['User-Agent'] || h['UserAgent'] || UA;
   const referer = h.referer || h.Referer || 'https://vidlink.pro/';
   const origin = h.origin || h.Origin || 'https://vidlink.pro';
   const subtitles = normSubs(d.subtitles || d.captions || d?.stream?.captions || []);
+  const viaRailway = (rawUrl) =>
+    resolverBase
+      ? `${resolverBase}/proxy?url=${encodeURIComponent(rawUrl)}&referer=${encodeURIComponent(referer)}`
+      : rawUrl;
 
-  // 1) Explicit HLS playlist text/URL wins when present.
+  // 1) Explicit HLS playlist URL wins when present (via Railway proxy).
   const pl = d.playlist || d?.stream?.playlist || null;
   if (typeof pl === 'string' && pl) {
     const isText = pl.trimStart().startsWith('#EXTM3U');
     if (!isText) {
+      const isHls = /\.m3u8($|\?)/i.test(pl);
       return {
-        streamUrl: pl, userAgent: ua, referer, origin, subtitles,
-        proxy: /\.m3u8($|\?)/i.test(pl),
+        streamUrl: isHls ? viaRailway(pl) : pl, userAgent: ua, referer, origin, subtitles,
+        proxy: isHls ? 'railway' : false,
       };
     }
     // Raw playlist text (no URL) — no direct src to return; fall through.
   }
 
-  // 2) Quality map: prefer any .m3u8 rendition, else highest numeric MP4.
+  // 2) Quality map: prefer any .m3u8 rendition, else LOWEST numeric MP4
+  // (smaller initial Range = less throttle surface; player buffers up).
   const qualities = d?.stream?.qualities || d?.qualities || null;
   if (qualities && typeof qualities === 'object') {
     const entries = Object.entries(qualities)
@@ -101,16 +111,14 @@ function normExtractor(d) {
       .map(([label, q]) => ({ label, url: q.url, type: (q.type || '').toLowerCase() }));
     const m3u8 = entries.find((e) => /\.m3u8($|\?)/i.test(e.url) || e.type === 'm3u8' || e.type === 'hls');
     if (m3u8) {
-      return { streamUrl: m3u8.url, userAgent: ua, referer, origin, subtitles, proxy: true, quality: m3u8.label };
+      return { streamUrl: viaRailway(m3u8.url), userAgent: ua, referer, origin, subtitles, proxy: 'railway', quality: m3u8.label };
     }
-    entries.sort((a, b) => (parseInt(b.label, 10) || 0) - (parseInt(a.label, 10) || 0));
+    entries.sort((a, b) => (parseInt(a.label, 10) || 0) - (parseInt(b.label, 10) || 0));
     if (entries[0]) {
-      // Always proxy: CDN lacks CORS headers (ERR_BLOCKED_BY_ORB otherwise).
-      // /api/stream streams with Range passthrough, no buffering.
       return {
-        streamUrl: entries[0].url, userAgent: ua, referer, origin, subtitles,
-        proxy: true, quality: entries[0].label,
-        qualities: entries,
+        streamUrl: viaRailway(entries[0].url), userAgent: ua, referer, origin, subtitles,
+        proxy: 'railway', quality: entries[0].label,
+        qualities: entries.map((e) => ({ ...e, url: viaRailway(e.url) })),
       };
     }
   }
@@ -118,9 +126,10 @@ function normExtractor(d) {
   // 3) Generic fallbacks (other extractor shapes).
   const url = d.streamUrl || d.url || d?.stream?.url || d?.sources?.[0]?.url || null;
   if (!url || typeof url !== 'string') return null;
+  const isHls = /\.m3u8($|\?)/i.test(url);
   return {
-    streamUrl: url, userAgent: ua, referer, origin, subtitles,
-    proxy: /\.m3u8($|\?)/i.test(url),
+    streamUrl: isHls ? viaRailway(url) : url, userAgent: ua, referer, origin, subtitles,
+    proxy: isHls ? 'railway' : false,
   };
 }
 

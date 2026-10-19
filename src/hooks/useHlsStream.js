@@ -56,13 +56,11 @@ export default function useHlsStream({ type, id, season, episode, enabled }) {
       })
       .then((d) => {
         if (ctrl.signal.aborted) return;
-        // Always route through /api/stream (CDN lacks CORS headers ->
-        // ERR_BLOCKED_BY_ORB on direct play). Proxy streams with Range
-        // passthrough so Vercel never buffers the full file.
-        const finalSrc = `/api/stream?url=${encodeURIComponent(d.streamUrl)}`
-          + (d.userAgent ? `&ua=${encodeURIComponent(d.userAgent)}` : '')
-          + (d.referer ? `&referer=${encodeURIComponent(d.referer)}` : '')
-          + (d.origin ? `&origin=${encodeURIComponent(d.origin)}` : '');
+        // streamUrl is ALREADY a Railway /proxy URL (same trusted IP that
+        // fetched the signed bcdn link). Play it directly — Vercel never
+        // touches video bytes, so no 429. Only legacy /api/stream HLS
+        // manifests from other shapes need no further wrapping.
+        const finalSrc = d.streamUrl;
         // Dedupe: same src → no state churn → no MediaPlayer remount loop.
         setStreamUrl((prev) => (prev === finalSrc ? prev : finalSrc));
         setHeaders((prev) => {

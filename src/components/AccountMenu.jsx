@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { signOut } from '../services/authService';
 
@@ -9,6 +9,7 @@ import { signOut } from '../services/authService';
  */
 export default function AccountMenu() {
   const { user, configured } = useAuth();
+  const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
 
@@ -34,9 +35,16 @@ export default function AccountMenu() {
     return (
       <Link
         to="/login"
-        className="rounded-full bg-brand px-4 py-1.5 text-sm font-bold text-white transition hover:bg-brand-dark"
+        aria-label="Sign in"
+        title="Sign in"
+        className="flex h-8 w-8 items-center justify-center rounded-md text-muted
+                   transition hover:text-white"
       >
-        Sign in
+        <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor"
+             strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" />
+          <circle cx="12" cy="7" r="4" />
+        </svg>
       </Link>
     );
   }
@@ -56,13 +64,15 @@ export default function AccountMenu() {
   };
 
   return (
-    <div ref={ref} className="relative">
+    <div ref={ref} className="relative" onMouseLeave={() => setOpen(false)}>
       <button
         type="button"
-        onClick={() => setOpen((v) => !v)}
+        onClick={() => navigate('/account')}
+        onMouseEnter={() => setOpen(true)}
+        onFocus={() => setOpen(true)}
         aria-haspopup="menu"
         aria-expanded={open}
-        aria-label="Account menu"
+        aria-label="Account"
         title={label}
         className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-full
                    bg-ink-raised text-sm font-black text-white ring-1 ring-ink-border
@@ -81,6 +91,14 @@ export default function AccountMenu() {
                      border border-ink-border bg-ink-raised/95 p-1.5 shadow-2xl shadow-black/40 backdrop-blur"
         >
           <p className="truncate px-2.5 py-2 text-xs text-muted">{label}</p>
+          <Link
+            to="/account"
+            role="menuitem"
+            onClick={() => setOpen(false)}
+            className="block rounded-lg px-2.5 py-2 text-sm font-medium text-white transition hover:bg-white/5"
+          >
+            My Account
+          </Link>
           <Link
             to="/watch-later"
             role="menuitem"

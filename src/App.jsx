@@ -19,6 +19,7 @@ import { AuthProvider } from './context/AuthContext';
 import BottomNav from './components/BottomNav';
 import LoginPage from './pages/LoginPage';
 import AuthCallback from './pages/AuthCallback';
+import AccountPage from './pages/AccountPage';
 
 // Live TV pages are loaded on demand so the heavy Vidstack player stays out of
 // the initial bundle for the movies/series browsing routes.
@@ -101,6 +102,7 @@ export default function App() {
         <Route path="/history" element={<HistoryPage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/auth/callback" element={<AuthCallback />} />
+        <Route path="/account" element={<AccountPage />} />
         <Route path="/movies" element={<MoviesPage />} />
         <Route path="/series" element={<SeriesPage />} />
         <Route path="/new-popular" element={<NewAndPopularPage />} />

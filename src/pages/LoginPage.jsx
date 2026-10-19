@@ -57,11 +57,12 @@ export default function LoginPage() {
     <div className="min-h-screen bg-ink text-foreground">
       <Navbar />
       <main className="mx-auto w-full max-w-md px-4 pt-28">
-        <h1 className="text-2xl font-black text-white">Sign in to FlixHub</h1>
-        <p className="mt-1 text-sm text-muted">
-          Optional — browsing works without an account. Signing in syncs your watchlist,
-          history and favorites across devices.
-        </p>
+        <h1 className="font-display text-3xl font-semibold uppercase tracking-wide text-white sm:text-4xl">
+          Sign in <span className="text-muted font-light normal-case tracking-normal">or</span>{' '}
+          <span className="bg-gradient-to-r from-brand-light via-brand to-amber-400 bg-clip-text text-transparent">
+            create your account
+          </span>
+        </h1>
         {!ready && (
           <p className="mt-4 rounded-md border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
             Accounts are not configured yet (missing Supabase keys). See{' '}
@@ -76,6 +77,7 @@ export default function LoginPage() {
                      text-sm font-bold text-black transition hover:bg-neutral-200 disabled:opacity-40"
         >
           Continue with Google
+          <span className="sr-only">(new accounts are created automatically)</span>
         </button>
         <div className="my-4 flex items-center gap-3 text-xs text-muted">
           <span className="h-px flex-1 bg-ink-border" /> or <span className="h-px flex-1 bg-ink-border" />
@@ -101,6 +103,9 @@ export default function LoginPage() {
           >
             Email me a sign-in link
           </button>
+          <p className="text-center text-xs text-muted">
+            We will email you a link — new accounts are created on first use.
+          </p>
         </form>
         {status && (
           <p

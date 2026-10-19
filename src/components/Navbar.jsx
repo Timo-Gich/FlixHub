@@ -16,6 +16,7 @@ const NAV_LINKS = [
   { key: 'popular', label: 'New & Popular', to: '/new-popular' },
   { key: 'mylist', label: 'Watchlist', to: '/watch-later' },
   { key: 'history', label: 'History', to: '/history' },
+  { key: 'account', label: 'Account', to: '/account' },
 ];
 
 // Session in-app back stack (module scope so it survives component remounts
@@ -71,6 +72,13 @@ const MENU_ICONS = {
       <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
       <path d="M3 3v5h5" />
       <path d="M12 7v5l4 2" />
+    </svg>
+  ),
+  account: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"
+         strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" />
+      <circle cx="12" cy="7" r="4" />
     </svg>
   ),
 };

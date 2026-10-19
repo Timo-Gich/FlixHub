@@ -96,3 +96,40 @@ create policy "history owner" on public.history_items
 drop policy if exists "favorites live owner" on public.favorites_live;
 create policy "favorites live owner" on public.favorites_live
   for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+-- ============================================================================
+-- Custom avatars — Supabase Storage bucket + policies.
+-- Files are stored at avatars/<userId>/avatar.<ext> (public read, owner write).
+-- ============================================================================
+
+insert into storage.buckets (id, name, public)
+values ('avatars', 'avatars', true)
+on conflict (id) do update set public = true;
+
+drop policy if exists "avatars public read" on storage.objects;
+create policy "avatars public read" on storage.objects
+  for select using (bucket_id = 'avatars');
+
+drop policy if exists "avatars owner insert" on storage.objects;
+create policy "avatars owner insert" on storage.objects
+  for insert with check (
+    bucket_id = 'avatars'
+    and auth.uid()::text = (storage.foldername(name))[1]
+  );
+
+drop policy if exists "avatars owner update" on storage.objects;
+create policy "avatars owner update" on storage.objects
+  for update using (
+    bucket_id = 'avatars'
+    and auth.uid()::text = (storage.foldername(name))[1]
+  ) with check (
+    bucket_id = 'avatars'
+    and auth.uid()::text = (storage.foldername(name))[1]
+  );
+
+drop policy if exists "avatars owner delete" on storage.objects;
+create policy "avatars owner delete" on storage.objects
+  for delete using (
+    bucket_id = 'avatars'
+    and auth.uid()::text = (storage.foldername(name))[1]
+  );

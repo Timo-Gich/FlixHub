@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { signOut } from '../services/authService';
+import { fetchProfileAvatar } from '../services/avatarService';
 
 /**
  * Right-side account control: "Sign in" pill for guests, avatar menu for
@@ -11,7 +12,20 @@ export default function AccountMenu() {
   const { user, configured } = useAuth();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
+  const [customAvatar, setCustomAvatar] = useState(null);
   const ref = useRef(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (user?.id) {
+      fetchProfileAvatar(user.id).then((url) => {
+        if (!cancelled) setCustomAvatar(url);
+      });
+    } else {
+      setCustomAvatar(null);
+    }
+    return () => { cancelled = true; };
+  }, [user?.id]);
 
   useEffect(() => {
     if (!open) return;
@@ -49,10 +63,10 @@ export default function AccountMenu() {
     );
   }
 
-  const meta = user.user_metadata || {};
-  const label = meta.full_name || meta.name || user.email || 'Account';
+  const meta = user?.user_metadata || {};
+  const label = meta.full_name || meta.name || user?.email || 'Account';
   const initial = String(label).trim().charAt(0).toUpperCase() || 'F';
-  const avatar = meta.avatar_url || meta.picture || null;
+  const avatar = customAvatar || meta.avatar_url || meta.picture || null;
 
   const doSignOut = async () => {
     setOpen(false);

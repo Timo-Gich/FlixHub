@@ -1,10 +1,7 @@
-import { Suspense, lazy, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import useEmbedServer from '../hooks/useEmbedServer';
-import useHlsStream from '../hooks/useHlsStream';
 import ServerDropdown from './ServerDropdown';
-
-const HlsPlayer = lazy(() => import('./HlsPlayer'));
 
 // Third-party player notice visibility timing.
 const NOTE_VISIBLE_MS = 5000; // How long the note stays fully shown.
@@ -49,14 +46,10 @@ export default function VideoPlayer({
   const {
     servers: activeServers,
     activeServerId,
-    activeKind,
     selectServer,
     source,
     imdbLoading,
   } = useEmbedServer({ type, id, season, episode, servers, validateId: !rawId });
-
-  const isHls = activeKind === 'hls';
-  const hls = useHlsStream({ type, id, season, episode, enabled: isHls });
 
   const [playerLoading, setPlayerLoading] = useState(true);
   // Track the third-party notice lifecycle: visible → fading → hidden.
@@ -77,14 +70,12 @@ export default function VideoPlayer({
   // Reset the loading spinner whenever the source changes (e.g. a new server).
   useEffect(() => {
     setPlayerLoading(true);
-  }, [source, activeServerId]);
+  }, [source]);
 
   // Only show the IMDb-fetch spinner over the player when the ACTIVE server
   // actually needs an IMDb id (avoids flashing on Server 1 / Server 3).
   const activeServer = activeServers.find((s) => s.id === activeServerId);
-  const showSpinner = isHls
-    ? hls.loading
-    : playerLoading || (imdbLoading && activeServer?.usesImdb);
+  const showSpinner = playerLoading || (imdbLoading && activeServer?.usesImdb);
 
   return (
     <div className="relative flex min-h-screen flex-col bg-ink text-foreground">
@@ -173,38 +164,6 @@ export default function VideoPlayer({
 
       {/* Player */}
       <div className="relative flex-1 bg-ink">
-        {isHls ? (
-          <>
-            {hls.loading && (
-              <div role="status" className="absolute inset-0 z-10 flex items-center justify-center bg-ink/80">
-                <span className="h-10 w-10 animate-spin rounded-full border-4 border-brand border-t-transparent" aria-hidden="true" />
-                <span className="sr-only">Resolving stream…</span>
-              </div>
-            )}
-            {!hls.loading && hls.error && !hls.streamUrl && (
-              <div className="flex h-full min-h-[50vh] items-center justify-center px-6">
-                <div className="mx-auto max-w-xl text-center">
-                  <h1 className="text-2xl font-black text-white">Stream unavailable</h1>
-                  <p className="mt-3 text-sm text-muted">{hls.error}. Try again or pick another server.</p>
-                  <div className="mt-5 flex flex-wrap justify-center gap-3">
-                    <button type="button" onClick={hls.retry} className="rounded-md bg-brand px-6 py-2.5 text-sm font-bold text-white hover:bg-brand-dark">
-                      Retry
-                    </button>
-                    <button type="button" onClick={() => selectServer('server1')} className="rounded-md border border-ink-border bg-ink-raised px-6 py-2.5 text-sm font-semibold text-white hover:border-brand">
-                      Try Server 1
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
-            {!hls.loading && hls.streamUrl && (
-              <Suspense fallback={null}>
-                <HlsPlayer src={hls.streamUrl} title={iframeTitle} tracks={hls.tracks} onFallbackServer={() => selectServer('server1')} />
-              </Suspense>
-            )}
-          </>
-        ) : (
-          <>
         {showSpinner && (
           <div
             role="status"
@@ -241,12 +200,10 @@ export default function VideoPlayer({
             </div>
           )
         )}
-          </>
-        )}
       </div>
 
-      {/* Third-party ad-blocker notice — hidden for self-hosted HLS (no ads) */}
-      {!isHls && notice && noticeState !== 'hidden' && (
+      {/* Third-party ad-blocker notice — auto-fades after a few seconds */}
+      {notice && noticeState !== 'hidden' && (
         <div
           role="status"
           className={`pointer-events-none absolute inset-x-0 bottom-0 z-30 bg-ink/90

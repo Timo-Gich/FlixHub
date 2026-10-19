@@ -68,14 +68,6 @@ export const SERVERS = [
     tv: (id, _imdbId, season, episode) =>
       `https://primesrc.me/embed/tv?tmdb=${id}&season=${season}&episode=${episode}`,
   },
-  {
-    id: 'server7',
-    label: 'Server 7',
-    provider: 'Direct HLS',
-    // Self-hosted HLS via /api/resolve — no iframe URL builder.
-    kind: 'hls',
-    usesImdb: false,
-  },
 ];
 
 /** Look up a server by id, falling back to the first (Server 1 / VidSrc). */

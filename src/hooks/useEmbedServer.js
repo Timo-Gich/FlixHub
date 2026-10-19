@@ -7,6 +7,11 @@ const DEFAULT_SERVER = 'server1';
 
 function readPreferred(list) {
   const stored = localStorage.getItem(PREF_KEY);
+  // Server 7 (Direct HLS) was removed — migrate anyone who had it saved.
+  if (stored === 'server7') {
+    localStorage.setItem(PREF_KEY, DEFAULT_SERVER);
+    return DEFAULT_SERVER;
+  }
   if (stored && list.some((s) => s.id === stored)) return stored;
   return list[0]?.id ?? DEFAULT_SERVER;
 }
@@ -90,7 +95,7 @@ export default function useEmbedServer({
     requested.usesImdb && !imdbLoading && !imdbId ? list[0] : requested;
 
   let source = null;
-  if (validId && idValidForType && server.kind !== 'hls') {
+  if (validId && idValidForType) {
     source =
       type === 'tv'
         ? server.tv(id, imdbId, season, episode)
@@ -103,7 +108,6 @@ export default function useEmbedServer({
       available: !s.usesImdb || (imdbLoading ? null : Boolean(imdbId)),
     })),
     activeServerId: server.id,
-    activeKind: server.kind === 'hls' ? 'hls' : 'iframe',
     selectServer: setPreferred,
     source,
     imdbId,

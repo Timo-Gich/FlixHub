@@ -65,7 +65,7 @@ function vercelApiPlugin() {
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react(), tailwindcss(), vercelApiPlugin()],
-  envPrefix: ['VITE_', 'TMDB_'],
+  envPrefix: ['VITE_', 'TMDB_', 'SUPABASE_'],
   server: {
     allowedHosts: ['undocked-casually-cloud.ngrok-free.dev'],
   },

@@ -1,6 +1,7 @@
 // ----------------------------------------------------------------------------
-// Supabase client (optional). If VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY are
-// missing, getSupabase() returns null and the app runs fully in guest mode
+// Supabase client (optional). Accepts either VITE_SUPABASE_* or SUPABASE_*
+// (Vercel envs were created without the VITE_ prefix). If both are missing,
+// getSupabase() returns null and the app runs fully in guest mode
 // (localStorage only). This keeps accounts truly optional.
 // ----------------------------------------------------------------------------
 
@@ -9,9 +10,17 @@ import { createClient } from '@supabase/supabase-js';
 let client = null;
 let warned = false;
 
+function readKey(...names) {
+  for (const name of names) {
+    const value = import.meta.env[name];
+    if (value) return value;
+  }
+  return '';
+}
+
 export function getSupabase() {
-  const url = import.meta.env.VITE_SUPABASE_URL;
-  const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+  const url = readKey('VITE_SUPABASE_URL', 'SUPABASE_URL');
+  const anonKey = readKey('VITE_SUPABASE_ANON_KEY', 'SUPABASE_ANON_KEY');
   if (!url || !anonKey) {
     if (!warned) {
       warned = true;
@@ -33,5 +42,5 @@ export function getSupabase() {
 }
 
 export function isSupabaseConfigured() {
-  return Boolean(import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY);
+  return Boolean(readKey('VITE_SUPABASE_URL', 'SUPABASE_URL') && readKey('VITE_SUPABASE_ANON_KEY', 'SUPABASE_ANON_KEY'));
 }

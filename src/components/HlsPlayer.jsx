@@ -1,44 +1,80 @@
-import { useMemo, useRef, useState } from 'react';
+import { useMemo, useRef, useState, useEffect } from 'react';
 import { MediaPlayer, MediaProvider, Track } from '@vidstack/react';
-import Hls from 'hls.js';
 import { DefaultVideoLayout, defaultLayoutIcons } from '@vidstack/react/player/layouts/default';
 import '@vidstack/react/player/styles/base.css';
 import '@vidstack/react/player/styles/default/theme.css';
 import '@vidstack/react/player/styles/default/layouts/video.css';
 
-// Aggressive buffer + retry tuning for VOD HLS.
-const HLS_CONFIG = {
-  maxBufferLength: 15,
-  maxMaxBufferLength: 30,
-  backBufferLength: 10,
-  fragLoadingMaxRetry: 6,
-  manifestLoadingMaxRetry: 3,
-  levelLoadingMaxRetry: 4,
-  enableWorker: true,
-};
+// NOTE: no hls.js import — proxied MP4 plays natively. HLS branch (raw .m3u8)
+// is handled by Vidstack's built-in provider without extra config.
 
 const FAIL_FAST_MS = 8000;
+// CDN (bcdn nginx) throttles bursts: back off 2s -> 4s -> 8s on 429.
+const BACKOFF_MS = [2000, 4000, 8000];
+const DEBUG = typeof process !== 'undefined' && process.env?.NODE_ENV !== 'production';
 
 export default function HlsPlayer({ src, title, tracks = [], onFallbackServer }) {
-  const [status, setStatus] = useState('loading');
+  const [status, setStatus] = useState('loading'); // loading | healthy | throttled | unavailable
   const [retryKey, setRetryKey] = useState(0);
+  const [throttleMsg, setThrottleMsg] = useState('');
   const startedRef = useRef(false);
   const attemptAt = useRef(performance.now());
+  const backoffRef = useRef(0);
+  const timerRef = useRef(null);
 
-  const key = useMemo(() => `${src}#${retryKey}`, [src, retryKey]);
-  // /api/stream URLs carry no extension: force explicit MP4 type so Vidstack
-  // never probes for HLS and plays the proxied progressive file directly.
-  const isProxyMp4 = (src || '').includes('/api/stream');
+  // Stable key per src only — retryKey remounts ONLY on user Retry.
+  const key = useMemo(() => src, [src]);
   const mediaSrc = useMemo(() => {
     if (!src) return null;
-    if (isProxyMp4) return { src, type: 'video/mp4' };
-    return src;
-  }, [src, isProxyMp4]);
-  console.log('[Server7/HlsPlayer] src passed to MediaPlayer:', typeof mediaSrc === 'object' ? `${mediaSrc.type} :: ${(mediaSrc.src || '').slice(0, 100)}...` : (mediaSrc || '').slice(0, 100));
+    return { src, type: 'video/mp4' };
+  }, [src]);
+  // VTT-only: Vidstack <Track> supports VTT, not SRT (SRT blocks canplay).
+  const vttTracks = useMemo(() => {
+    const list = Array.isArray(tracks) ? tracks : [];
+    const vtt = list.filter((t) => /\.vtt($|\?)/i.test(t?.url || '') || (t?.type || '').toLowerCase() === 'vtt');
+    return vtt.slice(0, 8).map((t, i) => ({
+      url: t.url,
+      lang: t.lang || `Subtitles ${i + 1}`,
+      srclang: (t.lang || 'en').slice(0, 2).toLowerCase(),
+    }));
+  }, [tracks]);
+
+  useEffect(() => {
+    if (DEBUG) console.log('[Server7/HlsPlayer] mount src:', (src || '').slice(0, 100));
+    return () => { if (timerRef.current) clearTimeout(timerRef.current); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [src]);
 
   const failFast = () => !startedRef.current && performance.now() - attemptAt.current >= FAIL_FAST_MS;
 
-  const handleError = () => {
+  // 429 from bcdn nginx (forwarded by /api/stream): back off, don't spin forever.
+  const scheduleBackoffRetry = (retryAfterSec) => {
+    const idx = Math.min(backoffRef.current, BACKOFF_MS.length - 1);
+    const wait = retryAfterSec != null ? retryAfterSec * 1000 : BACKOFF_MS[idx];
+    backoffRef.current += 1;
+    setStatus('throttled');
+    setThrottleMsg(`CDN is busy — retrying in ${Math.ceil(wait / 1000)}s… (${backoffRef.current}/3)`);
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => {
+      if (backoffRef.current > BACKOFF_MS.length) {
+        setStatus('unavailable');
+        return;
+      }
+      startedRef.current = false;
+      attemptAt.current = performance.now();
+      setStatus('loading');
+      setRetryKey((k) => k + 1);
+    }, wait);
+  };
+
+  const handleError = (detail) => {
+    const code = detail?.code ?? detail?.status ?? detail;
+    if (code === 429 || detail === 429) {
+      if (backoffRef.current <= BACKOFF_MS.length) {
+        scheduleBackoffRetry(detail?.retryAfter);
+        return;
+      }
+    }
     if (failFast()) setStatus('unavailable');
   };
 
@@ -46,58 +82,48 @@ export default function HlsPlayer({ src, title, tracks = [], onFallbackServer })
     <div className="hls-server7 absolute inset-0 bg-black">
       {status !== 'unavailable' && src && (
         <MediaPlayer
-          key={key}
+          key={`${key}#${retryKey}`}
           src={mediaSrc}
           viewType="video"
           streamType="on-demand"
           title={title}
           playsInline
           autoPlay
-          muted={false}
+          muted
           onCanPlay={() => { startedRef.current = true; setStatus('healthy'); }}
           onPlaying={() => { startedRef.current = true; setStatus('healthy'); }}
           onPlay={() => { startedRef.current = true; setStatus('healthy'); }}
           onLoadedMetadata={() => { startedRef.current = true; setStatus('healthy'); }}
-          onError={(e) => { console.warn('[Server7/HlsPlayer] media error:', e?.detail || e); handleError(); }}
-          onHlsError={(d) => { console.warn('[Server7/HlsPlayer] hls error:', d?.code, d?.fatal); if (d?.fatal) handleError(); }}
+          onError={(e) => { if (DEBUG) console.warn('[Server7/HlsPlayer] media error:', e?.detail || e); handleError(e?.detail); }}
         >
-          {/* Proxied MP4: NO HLS library — native playback only. */}
-          <MediaProvider config={HLS_CONFIG} />
-          {/* click-to-play fallback: autoplay is often blocked, and the
-              overlay spinner otherwise sits on top forever looking "stuck" */}
-          {status === 'loading' && (
-            <button
-              type="button"
-              aria-label="Play video"
-              onClick={() => {
-                const v = document.querySelector('.hls-server7 video');
-                if (v) v.play().catch(() => {});
-                setStatus('healthy');
-              }}
-              className="absolute inset-0 z-20 flex cursor-pointer items-center justify-center bg-black/40"
-            >
-              <span className="flex h-16 w-16 items-center justify-center rounded-full bg-brand text-white shadow-xl transition hover:scale-105">
-                <svg viewBox="0 0 24 24" className="h-8 w-8" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z" /></svg>
-              </span>
-            </button>
-          )}
-          {tracks.slice(0, 20).map((t, i) => (
+          {/* Native MP4 provider only — no HLS probing on extensionless proxy URL. */}
+          <MediaProvider />
+          {vttTracks.map((t, i) => (
             <Track
               key={`${t.url}-${i}`}
               src={t.url}
               kind="subtitles"
-              label={t.lang || `Subtitles ${i + 1}`}
-              srclang={(t.lang || 'en').slice(0, 2).toLowerCase()}
-              type={/\.vtt($|\?)/i.test(t.url || '') ? 'vtt' : 'srt'}
+              label={t.lang}
+              srclang={t.srclang}
+              type="vtt"
             />
           ))}
           <DefaultVideoLayout icons={defaultLayoutIcons} />
         </MediaPlayer>
       )}
+      {/* Single buffering indicator — parent owns the "resolving" spinner,
+          this one only shows while the media element buffers. */}
       {status === 'loading' && (
-        <div className="absolute inset-0 flex items-center justify-center">
+        <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
           <span className="h-10 w-10 animate-spin rounded-full border-4 border-brand border-t-transparent" />
           <span className="sr-only">Loading stream…</span>
+        </div>
+      )}
+      {status === 'throttled' && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-6 text-center">
+          <span className="h-10 w-10 animate-spin rounded-full border-4 border-brand border-t-transparent" />
+          <p className="text-sm font-semibold text-white">{throttleMsg || 'CDN is busy — retrying…'}</p>
+          <p className="max-w-md text-xs text-muted">The video host is rate-limiting requests. Waiting before retrying.</p>
         </div>
       )}
       {status === 'unavailable' && (

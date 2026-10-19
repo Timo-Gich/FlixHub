@@ -21,11 +21,20 @@ export default function useHlsStream({ type, id, season, episode, enabled }) {
   const [error, setError] = useState('');
   const [attempt, setAttempt] = useState(0);
   const abortRef = useRef(null);
+  const lastKeyRef = useRef('');
 
   const retry = useCallback(() => setAttempt((a) => a + 1), []);
 
   useEffect(() => {
-    if (!enabled || !id) { setStreamUrl(''); setError(''); setLoading(false); return; }
+    const key = `${type}:${id}:${season ?? ''}:${episode ?? ''}`;
+    if (!enabled || !id) {
+      lastKeyRef.current = '';
+      setStreamUrl(''); setError(''); setLoading(false); return;
+    }
+    // Same title + same manual attempt → don't refetch (stops remount loop
+    // from hammering Railway + bcdn with duplicate resolve calls).
+    if (key === lastKeyRef.current && attempt === 0) return;
+    if (attempt === 0) lastKeyRef.current = key;
     abortRef.current?.abort();
     const ctrl = new AbortController();
     abortRef.current = ctrl;
@@ -54,11 +63,17 @@ export default function useHlsStream({ type, id, season, episode, enabled }) {
           + (d.userAgent ? `&ua=${encodeURIComponent(d.userAgent)}` : '')
           + (d.referer ? `&referer=${encodeURIComponent(d.referer)}` : '')
           + (d.origin ? `&origin=${encodeURIComponent(d.origin)}` : '');
-        console.log('[Server7/useHlsStream] finalSrc ->', finalSrc.slice(0, 120) + '...');
-        setStreamUrl(finalSrc);
-        setHeaders({ userAgent: d.userAgent, referer: d.referer, origin: d.origin });
-        setTracks(Array.isArray(d.subtitles) ? d.subtitles : []);
-        setQuality(d.quality || '');
+        // Dedupe: same src → no state churn → no MediaPlayer remount loop.
+        setStreamUrl((prev) => (prev === finalSrc ? prev : finalSrc));
+        setHeaders((prev) => {
+          const next = { userAgent: d.userAgent, referer: d.referer, origin: d.origin };
+          return prev.userAgent === next.userAgent && prev.referer === next.referer && prev.origin === next.origin ? prev : next;
+        });
+        setTracks((prev) => {
+          const next = Array.isArray(d.subtitles) ? d.subtitles : [];
+          return prev.length === next.length && prev.every((t, i) => t.url === next[i]?.url) ? prev : next;
+        });
+        setQuality((prev) => (prev === (d.quality || '') ? prev : (d.quality || '')));
         setLoading(false);
       })
       .catch((e) => {

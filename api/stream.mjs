@@ -16,14 +16,32 @@ export default async function handler(req, res) {
     const headers = {
       'User-Agent': ua || 'Mozilla/5.0 Chrome/124.0 Safari/537.36',
       Accept: '*/*',
+      'Accept-Language': 'en-US,en;q=0.9',
     };
     if (referer) headers.Referer = referer;
     if (origin) headers.Origin = origin;
+    // Browser-like fingerprint: bcdn nginx throttles bare-bones clients.
+    if (referer) {
+      try { headers['Sec-Fetch-Site'] = new URL(referer).origin === new URL(target).origin ? 'same-origin' : 'cross-site'; } catch { headers['Sec-Fetch-Site'] = 'cross-site'; }
+      headers['Sec-Fetch-Mode'] = 'no-cors';
+      headers['Sec-Fetch-Dest'] = 'video';
+    }
     const range = req.headers && req.headers.range;
     if (range) headers.Range = range;
     const upstream = await fetch(target, {
       headers, redirect: 'follow', method: req.method === 'HEAD' ? 'HEAD' : 'GET',
     });
+    // Upstream throttled (bcdn nginx 429): forward Retry-After + JSON instead
+    // of piping their HTML error page into the video element.
+    if (upstream.status === 429) {
+      const retryAfter = upstream.headers.get('retry-after');
+      if (retryAfter) res.setHeader('Retry-After', retryAfter);
+      res.setHeader('Content-Type', 'application/json; charset=utf-8');
+      res.setHeader('Cache-Control', 'no-store');
+      const body = JSON.stringify({ error: 'cdn throttled', retryAfter: retryAfter ? Number(retryAfter) || retryAfter : null });
+      res.status(429);
+      return res.send(body);
+    }
     const ct = upstream.headers.get('content-type') || '';
     if (req.method !== 'HEAD' && /\.m3u8($|\?)/i.test(target)) {
       const text = await upstream.text();
@@ -41,6 +59,13 @@ export default async function handler(req, res) {
       if (v != null) res.setHeader(h, v);
     }
     res.setHeader('Access-Control-Expose-Headers', 'Content-Range, Content-Length');
+    // Cache successful Range chunks at the edge: repeat seeks for the same
+    // bytes don't hit bcdn again (reduces throttle pressure).
+    if (upstream.status === 206) {
+      res.setHeader('Cache-Control', 'public, max-age=3600, stale-while-revalidate=86400');
+    } else {
+      res.setHeader('Cache-Control', 'public, max-age=60, stale-while-revalidate=120');
+    }
     res.status(upstream.status || 200);
     if (!upstream.body) return res.end();
     const nodeStream = Readable.fromWeb(upstream.body);

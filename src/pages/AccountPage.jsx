@@ -72,7 +72,6 @@ function SignedInBody({ userId, oauthAvatar, displayName, email, provider, membe
   const [customAvatar, setCustomAvatar] = useState(null);
   const [avatarBusy, setAvatarBusy] = useState(false);
   const [avatarError, setAvatarError] = useState(null);
-  const [avatarMenuOpen, setAvatarMenuOpen] = useState(false);
   const fileRef = useRef(null);
   const avatarWrapRef = useRef(null);
 
@@ -83,22 +82,6 @@ function SignedInBody({ userId, oauthAvatar, displayName, email, provider, membe
     });
     return () => { cancelled = true; };
   }, [userId]);
-
-  useEffect(() => {
-    if (!avatarMenuOpen) return;
-    const onDoc = (e) => {
-      if (avatarWrapRef.current && !avatarWrapRef.current.contains(e.target)) setAvatarMenuOpen(false);
-    };
-    const onKey = (e) => {
-      if (e.key === 'Escape') setAvatarMenuOpen(false);
-    };
-    document.addEventListener('mousedown', onDoc);
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('mousedown', onDoc);
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [avatarMenuOpen]);
 
   const avatar = customAvatar || oauthAvatar || null;
   const hasCustom = Boolean(customAvatar);
@@ -117,7 +100,6 @@ function SignedInBody({ userId, oauthAvatar, displayName, email, provider, membe
     try {
       const url = await uploadAvatar(userId, file);
       setCustomAvatar(url.split('?')[0]);
-      setAvatarMenuOpen(false);
     } catch (err) {
       setAvatarError(err.message || 'Upload failed. Try again.');
     } finally {
@@ -131,7 +113,6 @@ function SignedInBody({ userId, oauthAvatar, displayName, email, provider, membe
     try {
       await removeAvatar(userId);
       setCustomAvatar(null);
-      setAvatarMenuOpen(false);
     } catch (err) {
       setAvatarError(err.message || 'Remove failed. Try again.');
     } finally {
@@ -141,26 +122,20 @@ function SignedInBody({ userId, oauthAvatar, displayName, email, provider, membe
 
   return (
     <>
-      <section aria-label="Profile" className="relative mt-6 overflow-hidden rounded-xl border border-ink-border">
-        <div className="absolute inset-0 bg-gradient-to-r from-brand/25 via-ink-soft to-ink-soft" aria-hidden="true" />
+      <section aria-label="Profile" className="relative mt-6 rounded-xl border border-ink-border">
+        <div className="absolute inset-0 overflow-hidden rounded-xl bg-gradient-to-r from-brand/25 via-ink-soft to-ink-soft" aria-hidden="true">
         {avatar && (
           <div className="absolute inset-0 opacity-20 blur-2xl" aria-hidden="true">
             <img src={avatar} alt="" className="h-full w-full scale-110 object-cover" />
           </div>
         )}
+        </div>
         <div className="relative flex flex-col items-center gap-5 p-6 text-center sm:flex-row sm:p-8 sm:text-left">
-        <div ref={avatarWrapRef} className="relative shrink-0">
-          <button
-            type="button"
-            onClick={() => setAvatarMenuOpen((v) => !v)}
-            aria-haspopup="menu"
-            aria-expanded={avatarMenuOpen}
-            aria-label="Change profile picture"
-            title="Change profile picture"
-            className="group relative flex h-24 w-24 items-center justify-center overflow-hidden rounded-full
+        <div ref={avatarWrapRef} className="flex shrink-0 flex-col items-center gap-2">
+          <span
+            className="relative flex h-24 w-24 items-center justify-center overflow-hidden rounded-full
                        bg-ink-raised text-2xl font-black text-white ring-2 ring-brand/70 ring-offset-2
-                       ring-offset-ink-soft shadow-xl shadow-black/50
-                       transition hover:ring-brand sm:h-28 sm:w-28"
+                       ring-offset-ink-soft shadow-xl shadow-black/50 sm:h-28 sm:w-28"
           >
             {avatarBusy ? (
               <span className="h-8 w-8 animate-spin rounded-full border-2 border-brand border-t-transparent" aria-hidden="true" />
@@ -169,13 +144,25 @@ function SignedInBody({ userId, oauthAvatar, displayName, email, provider, membe
             ) : (
               String(displayName).trim().charAt(0).toUpperCase() || 'F'
             )}
-            <span className="absolute inset-0 flex items-center justify-center bg-black/55 opacity-0 transition group-hover:opacity-100 group-focus-visible:opacity-100" aria-hidden="true">
-              <svg viewBox="0 0 24 24" className="h-6 w-6 text-white" fill="none" stroke="currentColor"
+          </span>
+          <button
+            type="button"
+            onClick={() => fileRef.current?.click()}
+            disabled={avatarBusy}
+            aria-label={hasCustom ? 'Change profile picture' : 'Upload profile picture'}
+            title={hasCustom ? 'Change profile picture' : 'Upload profile picture'}
+            className="flex items-center gap-2 rounded-full bg-black/50 py-1.5 pl-1.5 pr-4
+                       text-xs font-bold text-white ring-1 ring-white/20 backdrop-blur
+                       transition hover:bg-brand hover:ring-brand disabled:opacity-50"
+          >
+            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-white/15" aria-hidden="true">
+              <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor"
                    strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
                 <circle cx="12" cy="13" r="4" />
               </svg>
             </span>
+            {hasCustom ? 'Change picture' : 'Upload picture'}
           </button>
           <input
             ref={fileRef}
@@ -185,38 +172,22 @@ function SignedInBody({ userId, oauthAvatar, displayName, email, provider, membe
             tabIndex={-1}
             onChange={onPickFile}
           />
-          {avatarMenuOpen && (
-            <div
-              role="menu"
-              className="absolute left-0 top-full z-30 mt-2 w-48 origin-top-left overflow-hidden rounded-xl border
-                         border-ink-border bg-ink-raised/95 p-1.5 shadow-2xl shadow-black/40 backdrop-blur"
+          {avatarError && (
+            <p role="alert" className="rounded-md border border-brand/40 bg-brand/10 px-3 py-2 text-xs text-brand-light">
+              {avatarError}
+            </p>
+          )}
+          {hasCustom && (
+            <button
+              type="button"
+              onClick={onRemove}
+              disabled={avatarBusy}
+              className="text-xs font-semibold text-muted underline-offset-2 transition hover:text-brand-light hover:underline disabled:opacity-50"
             >
-              <button
-                type="button"
-                role="menuitem"
-                onClick={() => fileRef.current?.click()}
-                className="block w-full rounded-lg px-2.5 py-2 text-left text-sm text-muted transition hover:bg-white/5 hover:text-white"
-              >
-                {hasCustom ? 'Change picture…' : 'Upload picture…'}
-              </button>
-              {hasCustom && (
-                <button
-                  type="button"
-                  role="menuitem"
-                  onClick={onRemove}
-                  className="block w-full rounded-lg px-2.5 py-2 text-left text-sm text-muted transition hover:bg-white/5 hover:text-white"
-                >
-                  Remove picture
-                </button>
-              )}
-            </div>
+              Remove picture
+            </button>
           )}
         </div>
-        {avatarError && (
-          <p role="alert" className="rounded-md border border-brand/40 bg-brand/10 px-3 py-2 text-xs text-brand-light sm:hidden">
-            {avatarError}
-          </p>
-        )}
         <div className="min-w-0 flex-1">
           <p className="truncate font-display text-2xl font-semibold uppercase tracking-wide text-white sm:text-3xl">{displayName}</p>
           {email && <p className="mt-0.5 truncate text-sm text-muted">{email}</p>}

@@ -75,9 +75,9 @@ export function useLibrary() {
         const hasLocal = local.getWatchLater().length || local.getHistory().length || local.getFavoritesLive().length;
         if (!flag && hasLocal) {
           await Promise.all([
-            upsertCloudWatchLater(userId, mergedWL),
-            upsertCloudHistory(userId, mergedHist),
-            upsertCloudFavLive(userId, mergedFav),
+            mergedWL.length ? upsertCloudWatchLater(userId, mergedWL) : Promise.resolve(),
+            mergedHist.length ? upsertCloudHistory(userId, mergedHist) : Promise.resolve(),
+            mergedFav.length ? upsertCloudFavLive(userId, mergedFav) : Promise.resolve(),
           ]);
           try { localStorage.setItem(`${MERGED_FLAG}:${userId}`, String(Date.now())); } catch { /* ignore */ }
         }
@@ -97,9 +97,13 @@ export function useLibrary() {
     const reload = async () => {
       try {
         const cloud = await fetchCloudLibrary(userId);
-        setWatchLater(sortWatchLater(cloud.watchLater));
-        setHistory(sortHistory(cloud.history));
-        setFavoritesLive(cloud.favoritesLive);
+        // Merge with the local mirror — never blindly trust a mid-write cloud
+        // read. Our own upserts fire postgres_changes events, and a reload
+        // triggered by e.g. the watchlist write can fetch history before its
+        // own upsert has committed, which used to zero out the UI.
+        setWatchLater(sortWatchLater(mergeWatchLater(local.getWatchLater(), cloud.watchLater)));
+        setHistory(sortHistory(mergeHistory(local.getHistory(), cloud.history)));
+        setFavoritesLive(mergeFavoritesLive(local.getFavoritesLive(), cloud.favoritesLive));
       } catch { /* keep current state on transient errors */ }
     };
     const ch = sb

@@ -44,7 +44,9 @@ export default async function handler(req, res) {
           throw e;
         }
         if (out) {
-          res.setHeader('Cache-Control', 'public, max-age=3600, stale-while-revalidate=86400');
+          // Signed bcdn URLs expire fast (stream TTL ~3600s, sign timestamps
+          // drift). Keep edge cache tiny so we never serve a dead sign.
+          res.setHeader('Cache-Control', 'public, max-age=60, stale-while-revalidate=120');
           return res.status(200).json(out);
         }
       }

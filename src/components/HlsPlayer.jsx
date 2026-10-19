@@ -123,7 +123,16 @@ export default function HlsPlayer({ src, title, tracks = [], onFallbackServer })
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-6 text-center">
           <span className="h-10 w-10 animate-spin rounded-full border-4 border-brand border-t-transparent" />
           <p className="text-sm font-semibold text-white">{throttleMsg || 'CDN is busy — retrying…'}</p>
-          <p className="max-w-md text-xs text-muted">The video host is rate-limiting requests. Waiting before retrying.</p>
+          <p className="max-w-md text-xs text-muted">The video host is rate-limiting requests. Waiting before retrying, or pick another server.</p>
+          {onFallbackServer && (
+            <button
+              type="button"
+              onClick={onFallbackServer}
+              className="mt-1 rounded-md border border-ink-border bg-ink-raised px-5 py-2 text-xs font-semibold text-white hover:border-brand"
+            >
+              Try Server 1 instead
+            </button>
+          )}
         </div>
       )}
       {status === 'unavailable' && (

@@ -34,7 +34,15 @@ export default async function handler(req, res) {
         : `${RESOLVER_BASE}/series/${encodeURIComponent(id)}/${season}/${episode}`;
       const r = await fetch(path, { headers: { Accept: 'application/json', 'User-Agent': UA } });
       if (r.ok) {
-        const out = normExtractor(await r.json().catch(() => null), RESOLVER_BASE);
+        let out = null;
+        try {
+          out = normExtractor(await r.json().catch(() => null), RESOLVER_BASE);
+        } catch (e) {
+          if (e?.message === 'missing-resolver-base') {
+            return res.status(501).json({ error: 'RESOLVER_BASE_URL is not set on this deployment.' });
+          }
+          throw e;
+        }
         if (out) {
           res.setHeader('Cache-Control', 'public, max-age=3600, stale-while-revalidate=86400');
           return res.status(200).json(out);
@@ -83,10 +91,15 @@ function normExtractor(d, resolverBase) {
   const referer = h.referer || h.Referer || 'https://vidlink.pro/';
   const origin = h.origin || h.Origin || 'https://vidlink.pro';
   const subtitles = normSubs(d.subtitles || d.captions || d?.stream?.captions || []);
-  const viaRailway = (rawUrl) =>
-    resolverBase
-      ? `${resolverBase}/proxy?url=${encodeURIComponent(rawUrl)}&referer=${encodeURIComponent(referer)}`
-      : rawUrl;
+  const viaRailway = (rawUrl) => {
+    if (!resolverBase) {
+      // Misconfigured: without RESOLVER_BASE_URL we can't build the trusted
+      // Railway proxy URL, so signal failure instead of leaking a raw bcdn
+      // link that the browser will ORB-block.
+      throw new Error('missing-resolver-base');
+    }
+    return `${resolverBase}/proxy?url=${encodeURIComponent(rawUrl)}&referer=${encodeURIComponent(referer)}`;
+  };
 
   // 1) Explicit HLS playlist URL wins when present (via Railway proxy).
   const pl = d.playlist || d?.stream?.playlist || null;

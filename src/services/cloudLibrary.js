@@ -29,8 +29,8 @@ function toHistoryRow(userId, entry) {
     progress_seconds: entry.progressSeconds || 0,
     duration_seconds: entry.durationSeconds || 0,
     type: entry.type || null,
-    season: entry.season ?? null,
-    episode: entry.episode ?? null,
+    season: entry.season || 0,
+    episode: entry.episode || 0,
     watched_at: new Date(entry.watchedAt || Date.now()).toISOString(),
     updated_at: new Date(entry.updatedAt || entry.watchedAt || Date.now()).toISOString(),
   };

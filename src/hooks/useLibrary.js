@@ -107,31 +107,22 @@ export function useLibrary() {
       try {
         const cloud = await fetchCloudLibrary(userId);
         if (cancelled) return;
-        if (import.meta.env.DEV) {
-          console.info('[library] fetched from cloud', {
-            watchLater: cloud.watchLater.length,
-            history: cloud.history.length,
-            favoritesLive: cloud.favoritesLive.length,
-            historyNullSnapshots: cloud.history.filter((e) => e?.movie?.id == null).length,
-          });
-        }
-        const mergedWL = mergeWatchLater(local.getWatchLater(), cloud.watchLater);
-        const mergedHist = mergeHistory(local.getHistory(), cloud.history);
-        const mergedFav = mergeFavoritesLive(local.getFavoritesLive(), cloud.favoritesLive);
-        if (import.meta.env.DEV) {
-          console.info('[library] merged', {
-            watchLater: mergedWL.length,
-            history: mergedHist.length,
-            favoritesLive: mergedFav.length,
-          });
-        }
-        setWatchLater(sortWatchLater(mergedWL));
-        setHistory(sortHistory(mergedHist));
-        setFavoritesLive(mergedFav);
-        let flag = null;
+        // Merge with the local mirror — never blindly trust a mid-write cloud read.
+        // Our own upserts fire postgres_changes events, and a reload triggered by
+        // e.g. the watchlist write can fetch history before its own upsert has
+        // committed, which used to zero out the UI.
+        setWatchLater(sortWatchLater(mergeWatchLater(local.getWatchLater(), cloud.watchLater)));
+        setHistory(sortHistory(mergeHistory(local.getHistory(), cloud.history)));
+        setFavoritesLive(mergeFavoritesLive(local.getFavoritesLive(), cloud.favoritesLive));
+      } catch (err) {
+        console.warn('[library] cloud sync failed, using local copy', err);
+      } finally {
         try { flag = localStorage.getItem(`${MERGED_FLAG}:${userId}`); } catch { /* ignore */ }
         const hasLocal = local.getWatchLater().length || local.getHistory().length || local.getFavoritesLive().length;
         if (!flag && hasLocal) {
+          const mergedWL = mergeWatchLater(local.getWatchLater(), cloud.watchLater);
+          const mergedHist = mergeHistory(local.getHistory(), cloud.history);
+          const mergedFav = mergeFavoritesLive(local.getFavoritesLive(), cloud.favoritesLive);
           await Promise.all([
             mergedWL.length ? upsertCloudWatchLater(userId, mergedWL) : Promise.resolve(),
             mergedHist.length ? upsertCloudHistory(userId, mergedHist) : Promise.resolve(),
@@ -139,9 +130,6 @@ export function useLibrary() {
           ]);
           try { localStorage.setItem(`${MERGED_FLAG}:${userId}`, String(Date.now())); } catch { /* ignore */ }
         }
-      } catch (err) {
-        console.warn('[library] cloud sync failed, using local copy', err);
-      } finally {
         if (!cancelled) setSyncing(false);
       }
     })();

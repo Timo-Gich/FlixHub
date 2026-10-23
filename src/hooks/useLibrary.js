@@ -114,9 +114,7 @@ export function useLibrary() {
         setWatchLater(sortWatchLater(mergeWatchLater(local.getWatchLater(), cloud.watchLater)));
         setHistory(sortHistory(mergeHistory(local.getHistory(), cloud.history)));
         setFavoritesLive(mergeFavoritesLive(local.getFavoritesLive(), cloud.favoritesLive));
-      } catch (err) {
-        console.warn('[library] cloud sync failed, using local copy', err);
-      } finally {
+        let flag = null;
         try { flag = localStorage.getItem(`${MERGED_FLAG}:${userId}`); } catch { /* ignore */ }
         const hasLocal = local.getWatchLater().length || local.getHistory().length || local.getFavoritesLive().length;
         if (!flag && hasLocal) {
@@ -130,6 +128,9 @@ export function useLibrary() {
           ]);
           try { localStorage.setItem(`${MERGED_FLAG}:${userId}`, String(Date.now())); } catch { /* ignore */ }
         }
+      } catch (err) {
+        console.warn('[library] cloud sync failed, using local copy', err);
+      } finally {
         if (!cancelled) setSyncing(false);
       }
     })();
@@ -311,5 +312,4 @@ export function useLibrary() {
     [isGuest, syncing, watchLater, history, favoritesLive, toggleSaved, removeSaved, logPlayed, updateProgress, removeHistory, clearAllHistory, toggleFav],
   );
 }
-
 

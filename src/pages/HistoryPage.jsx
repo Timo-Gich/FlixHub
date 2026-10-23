@@ -229,7 +229,11 @@ export default function HistoryPage() {
                 <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-muted">{group.key}</h2>
                 <ul className="space-y-2">
                   {group.entries.map((entry) => (
-                    <HistoryRow key={entry.movie.id} entry={entry} onRemove={removeById} />
+                    <HistoryRow
+                      key={`${entry.type || entry.movie.media_type || 'movie'}-${entry.movie.id}-${entry.season ?? 0}-${entry.episode ?? 0}`}
+                      entry={entry}
+                      onRemove={removeById}
+                    />
                   ))}
                 </ul>
               </section>

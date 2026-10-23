@@ -5,7 +5,7 @@
 // ----------------------------------------------------------------------------
 
 function keyOfHistory(e) {
-  return `${e.movie?.id}|${e.season ?? ''}|${e.episode ?? ''}`;
+  return `${e.movie?.id}|${e.season ?? 0}|${e.episode ?? 0}`;
 }
 
 export function mergeWatchLater(localItems = [], cloudItems = []) {

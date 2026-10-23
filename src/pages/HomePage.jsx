@@ -24,13 +24,21 @@ export default function HomePage() {
     return dur > 0 && (entry.progressSeconds || 0) >= dur * FINISH_THRESHOLD;
   };
 
-  // "Continue Watching" shows recent, in-progress titles first, followed by
-  // finished ones — every history entry stays visible in the row. Cloud rows
-  // with a missing snapshot are skipped so one bad row can't blank the page.
+  // "Continue Watching" shows the latest entry per title, with in-progress
+  // titles first. Cloud rows with a missing snapshot are skipped.
   const validHistory = history.filter((entry) => entry?.movie?.id != null);
+  const latestByTitle = new Map();
+  for (const entry of validHistory) {
+    const key = `${entry.type || entry.movie.media_type || 'movie'}-${entry.movie.id}`;
+    const previous = latestByTitle.get(key);
+    if (!previous || (entry.updatedAt || entry.watchedAt || 0) > (previous.updatedAt || previous.watchedAt || 0)) {
+      latestByTitle.set(key, entry);
+    }
+  }
+  const latestHistory = [...latestByTitle.values()];
   const continueWatching = [
-    ...validHistory.filter((entry) => !isFinished(entry)),
-    ...validHistory.filter(isFinished),
+    ...latestHistory.filter((entry) => !isFinished(entry)),
+    ...latestHistory.filter(isFinished),
   ];
 
   // Desktop scroll arrows for the Continue Watching row: they only appear when
@@ -90,7 +98,7 @@ export default function HomePage() {
                       ? `/tv/${entry.movie.id}?season=${entry.season}${entry.episode != null ? `&episode=${entry.episode}` : ''}`
                       : undefined;
                   return (
-                    <div key={entry.movie?.id ?? `${entry.season}-${entry.episode}`} className="w-[150px] shrink-0 snap-start sm:w-[180px]">
+                    <div key={`${entry.type || entry.movie.media_type || 'movie'}-${entry.movie.id}`} className="w-[150px] shrink-0 snap-start sm:w-[180px]">
                       <MovieCard
                         movie={entry.movie}
                         progress={progress}

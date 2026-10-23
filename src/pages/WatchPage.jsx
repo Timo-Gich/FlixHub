@@ -3,7 +3,7 @@ import { useParams } from 'react-router-dom';
 import VideoPlayer from '../components/VideoPlayer';
 import { fetchMovieDetails } from '../services/tmdbService';
 import { useMovieData } from '../hooks/useMovieData';
-import { logPlayed, updateWatchProgress } from '../services/libraryService';
+import { useLibrary } from '../hooks/useLibrary';
 
 /**
  * /watch/:id - movie player with a server selector (2Embed / VidSrc / VidCore).
@@ -11,6 +11,7 @@ import { logPlayed, updateWatchProgress } from '../services/libraryService';
  */
 export default function WatchPage() {
   const { id } = useParams();
+  const { logPlayed, updateProgress } = useLibrary();
   const hasValidId = id !== undefined && !Number.isNaN(Number(id));
 
   // Load the real title so the top bar can show it after "Now playing".
@@ -33,13 +34,13 @@ export default function WatchPage() {
     progressRef.current = 0;
     const write = () => {
       progressRef.current += 5;
-      updateWatchProgress(details.id, progressRef.current, durationSeconds);
+      updateProgress(details.id, progressRef.current, durationSeconds);
     };
     const idHandle = setInterval(write, 5000);
     const cleanup = () => {
       clearInterval(idHandle);
       if (progressRef.current > 0) {
-        updateWatchProgress(details.id, progressRef.current, durationSeconds);
+        updateProgress(details.id, progressRef.current, durationSeconds);
       }
     };
     return cleanup;

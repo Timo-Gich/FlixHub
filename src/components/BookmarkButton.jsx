@@ -1,32 +1,33 @@
 import { useEffect, useState } from 'react';
-import { subscribeLibrary, isSaved, toggleWatchLater } from '../services/libraryService';
+import { useLibrary } from '../hooks/useLibrary';
 
 /**
  * Compact Watchlist (bookmark) toggle for search rows.
  *
  * Mirrors MovieCard's bookmark behaviour: reads the saved state, toggles via
- * `toggleWatchLater`, and stays in sync with library changes. Hidden for IMDb-only
- * results (the app only keeps TMDb titles in the watchlist) and items with no id.
+ * the cloud-aware library hook, and stays in sync with library changes. Hidden
+ * for IMDb-only results (the app only keeps TMDb titles in the watchlist) and
+ * items with no id.
  *
  * Props:
  *   - movie : a TMDb / IMDb search result object
  */
 export default function BookmarkButton({ movie }) {
+  const { isSaved, toggleSaved } = useLibrary();
   const [saved, setSaved] = useState(() => (movie?.id ? isSaved(movie.id) : false));
 
   useEffect(() => {
     if (!movie?.id) return;
     setSaved(isSaved(movie.id));
-    return subscribeLibrary(() => setSaved(isSaved(movie.id)));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [movie?.id]);
+  }, [movie?.id, isSaved]);
 
   if (!movie?.id || movie.source === 'imdb') return null;
 
   const toggle = (e) => {
     e.preventDefault();
     e.stopPropagation();
-    setSaved(toggleWatchLater(movie));
+    toggleSaved(movie).then((next) => setSaved(next));
   };
 
   return (

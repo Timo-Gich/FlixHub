@@ -11,8 +11,9 @@ function keyOfHistory(e) {
 export function mergeWatchLater(localItems = [], cloudItems = []) {
   const map = new Map();
   for (const e of [...cloudItems, ...localItems]) {
-    const k = String(e.movie?.id);
-    if (!k) continue;
+    const id = e?.movie?.id;
+    if (id == null || id === '') continue;
+    const k = String(id);
     const prev = map.get(k);
     if (!prev || (e.savedAt || 0) > (prev.savedAt || 0)) map.set(k, e);
   }
@@ -22,7 +23,7 @@ export function mergeWatchLater(localItems = [], cloudItems = []) {
 export function mergeHistory(localItems = [], cloudItems = []) {
   const map = new Map();
   for (const e of [...cloudItems, ...localItems]) {
-    if (!e.movie?.id) continue;
+    if (e?.movie?.id == null) continue;
     const k = keyOfHistory(e);
     const prev = map.get(k);
     if (!prev) {

@@ -23,7 +23,7 @@ import {
   getRegionByCode,
   getRegionForCountry,
 } from '../services/liveTvService';
-import { getFavoritesLive } from '../services/libraryService';
+import { useLibrary } from '../hooks/useLibrary';
 
 const REGION_KEY = 'flixhub.liveRegion';
 // Public IPTV streams go offline a lot — if the player hasn't produced any media
@@ -76,6 +76,7 @@ function formatClock(ms) {
  */
 export default function LivePlayerPage() {
   const { channelId } = useParams();
+  const { favoritesLive } = useLibrary();
   const decoded = safeDecode(channelId);
 
   const [channel, setChannel] = useState(null);
@@ -124,7 +125,7 @@ export default function LivePlayerPage() {
         setChannel(found);
         return;
       }
-      const fav = getFavoritesLive()
+      const fav = favoritesLive
         .map((e) => e.channel)
         .find((c) => c.id === decoded || c.tvgId === decoded);
       setChannel(fav ?? null);
@@ -134,7 +135,7 @@ export default function LivePlayerPage() {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [decoded]);
+  }, [decoded, favoritesLive]);
 
   // Channel health probe: fail fast within the timeout if nothing starts playing.
   // A ref tracks whether playback actually began, so the timeout only fires while

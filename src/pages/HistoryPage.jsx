@@ -3,7 +3,9 @@ import { Link } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import ConfirmDialog from '../components/ConfirmDialog';
-import { getHistory, clearHistory, removeFromHistory, MAX_HISTORY } from '../services/libraryService';
+import SyncNudge from '../components/SyncNudge';
+import { MAX_HISTORY } from '../services/libraryService';
+import { useLibrary } from '../hooks/useLibrary';
 import { getPosterUrl, formatYear } from '../services/tmdbService';
 
 // Swipe-to-remove tuning.
@@ -148,27 +150,26 @@ function HistoryRow({ entry, onRemove }) {
  * (swipe on touch / ✕ on desktop), and an auto-cap that trims the oldest.
  */
 export default function HistoryPage() {
-  const [items, setItems] = useState(() => getHistory());
+  const { history: items, removeHistory, clearAllHistory, syncing } = useLibrary();
   const [confirmClear, setConfirmClear] = useState(false);
 
-  const refresh = () => setItems(getHistory());
   const removeById = (id) => {
-    removeFromHistory(id);
-    refresh();
+    removeHistory(id);
   };
 
   const handleClear = () => setConfirmClear(true);
 
   const doClear = () => {
-    clearHistory();
+    clearAllHistory();
     setConfirmClear(false);
-    refresh();
   };
 
-  // Group by day label, preserving newest-first order.
+  // Group by day label, preserving newest-first order. Rows with a missing
+  // snapshot are skipped so one corrupt cloud row can't blank the page.
   const groups = [];
   const seen = new Set();
   for (const entry of items) {
+    if (entry?.movie?.id == null) continue;
     const key = dayLabel(entry.watchedAt);
     if (!seen.has(key)) {
       seen.add(key);
@@ -185,7 +186,7 @@ export default function HistoryPage() {
         <div className="flex flex-wrap items-center gap-3">
           <h1 className="text-2xl font-black text-white">Watch History</h1>
           <span className="w-fit rounded bg-ink-raised px-2 py-0.5 text-xs font-semibold text-muted">
-            {items.length} watched
+            {items.length} watched{syncing ? ' · syncing…' : ''}
           </span>
           {items.length > 0 && (
             <button
@@ -198,6 +199,8 @@ export default function HistoryPage() {
             </button>
           )}
         </div>
+
+        <SyncNudge hasItems={items.length > 0} />
 
         {items.length >= MAX_HISTORY && (
           <p className="mt-1 text-xs text-muted">

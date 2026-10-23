@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { getPosterUrl, formatRating, formatYear } from '../services/tmdbService';
-import { subscribeLibrary, isSaved, toggleWatchLater } from '../services/libraryService';
+import { useLibrary } from '../hooks/useLibrary';
 import { gradients } from '../data/movies';
 
 /**
@@ -35,11 +35,14 @@ export default function MovieCard({
   const [hover, setHover] = useState(false);
   const [imgFailed, setImgFailed] = useState(false);
   const controlled = typeof saved === 'boolean';
+  const { isSaved, toggleSaved } = useLibrary();
   const [selfSaved, setSelfSaved] = useState(() =>
     controlled ? saved : movie?.id ? isSaved(movie.id) : false,
   );
 
   // Keep the bookmark state in sync with external changes (and our own writes).
+  // NOTE: dep uses movie?.id — a bare movie.id here throws during render when
+  // a cloud snapshot is null, blanking the whole page.
   useEffect(() => {
     if (controlled) {
       setSelfSaved(!!saved);
@@ -47,9 +50,8 @@ export default function MovieCard({
     }
     if (!movie?.id) return;
     setSelfSaved(isSaved(movie.id));
-    return subscribeLibrary(() => setSelfSaved(isSaved(movie.id)));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [controlled, saved, movie.id]);
+  }, [controlled, saved, movie?.id, isSaved]);
 
   if (!movie) return null;
 
@@ -87,7 +89,7 @@ export default function MovieCard({
     if (controlled) {
       onToggleSaved?.(movie);
     } else {
-      setSelfSaved(toggleWatchLater(movie));
+      toggleSaved(movie).then((next) => setSelfSaved(next));
     }
   };
 

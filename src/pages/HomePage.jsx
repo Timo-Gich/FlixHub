@@ -5,7 +5,8 @@ import MovieRow from '../components/MovieRow';
 import MovieCard from '../components/MovieCard';
 import Footer from '../components/Footer';
 import { fetchTrendingMovies, fetchPopularMovies } from '../services/tmdbService';
-import { getHistory, subscribeLibrary, FINISH_THRESHOLD } from '../services/libraryService';
+import { FINISH_THRESHOLD } from '../services/libraryService';
+import { useLibrary } from '../hooks/useLibrary';
 
 /**
  * Home page: the fixed navbar, a full-width trending hero carousel, a
@@ -14,9 +15,8 @@ import { getHistory, subscribeLibrary, FINISH_THRESHOLD } from '../services/libr
  * content rows, and the footer.
  */
 export default function HomePage() {
-  // Keep history in state, refreshed live whenever the library changes.
-  const [history, setHistory] = useState(() => getHistory());
-  useEffect(() => subscribeLibrary(() => setHistory(getHistory())), []);
+  // Cloud-aware history (falls back to localStorage for guests).
+  const { history } = useLibrary();
 
   // A title counts as "finished" once progress reaches 98% of its duration.
   const isFinished = (entry) => {
@@ -25,10 +25,12 @@ export default function HomePage() {
   };
 
   // "Continue Watching" shows recent, in-progress titles first, followed by
-  // finished ones — every history entry stays visible in the row.
+  // finished ones — every history entry stays visible in the row. Cloud rows
+  // with a missing snapshot are skipped so one bad row can't blank the page.
+  const validHistory = history.filter((entry) => entry?.movie?.id != null);
   const continueWatching = [
-    ...history.filter((entry) => !isFinished(entry)),
-    ...history.filter(isFinished),
+    ...validHistory.filter((entry) => !isFinished(entry)),
+    ...validHistory.filter(isFinished),
   ];
 
   // Desktop scroll arrows for the Continue Watching row: they only appear when
@@ -88,7 +90,7 @@ export default function HomePage() {
                       ? `/tv/${entry.movie.id}?season=${entry.season}${entry.episode != null ? `&episode=${entry.episode}` : ''}`
                       : undefined;
                   return (
-                    <div key={entry.movie.id} className="w-[150px] shrink-0 snap-start sm:w-[180px]">
+                    <div key={entry.movie?.id ?? `${entry.season}-${entry.episode}`} className="w-[150px] shrink-0 snap-start sm:w-[180px]">
                       <MovieCard
                         movie={entry.movie}
                         progress={progress}

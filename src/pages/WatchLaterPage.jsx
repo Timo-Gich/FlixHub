@@ -3,7 +3,8 @@ import { Link } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import MovieCard from '../components/MovieCard';
-import { getWatchLater, removeFromWatchLater, toggleWatchLater } from '../services/libraryService';
+import SyncNudge from '../components/SyncNudge';
+import { useLibrary } from '../hooks/useLibrary';
 
 const SORT_OPTIONS = [
   { value: 'recent', label: 'Recently added' },
@@ -18,10 +19,13 @@ const SORT_OPTIONS = [
  * button. Supports sorting, removing individual items, and an empty state.
  */
 export default function WatchLaterPage() {
-  const [items, setItems] = useState(() => getWatchLater());
+  const { watchLater: items, removeSaved, toggleSaved, syncing } = useLibrary();
   const [sort, setSort] = useState('recent');
 
-  const sorted = [...items].sort((a, b) => {
+  // Skip cloud rows whose snapshot failed to parse — one bad row must never
+  // blank the whole list (a.movie.title / release_date reads below throw).
+  const validItems = items.filter((e) => e?.movie?.id != null);
+  const sorted = [...validItems].sort((a, b) => {
     switch (sort) {
       case 'oldest':
         return a.savedAt - b.savedAt;
@@ -38,17 +42,13 @@ export default function WatchLaterPage() {
     }
   });
 
-  const refresh = () => setItems(getWatchLater());
-
   const removeById = (id) => {
-    removeFromWatchLater(id);
-    refresh();
+    removeSaved(id);
   };
 
   // Controlled toggle: the movie is already saved, so toggling removes it.
   const toggleOff = (movie) => {
-    toggleWatchLater(movie);
-    refresh();
+    toggleSaved(movie);
   };
 
   return (
@@ -59,9 +59,11 @@ export default function WatchLaterPage() {
         <div className="flex flex-wrap items-center gap-3">
           <h1 className="text-2xl font-black text-white">Watchlist</h1>
           <span className="w-fit rounded bg-ink-raised px-2 py-0.5 text-xs font-semibold text-muted">
-            {items.length} saved
+            {items.length} saved{syncing ? ' · syncing…' : ''}
           </span>
         </div>
+
+        <SyncNudge hasItems={items.length > 0} />
 
         {items.length > 0 && (
           <label className="mt-2 inline-flex items-center gap-2 text-sm text-muted">

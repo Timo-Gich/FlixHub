@@ -1,10 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import {
-  subscribeLibrary,
-  isFavLive,
-  toggleFavLive,
-} from '../services/libraryService';
+import { useLibrary } from '../hooks/useLibrary';
 import { programmeProgress, formatRange } from '../services/liveTvService';
 
 /**
@@ -14,6 +10,7 @@ import { programmeProgress, formatRange } from '../services/liveTvService';
 export default function LiveChannelCard({ channel, epg = null, clock = Date.now() }) {
   const [imgFailed, setImgFailed] = useState(!channel?.logo);
   const [hover, setHover] = useState(false);
+  const { isFavLive, toggleFav } = useLibrary();
   const [saved, setSaved] = useState(() =>
     channel?.id ? isFavLive(channel.id) : false,
   );
@@ -21,9 +18,8 @@ export default function LiveChannelCard({ channel, epg = null, clock = Date.now(
   useEffect(() => {
     if (!channel?.id) return;
     setSaved(isFavLive(channel.id));
-    return subscribeLibrary(() => setSaved(isFavLive(channel.id)));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [channel?.id, channel?.logo]);
+  }, [channel?.id, channel?.logo, isFavLive]);
 
   if (!channel) return null;
 
@@ -33,7 +29,7 @@ export default function LiveChannelCard({ channel, epg = null, clock = Date.now(
   const handleFav = (e) => {
     e.preventDefault();
     e.stopPropagation();
-    setSaved(toggleFavLive(channel));
+    toggleFav(channel).then((next) => setSaved(next));
   };
 
   return (

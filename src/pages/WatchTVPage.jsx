@@ -3,7 +3,8 @@ import { useParams } from 'react-router-dom';
 import VideoPlayer from '../components/VideoPlayer';
 import { fetchTVDetails } from '../services/tmdbService';
 import { useMovieData } from '../hooks/useMovieData';
-import { logPlayed, updateWatchProgress, FINISH_THRESHOLD } from '../services/libraryService';
+import { FINISH_THRESHOLD } from '../services/libraryService';
+import { useLibrary } from '../hooks/useLibrary';
 import { saveLastSeason, markEpisodeWatched } from '../services/seasonMem';
 
 // Only treat an episode as "started" after this much real watch time (in
@@ -18,6 +19,7 @@ const LOG_BEFORE_LOG = 10;
  */
 export default function WatchTVPage() {
   const { id, season, episode } = useParams();
+  const { logPlayed, updateProgress } = useLibrary();
   const hasValidId =
     id !== undefined &&
     !Number.isNaN(Number(id)) &&
@@ -71,7 +73,7 @@ export default function WatchTVPage() {
         logPlayed(details, { type: 'tv', season: seasonNumber, episode: episodeNumber });
         markEpisodeWatched(id, seasonNumber, episodeNumber);
       }
-      updateWatchProgress(details.id, progressRef.current, durationSeconds, {
+      updateProgress(details.id, progressRef.current, durationSeconds, {
         season: seasonNumber,
         episode: episodeNumber,
       });
@@ -80,7 +82,7 @@ export default function WatchTVPage() {
     const cleanup = () => {
       clearInterval(idHandle);
       if (progressRef.current > 0) {
-        updateWatchProgress(details.id, progressRef.current, durationSeconds, {
+        updateProgress(details.id, progressRef.current, durationSeconds, {
           season: seasonNumber,
           episode: episodeNumber,
         });

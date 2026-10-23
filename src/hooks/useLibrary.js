@@ -17,6 +17,49 @@ import { getSupabase } from '../services/supabaseClient';
 const MERGED_FLAG = 'flixhub.mergedToCloud';
 const PROGRESS_DEBOUNCE_MS = 4000;
 
+// Shared realtime channels: every useLibrary() instance (each MovieCard!)
+// subscribes to the same per-user channel. Without this, N mounted cards = N
+// identical `library:<userId>` channels, and React 18 StrictMode double-mounts
+// effects in dev — the second .on() hits an already-subscribed channel and
+// Supabase throws "cannot add postgres_changes callbacks after subscribe()",
+// an uncaught error that blanked the whole page after sign-in.
+const channelRegistry = new Map(); // userId -> { channel, reloads: Set, refCount }
+
+function attachRealtime(userId, reload) {
+  const sb = getSupabase();
+  if (!sb || !userId) return () => {};
+  let entry = channelRegistry.get(userId);
+  if (!entry) {
+    const reloads = new Set();
+    const channel = sb.channel(`library:${userId}`);
+    const fanOut = () => {
+      reloads.forEach((fn) => {
+        try { fn(); } catch { /* one bad listener must not break the rest */ }
+      });
+    };
+    channel.on('postgres_changes', { event: '*', schema: 'public', table: 'watchlist_items', filter: `user_id=eq.${userId}` }, fanOut);
+    channel.on('postgres_changes', { event: '*', schema: 'public', table: 'history_items', filter: `user_id=eq.${userId}` }, fanOut);
+    channel.on('postgres_changes', { event: '*', schema: 'public', table: 'favorites_live', filter: `user_id=eq.${userId}` }, fanOut);
+    channel.subscribe();
+    entry = { channel, reloads, refCount: 0 };
+    channelRegistry.set(userId, entry);
+  }
+  entry.reloads.add(reload);
+  entry.refCount += 1;
+  return () => {
+    const current = channelRegistry.get(userId);
+    if (!current) return;
+    current.reloads.delete(reload);
+    current.refCount -= 1;
+    if (current.refCount <= 0) {
+      channelRegistry.delete(userId);
+      try {
+        getSupabase()?.removeChannel(current.channel);
+      } catch { /* already gone */ }
+    }
+  };
+}
+
 function sortWatchLater(items) {
   return [...items].sort((a, b) => (b.savedAt || 0) - (a.savedAt || 0));
 }
@@ -64,9 +107,24 @@ export function useLibrary() {
       try {
         const cloud = await fetchCloudLibrary(userId);
         if (cancelled) return;
+        if (import.meta.env.DEV) {
+          console.info('[library] fetched from cloud', {
+            watchLater: cloud.watchLater.length,
+            history: cloud.history.length,
+            favoritesLive: cloud.favoritesLive.length,
+            historyNullSnapshots: cloud.history.filter((e) => e?.movie?.id == null).length,
+          });
+        }
         const mergedWL = mergeWatchLater(local.getWatchLater(), cloud.watchLater);
         const mergedHist = mergeHistory(local.getHistory(), cloud.history);
         const mergedFav = mergeFavoritesLive(local.getFavoritesLive(), cloud.favoritesLive);
+        if (import.meta.env.DEV) {
+          console.info('[library] merged', {
+            watchLater: mergedWL.length,
+            history: mergedHist.length,
+            favoritesLive: mergedFav.length,
+          });
+        }
         setWatchLater(sortWatchLater(mergedWL));
         setHistory(sortHistory(mergedHist));
         setFavoritesLive(mergedFav);
@@ -91,9 +149,10 @@ export function useLibrary() {
   }, [userId]);
 
   // Real-time: reflect writes from other devices on the same account.
+  // One shared channel per user (see attachRealtime) — every hook instance
+  // registers its reload fan-out instead of opening its own channel.
   useEffect(() => {
-    const sb = getSupabase();
-    if (!sb || !userId) return;
+    if (!userId) return;
     const reload = async () => {
       try {
         const cloud = await fetchCloudLibrary(userId);
@@ -106,13 +165,7 @@ export function useLibrary() {
         setFavoritesLive(mergeFavoritesLive(local.getFavoritesLive(), cloud.favoritesLive));
       } catch { /* keep current state on transient errors */ }
     };
-    const ch = sb
-      .channel(`library:${userId}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'watchlist_items', filter: `user_id=eq.${userId}` }, reload)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'history_items', filter: `user_id=eq.${userId}` }, reload)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'favorites_live', filter: `user_id=eq.${userId}` }, reload)
-      .subscribe();
-    return () => { sb.removeChannel(ch); };
+    return attachRealtime(userId, reload);
   }, [userId]);
 
   const flushProgress = useCallback(async () => {
@@ -126,11 +179,12 @@ export function useLibrary() {
 
   const toggleSaved = useCallback(
     async (movie) => {
-      const saved = watchLater.some((e) => e.movie.id === movie?.id);
+      if (!movie?.id) return false;
+      const saved = watchLater.some((e) => e?.movie?.id === movie.id);
       const next = !saved;
       const optimistic = next
         ? [{ movie, savedAt: Date.now() }, ...watchLater]
-        : watchLater.filter((e) => e.movie.id !== movie?.id);
+        : watchLater.filter((e) => e?.movie?.id !== movie.id);
       setWatchLater(optimistic);
       if (!userId) {
         local.toggleWatchLater(movie);
@@ -150,7 +204,7 @@ export function useLibrary() {
 
   const removeSaved = useCallback(
     async (id) => {
-      setWatchLater((prev) => prev.filter((e) => e.movie.id !== id));
+      setWatchLater((prev) => prev.filter((e) => e?.movie?.id !== id));
       if (!userId) {
         local.removeFromWatchLater(id);
         return;
@@ -172,8 +226,8 @@ export function useLibrary() {
         return;
       }
       local.logPlayed(movie, opts);
-      const entry = local.getHistory().find((e) => e.movie.id === movie?.id);
-      setHistory((prev) => sortHistory([entry, ...prev.filter((e) => e.movie.id !== movie?.id)].filter(Boolean)));
+      const entry = local.getHistory().find((e) => e?.movie?.id === movie?.id);
+      setHistory((prev) => sortHistory([entry, ...prev.filter((e) => e?.movie?.id !== movie?.id)].filter(Boolean)));
       try {
         if (entry) await upsertCloudHistory(userId, [entry]);
       } catch (err) {
@@ -197,7 +251,7 @@ export function useLibrary() {
 
   const removeHistory = useCallback(
     async (id) => {
-      setHistory((prev) => prev.filter((e) => e.movie.id !== id));
+      setHistory((prev) => prev.filter((e) => e?.movie?.id !== id));
       if (!userId) {
         local.removeFromHistory(id);
         return;
@@ -227,11 +281,11 @@ export function useLibrary() {
   const toggleFav = useCallback(
     async (channel) => {
       const key = channel?.id ?? channel?.name;
-      const saved = favoritesLive.some((e) => (e.channel?.id ?? e.channel?.name) === key);
+      const saved = favoritesLive.some((e) => (e?.channel?.id ?? e?.channel?.name) === key);
       const next = !saved;
       const optimistic = next
         ? [{ channel, savedAt: Date.now() }, ...favoritesLive]
-        : favoritesLive.filter((e) => (e.channel?.id ?? e.channel?.name) !== key);
+        : favoritesLive.filter((e) => (e?.channel?.id ?? e?.channel?.name) !== key);
       setFavoritesLive(optimistic);
       if (!userId) {
         local.toggleFavLive(channel);
@@ -256,8 +310,8 @@ export function useLibrary() {
       watchLater,
       history,
       favoritesLive,
-      isSaved: (id) => watchLater.some((e) => e.movie.id === id),
-      isFavLive: (id) => favoritesLive.some((e) => (e.channel?.id ?? e.channel?.name) === id),
+      isSaved: (id) => watchLater.some((e) => e?.movie?.id === id),
+      isFavLive: (id) => favoritesLive.some((e) => (e?.channel?.id ?? e?.channel?.name) === id),
       toggleSaved,
       removeSaved,
       logPlayed,

@@ -8,7 +8,7 @@ import {
   fetchPlaylist, EPG_REGIONS, fetchEPGForRegions, getRegionForCountry,
   matchProgrammes, pickFeaturedOnNow, sliceWindow,
 } from '../services/liveTvService';
-import { getFavoritesLive, subscribeLibrary } from '../services/libraryService';
+import { useLibrary } from '../hooks/useLibrary';
 
 const REGION_KEY = 'flixhub.liveRegion';
 const VIEW_KEY = 'flixhub.liveView';
@@ -67,7 +67,7 @@ export default function LiveTVPage() {
   });
   const [tab, setTab] = useState(readStoredTab);
   const [query, setQuery] = useState(readStoredQuery);
-  const [favState, setFavState] = useState(() => getFavoritesLive());
+  const { favoritesLive: favState } = useLibrary();
   const [page, setPage] = useState(1);
   const [guidePage, setGuidePage] = useState(1);
   const [epgMaps, setEpgMaps] = useState({});
@@ -122,8 +122,7 @@ export default function LiveTVPage() {
     };
   }, []);
 
-  // Keep favorites in sync with the library service.
-  useEffect(() => subscribeLibrary(() => setFavState(getFavoritesLive())), []);
+  // Favorites come from the cloud-aware hook — no local subscription needed.
 
   // Persist the chosen region so the player page can use it for EPG.
   useEffect(() => {

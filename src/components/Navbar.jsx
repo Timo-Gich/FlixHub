@@ -374,8 +374,33 @@ return (
 
         {/* Right: compact icon group (no labels) */}
         <div className="relative flex shrink-0 items-center gap-2">
-          <NotificationCenter />
-          <AccountMenu />
+<button
+            type="button"
+            aria-label={menuOpen ? 'Close menu' : 'Open menu'}
+            aria-expanded={menuOpen}
+            aria-controls="nav-menu"
+            onClick={() => {
+              setMenuOpen((open) => !open);
+              setMobileSearchOpen(false);
+            }}
+            className="flex h-8 w-8 items-center justify-center rounded-md text-muted
+                       transition hover:text-white"
+          >
+            {menuOpen ? (
+              <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor"
+                   strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+                <line x1="6" y1="6" x2="18" y2="18" />
+                <line x1="18" y1="6" x2="6" y2="18" />
+              </svg>
+            ) : (
+              <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor"
+                   strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+                <line x1="3" y1="6" x2="21" y2="6" />
+                <line x1="3" y1="12" x2="21" y2="12" />
+                <line x1="3" y1="18" x2="21" y2="18" />
+              </svg>
+            )}
+          </button>
           <button
             type="button"
             aria-label={theme === 'dark' ? 'Switch to cinema theme' : 'Switch to dark theme'}
@@ -403,33 +428,8 @@ return (
               </svg>
             )}
           </button>
-          <button
-            type="button"
-            aria-label={menuOpen ? 'Close menu' : 'Open menu'}
-            aria-expanded={menuOpen}
-            aria-controls="nav-menu"
-            onClick={() => {
-              setMenuOpen((open) => !open);
-              setMobileSearchOpen(false);
-            }}
-            className="flex h-8 w-8 items-center justify-center rounded-md text-muted
-                       transition hover:text-white"
-          >
-            {menuOpen ? (
-              <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor"
-                   strokeWidth="2" strokeLinecap="round" aria-hidden="true">
-                <line x1="6" y1="6" x2="18" y2="18" />
-                <line x1="18" y1="6" x2="6" y2="18" />
-              </svg>
-            ) : (
-              <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor"
-                   strokeWidth="2" strokeLinecap="round" aria-hidden="true">
-                <line x1="3" y1="6" x2="21" y2="6" />
-                <line x1="3" y1="12" x2="21" y2="12" />
-                <line x1="3" y1="18" x2="21" y2="18" />
-              </svg>
-            )}
-          </button>
+          <NotificationCenter />
+          <AccountMenu />
           {menuOpen && (
             <div
               id="nav-menu"

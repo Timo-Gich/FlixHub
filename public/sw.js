@@ -24,6 +24,49 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
+self.addEventListener('push', (event) => {
+  let payload = {};
+  try {
+    payload = event.data ? event.data.json() : {};
+  } catch {
+    payload = { body: event.data?.text() || '' };
+  }
+  const title = String(payload.title || 'FlixHub').slice(0, 100);
+  const body = String(payload.body || 'You have a new notification.').slice(0, 240);
+  const url = safeAppPath(payload.url);
+
+  event.waitUntil((async () => {
+    const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    const focused = clients.find((client) => client.visibilityState === 'visible' && 'focus' in client);
+    if (focused) {
+      focused.postMessage({ type: 'flixhub:push', title, body, url });
+      return;
+    }
+    await self.registration.showNotification(title, {
+      body,
+      icon: '/icons/icon-192.png',
+      badge: '/icons/icon-192.png',
+      tag: String(payload.tag || 'flixhub-notification').slice(0, 100),
+      data: { url },
+    });
+  })());
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const url = safeAppPath(event.notification.data?.url);
+  event.waitUntil((async () => {
+    const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    for (const client of clients) {
+      if (new URL(client.url).origin === self.location.origin) {
+        await client.navigate(url);
+        return client.focus();
+      }
+    }
+    return self.clients.openWindow(url);
+  })());
+});
+
 self.addEventListener('fetch', (event) => {
   const req = event.request;
   if (req.method !== 'GET') return;
@@ -45,6 +88,16 @@ self.addEventListener('fetch', (event) => {
 
   event.respondWith(fromCacheOrNetwork(req));
 });
+
+function safeAppPath(value) {
+  if (typeof value !== 'string' || !value.startsWith('/') || value.startsWith('//')) return '/';
+  try {
+    const url = new URL(value, self.location.origin);
+    return url.origin === self.location.origin ? `${url.pathname}${url.search}${url.hash}` : '/';
+  } catch {
+    return '/';
+  }
+}
 
 /* Register the app shell in the cache on install. */
 async function precacheCore() {

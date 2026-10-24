@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import Logo from './Logo';
 import AccountMenu from './AccountMenu';
+import NotificationCenter from './NotificationCenter';
 import SearchPill from './SearchPill';
 import SearchResults from './SearchResults';
 import SearchSuggestions from './SearchSuggestions';
@@ -373,6 +374,7 @@ return (
 
         {/* Right: compact icon group (no labels) */}
         <div className="relative flex shrink-0 items-center gap-2">
+          <NotificationCenter />
           <AccountMenu />
           <button
             type="button"

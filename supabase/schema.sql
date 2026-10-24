@@ -48,6 +48,43 @@ create table if not exists public.favorites_live (
   primary key (user_id, channel_id)
 );
 
+-- In-app notification preferences and per-user notifications.
+create table if not exists public.notification_settings (
+  user_id uuid primary key references auth.users (id) on delete cascade,
+  in_app_enabled boolean not null default true,
+  browser_enabled boolean not null default false,
+  notify_continue_watching boolean not null default true,
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.notifications (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users (id) on delete cascade,
+  type text not null,
+  payload jsonb not null default '{}'::jsonb,
+  dedupe_key text,
+  read_at timestamptz,
+  created_at timestamptz not null default now(),
+  unique (user_id, dedupe_key)
+);
+create index if not exists notifications_user_created_idx
+  on public.notifications (user_id, created_at desc);
+
+-- Push endpoints are private credentials and are only readable by the push API
+-- using the server-side service role, never by another signed-in user.
+create table if not exists public.push_subscriptions (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users (id) on delete cascade,
+  endpoint text not null unique,
+  p256dh text not null,
+  auth text not null,
+  user_agent text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+create index if not exists push_subscriptions_user_idx
+  on public.push_subscriptions (user_id);
+
 -- Auto-create a profile row whenever a new auth user signs up.
 create or replace function public.handle_new_user()
 returns trigger
@@ -76,6 +113,9 @@ alter table public.profiles enable row level security;
 alter table public.watchlist_items enable row level security;
 alter table public.history_items enable row level security;
 alter table public.favorites_live enable row level security;
+alter table public.notification_settings enable row level security;
+alter table public.notifications enable row level security;
+alter table public.push_subscriptions enable row level security;
 
 drop policy if exists "profiles self read" on public.profiles;
 create policy "profiles self read" on public.profiles
@@ -96,6 +136,31 @@ create policy "history owner" on public.history_items
 drop policy if exists "favorites live owner" on public.favorites_live;
 create policy "favorites live owner" on public.favorites_live
   for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+drop policy if exists "notification settings owner" on public.notification_settings;
+create policy "notification settings owner" on public.notification_settings
+  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+drop policy if exists "notifications owner" on public.notifications;
+create policy "notifications owner" on public.notifications
+  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+drop policy if exists "push subscriptions owner" on public.push_subscriptions;
+create policy "push subscriptions owner" on public.push_subscriptions
+  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime'
+      and schemaname = 'public'
+      and tablename = 'notifications'
+  ) then
+    alter publication supabase_realtime add table public.notifications;
+  end if;
+end;
+$$;
 
 -- ============================================================================
 -- Custom avatars — Supabase Storage bucket + policies.

@@ -40,7 +40,9 @@
       // PWA: register the service worker (offline support + installability).
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', function () {
-          navigator.serviceWorker.register('/sw.js').catch(function () {});
+          navigator.serviceWorker.register('/sw.js').catch(function (error) {
+            console.error('[pwa] service worker registration failed', error);
+          });
         });
       }
     </script>

@@ -1,8 +1,8 @@
-﻿import { getAdminClient, configureVapid, sendPushToUser } from '../_lib/push.mjs';
+import { getAdminClient, configureVapid, sendPushToUser } from '../_lib/push.mjs';
 
 export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store');
-  const secret = process.env.CRON_SECRET;
+  const secret = process.env.SECRET;
   if (!secret || req.headers.authorization !== `Bearer ${secret}`) {
     return res.status(401).json({ error: 'Unauthorized' });
   }

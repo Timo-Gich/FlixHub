@@ -186,19 +186,6 @@ export default function NotificationCenter() {
             {!browserSupported && (
               <p className="mt-1 text-[10px] text-muted">This browser does not support Web Push notifications.</p>
             )}
-            {user && settings.browser_enabled && (
-              <button
-                type="button"
-                disabled={busy}
-                onClick={sendTest}
-                className="mt-2 rounded-md border border-ink-border px-2.5 py-1.5 text-[11px] font-semibold text-white/80 transition hover:bg-white/5 disabled:opacity-50"
-              >
-                Send test notification
-              </button>
-            )}
-            <p className="mt-1 text-[10px] leading-relaxed text-muted">
-              Web Push can reach subscribed devices while FlixHub is closed. Requires HTTPS and browser notification permission.
-            </p>
             {(message || error) && (
               <p role={error || message.includes('failed') ? 'alert' : 'status'} className="mt-2 text-[11px] leading-relaxed text-brand-light">
                 {message || error}

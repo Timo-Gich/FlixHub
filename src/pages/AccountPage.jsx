@@ -220,9 +220,6 @@ function SignedInBody({ userId, oauthAvatar, displayName, email, provider, membe
           {signingOut ? 'Signing out…' : 'Sign out'}
         </button>
         </div>
-        <div className="mt-6">
-          <NotificationCenter />
-        </div>
       </section>
       {error && (
         <p role="alert" className="mt-4 rounded-md border border-brand/40 bg-brand/10 px-4 py-3 text-sm text-brand-light">

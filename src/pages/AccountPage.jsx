@@ -4,11 +4,12 @@ import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import { useAuth } from '../context/AuthContext';
 import { useLibrary } from '../hooks/useLibrary';
-import { signOut } from '../services/authService';
+import { deleteAccount, signOut } from '../services/authService';
 import NotificationCenter from '../components/NotificationCenter';
+import ConfirmDialog from '../components/ConfirmDialog';
 import { uploadAvatar, removeAvatar, fetchProfileAvatar, validateAvatarFile } from '../services/avatarService';
 
-function SignedInBody({ userId, oauthAvatar, displayName, email, provider, memberSince, syncing, counts, signingOut, error, onSignOut }) {
+function SignedInBody({ userId, oauthAvatar, displayName, email, provider, memberSince, syncing, counts, signingOut, deletingAccount, deleteError, error, onSignOut, onDeleteAccount }) {
   const stats = [
     {
       label: 'Watchlist', value: counts.watchLater, to: '/watch-later',
@@ -33,35 +34,6 @@ function SignedInBody({ userId, oauthAvatar, displayName, email, provider, membe
     {
       label: 'Live favorites', value: counts.favoritesLive, to: '/live',
       blurb: 'Starred channels',
-      icon: (
-        <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-          <rect x="2" y="7" width="20" height="15" rx="2" />
-          <path d="M17 7l4-4M8 7V4M6 2l-3 3" />
-        </svg>
-      ),
-    },
-  ];
-  const links = [
-    {
-      label: 'My Watchlist', hint: 'Titles you saved for later', to: '/watch-later',
-      icon: (
-        <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-          <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
-        </svg>
-      ),
-    },
-    {
-      label: 'Watch History', hint: 'What you have played, grouped by day', to: '/history',
-      icon: (
-        <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-          <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
-          <path d="M3 3v5h5" />
-          <path d="M12 7v5l4 2" />
-        </svg>
-      ),
-    },
-    {
-      label: 'Live TV favorites', hint: 'Channels you starred', to: '/live',
       icon: (
         <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
           <rect x="2" y="7" width="20" height="15" rx="2" />
@@ -257,28 +229,36 @@ function SignedInBody({ userId, oauthAvatar, displayName, email, provider, membe
         ))}
         </div>
       </section>
-      <section aria-label="Manage" className="mt-8">
+      <section aria-label="Manage account" className="mt-8">
         <h2 className="font-display text-sm font-semibold uppercase tracking-[0.2em] text-muted">
-          Manage
+          Manage account
         </h2>
-        <div className="mt-3 overflow-hidden rounded-xl border border-ink-border bg-ink-soft/80 backdrop-blur">
-        {links.map((row) => (
-          <Link
-            key={row.label}
-            to={row.to}
-            className="group flex items-center gap-4 border-b border-ink-border/70 px-5 py-4 transition last:border-0 hover:bg-gradient-to-r hover:from-brand/15 hover:to-transparent"
-          >
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-ink-raised text-muted ring-1 ring-ink-border transition group-hover:text-brand-light group-hover:ring-brand/50">
-              {row.icon}
-            </span>
-            <span className="flex-1">
-              <span className="block text-sm font-bold text-white">{row.label}</span>
-              <span className="block text-xs text-muted">{row.hint}</span>
-            </span>
-            <span className="text-muted transition group-hover:translate-x-1 group-hover:text-brand-light" aria-hidden="true">→</span>
-          </Link>
-        ))}
-        </div>
+        <NotificationCenter />
+        <section aria-labelledby="danger-zone-title" className="mt-6 rounded-xl border border-red-500/50 bg-red-950/20 p-5">
+          <h3 id="danger-zone-title" className="text-sm font-bold uppercase tracking-wider text-red-300">
+            Danger zone
+          </h3>
+          <div className="mt-3 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-sm font-semibold text-white">Delete account</p>
+              <p className="mt-1 max-w-xl text-xs leading-relaxed text-muted">
+                Permanently delete your account and its synced profile, library, notifications, and push subscriptions. This cannot be undone.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={onDeleteAccount}
+              disabled={deletingAccount}
+              className="shrink-0 rounded-md border border-red-400/60 px-4 py-2 text-sm font-bold text-red-300 transition
+                         hover:bg-red-500/15 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Delete account
+            </button>
+          </div>
+          {deleteError && (
+            <p role="alert" className="mt-3 text-sm text-red-300">{deleteError}</p>
+          )}
+        </section>
       </section>
     </>
   );
@@ -296,6 +276,9 @@ export default function AccountPage() {
   }, [location.hash]);
   const navigate = useNavigate();
   const [signingOut, setSigningOut] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deletingAccount, setDeletingAccount] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
   const [error, setError] = useState(null);
 
   const meta = user?.user_metadata || {};
@@ -317,6 +300,20 @@ export default function AccountPage() {
       setError(err.message || 'Sign out failed. Try again.');
     } finally {
       setSigningOut(false);
+    }
+  };
+
+  const doDeleteAccount = async () => {
+    setDeleteError('');
+    setDeletingAccount(true);
+    try {
+      await deleteAccount();
+      navigate('/', { replace: true });
+    } catch (deleteErr) {
+      setDeleteError(deleteErr.message || 'Account deletion failed. Try again.');
+      setDeleteDialogOpen(false);
+    } finally {
+      setDeletingAccount(false);
     }
   };
 
@@ -408,12 +405,28 @@ export default function AccountPage() {
             syncing={syncing}
             counts={{ watchLater: watchLater.length, history: history.length, favoritesLive: favoritesLive.length }}
             signingOut={signingOut}
+            deletingAccount={deletingAccount}
+            deleteError={deleteError}
             error={error}
             onSignOut={doSignOut}
+            onDeleteAccount={() => setDeleteDialogOpen(true)}
           />
         )}
       </main>
       <Footer />
+      <ConfirmDialog
+        open={deleteDialogOpen}
+        title="Delete your account?"
+        message="This permanently deletes your account and all synced FlixHub data. This action cannot be undone."
+        confirmLabel={deletingAccount ? 'Deleting…' : 'Delete account'}
+        cancelLabel="Keep account"
+        confirmDisabled={deletingAccount}
+        cancelDisabled={deletingAccount}
+        onConfirm={doDeleteAccount}
+        onClose={() => {
+          if (!deletingAccount) setDeleteDialogOpen(false);
+        }}
+      />
     </div>
   );
 }

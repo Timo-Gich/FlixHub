@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import Logo from './Logo';
 import AccountMenu from './AccountMenu';
-import NotificationCenter from './NotificationCenter';
+import NotificationBell from './NotificationBell';
 import SearchPill from './SearchPill';
 import SearchResults from './SearchResults';
 import SearchSuggestions from './SearchSuggestions';
@@ -428,7 +428,7 @@ return (
               </svg>
             )}
           </button>
-          <NotificationCenter />
+          <NotificationBell />
           <AccountMenu />
           {menuOpen && (
             <div

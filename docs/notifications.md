@@ -1,9 +1,10 @@
 # Notifications and Web Push setup
 
-The notification center supports local guest notifications and account-synced
-in-app notifications. Background browser notifications use the existing service
-worker, Web Push, and VAPID. Browser permission is requested only when a signed-in
-user turns on **Background browser notifications**.
+Notifications are account-scoped. The Account page's **Manage account** section
+contains one **Enable notifications** setting; notification messages are shown
+only in the unread bell dropdown. Enabling requests browser permission and
+registers this device for background push using the existing service worker,
+Web Push, and VAPID.
 
 ## Supabase
 
@@ -44,11 +45,10 @@ browser with Web Push support, and permission to display notifications.
 
 ## Verify delivery
 
-Sign in, open the notification bell, and enable **Background browser
-notifications**. Use **Send test notification** to verify delivery. With the
-FlixHub tab focused, the service worker forwards the push into the in-app toast;
-with it hidden or closed, the service worker displays an operating-system
-notification. Clicking that notification opens the app at its target route.
+Sign in, open Account → **Manage account**, and enable **Enable notifications**.
+When FlixHub is focused, alerts can appear in-app and in the bell dropdown; with
+the app hidden or closed, Web Push can display an operating-system notification.
+Clicking that notification opens the app at its target route.
 
 Currently, the app creates a continue-watching reminder when it is opened or
 returns to the foreground. That reminder can be pushed to the user's other

@@ -4,9 +4,10 @@ const GUEST_NOTIFICATIONS_KEY = 'flixhub.notifications';
 const GUEST_SETTINGS_KEY = 'flixhub.notificationSettings';
 
 export const DEFAULT_NOTIFICATION_SETTINGS = {
-  in_app_enabled: true,
+  notifications_enabled: false,
+  in_app_enabled: false,
   browser_enabled: false,
-  notify_continue_watching: true,
+  notify_continue_watching: false,
 };
 
 function readJSON(key, fallback) {
@@ -51,7 +52,7 @@ export async function fetchNotificationSettings(userId) {
   const sb = requireSupabase();
   const { data, error } = await sb
     .from('notification_settings')
-    .select('in_app_enabled, browser_enabled, notify_continue_watching')
+    .select('notifications_enabled, in_app_enabled, browser_enabled, notify_continue_watching')
     .eq('user_id', userId)
     .maybeSingle();
   if (error) throw error;
@@ -71,7 +72,7 @@ export async function saveNotificationSettings(userId, settings) {
       { user_id: userId, ...settings, updated_at: new Date().toISOString() },
       { onConflict: 'user_id' },
     )
-    .select('in_app_enabled, browser_enabled, notify_continue_watching')
+    .select('notifications_enabled, in_app_enabled, browser_enabled, notify_continue_watching')
     .single();
   if (error) throw error;
   return { ...DEFAULT_NOTIFICATION_SETTINGS, ...data };

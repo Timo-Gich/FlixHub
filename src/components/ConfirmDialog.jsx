@@ -20,6 +20,8 @@ export default function ConfirmDialog({
   confirmLabel = 'Confirm',
   cancelLabel = 'Cancel',
   danger = true,
+  confirmDisabled = false,
+  cancelDisabled = false,
   onConfirm,
   onClose,
 }) {
@@ -84,8 +86,9 @@ export default function ConfirmDialog({
             type="button"
             ref={cancelRef}
             onClick={onClose}
+            disabled={cancelDisabled}
             className="rounded-md bg-ink-raised px-4 py-2.5 text-sm font-semibold text-white
-                       ring-1 ring-ink-border transition hover:bg-zinc-800 focus:outline-none
+                       ring-1 ring-ink-border transition hover:bg-zinc-800 focus:outline-none disabled:opacity-50
                        focus-visible:ring-2 focus-visible:ring-brand"
           >
             {cancelLabel}
@@ -93,9 +96,10 @@ export default function ConfirmDialog({
           <button
             type="button"
             onClick={handleConfirm}
+            disabled={confirmDisabled}
             className={`rounded-md px-4 py-2.5 text-sm font-bold text-white transition
                        focus:outline-none focus-visible:ring-2 focus-visible:ring-white/70
-                       active:scale-[0.98] ${
+                       active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 ${
                          danger
                            ? 'bg-brand hover:bg-brand-dark shadow-md shadow-brand/30'
                            : 'bg-ink-raised ring-1 ring-ink-border hover:bg-zinc-800'

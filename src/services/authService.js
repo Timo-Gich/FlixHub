@@ -32,6 +32,25 @@ export async function signOut() {
   if (error) throw error;
 }
 
+export async function deleteAccount() {
+  const sb = getSupabase();
+  if (!sb) throw new Error('Accounts are not configured yet.');
+  const { data, error: sessionError } = await sb.auth.getSession();
+  if (sessionError) throw sessionError;
+  const accessToken = data.session?.access_token;
+  if (!accessToken) throw new Error('Sign in again to delete your account.');
+
+  const response = await fetch('/api/delete-account', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  const result = await response.json();
+  if (!response.ok) throw new Error(result.error || 'Account deletion failed.');
+
+  const { error: signOutError } = await sb.auth.signOut({ scope: 'local' });
+  if (signOutError) throw signOutError;
+}
+
 export async function getSession() {
   const sb = getSupabase();
   if (!sb) return null;

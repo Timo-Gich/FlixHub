@@ -51,11 +51,14 @@ create table if not exists public.favorites_live (
 -- In-app notification preferences and per-user notifications.
 create table if not exists public.notification_settings (
   user_id uuid primary key references auth.users (id) on delete cascade,
-  in_app_enabled boolean not null default true,
+  notifications_enabled boolean not null default false,
+  in_app_enabled boolean not null default false,
   browser_enabled boolean not null default false,
-  notify_continue_watching boolean not null default true,
+  notify_continue_watching boolean not null default false,
   updated_at timestamptz not null default now()
 );
+alter table public.notification_settings
+  add column if not exists notifications_enabled boolean not null default false;
 
 create table if not exists public.notifications (
   id uuid primary key default gen_random_uuid(),

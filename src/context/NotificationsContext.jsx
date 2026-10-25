@@ -43,12 +43,12 @@ export function NotificationsProvider({ children }) {
 
   const showToast = useCallback((notification) => {
     if (!userId) return;
-    if (settingsRef.current.in_app_enabled) {
+    if (settingsRef.current.notifications_enabled && settingsRef.current.in_app_enabled) {
       setToast(notification);
       clearTimeout(toastTimer.current);
       toastTimer.current = setTimeout(() => setToast(null), 6500);
     }
-  }, []);
+  }, [userId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -99,7 +99,7 @@ export function NotificationsProvider({ children }) {
 
   const createSmartReminder = useCallback(async () => {
     if (!userId) return;
-    if (!settingsRef.current.notify_continue_watching) return;
+    if (!settingsRef.current.notifications_enabled || !settingsRef.current.notify_continue_watching) return;
     let history = getHistory();
     if (userId) {
       try {
@@ -140,7 +140,7 @@ export function NotificationsProvider({ children }) {
       const created = await createNotification(userId, notification);
       if (!created) return;
       receiveNotification(created);
-      if (userId && settingsRef.current.browser_enabled && session?.access_token) {
+      if (userId && settingsRef.current.notifications_enabled && settingsRef.current.browser_enabled && session?.access_token) {
         try {
           await sendPushNotification(session.access_token, {
             title: notification.payload.title,
@@ -160,7 +160,7 @@ export function NotificationsProvider({ children }) {
   }, [userId, session?.access_token, receiveNotification]);
 
   useEffect(() => {
-    if (!userId || !ready || !settings.notify_continue_watching) return undefined;
+    if (!userId || !ready || !settings.notifications_enabled || !settings.notify_continue_watching) return undefined;
     let active = true;
     const check = () => {
       if (active && document.visibilityState === 'visible') createSmartReminder();
@@ -171,7 +171,7 @@ export function NotificationsProvider({ children }) {
       active = false;
       document.removeEventListener('visibilitychange', check);
     };
-  }, [ready, settings.notify_continue_watching, createSmartReminder]);
+  }, [ready, settings.notifications_enabled, settings.notify_continue_watching, createSmartReminder]);
 
   useEffect(() => {
     const onMessage = (event) => {
@@ -216,7 +216,12 @@ export function NotificationsProvider({ children }) {
     let subscription;
     try {
       subscription = await enablePushNotifications(userId, session?.access_token);
-      await updateSettings({ browser_enabled: true });
+      await updateSettings({
+        notifications_enabled: true,
+        in_app_enabled: true,
+        notify_continue_watching: true,
+        browser_enabled: true,
+      });
       return subscription;
     } catch (pushError) {
       if (subscription) {
@@ -235,8 +240,13 @@ export function NotificationsProvider({ children }) {
   const disableBrowserNotifications = useCallback(async () => {
     setError('');
     try {
-      await updateSettings({ browser_enabled: false });
       await removePushSubscription(userId);
+      await updateSettings({
+        notifications_enabled: false,
+        in_app_enabled: false,
+        notify_continue_watching: false,
+        browser_enabled: false,
+      });
     } catch (pushError) {
       console.error('[notifications] could not disable background notifications', pushError);
       setError(pushError.message || 'Could not disable background notifications.');

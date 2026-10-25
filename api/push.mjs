@@ -78,14 +78,16 @@ export default async function handler(req, res) {
 
   const [{ data: preference, error: preferenceError }, { data: subscriptions, error: subscriptionsError }] =
     await Promise.all([
-      admin.from('notification_settings').select('browser_enabled').eq('user_id', userId).maybeSingle(),
+      admin.from('notification_settings').select('notifications_enabled, browser_enabled').eq('user_id', userId).maybeSingle(),
       admin.from('push_subscriptions').select('id, endpoint, p256dh, auth').eq('user_id', userId),
     ]);
   if (preferenceError || subscriptionsError) {
     console.error('[push] could not load push settings or subscriptions', preferenceError || subscriptionsError);
     return json(res, 500, { error: 'Could not load notification subscriptions.' });
   }
-  if (!preference?.browser_enabled) return json(res, 403, { error: 'Background notifications are disabled.' });
+  if (!preference?.notifications_enabled || !preference.browser_enabled) {
+    return json(res, 403, { error: 'Background notifications are disabled.' });
+  }
   if (!subscriptions?.length) return json(res, 409, { error: 'No registered devices for background notifications.' });
 
   const payload = req.body || {};

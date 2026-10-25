@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useNotifications } from '../context/NotificationsContext';
 import { canSendBrowserNotifications } from '../services/notificationService';
@@ -12,6 +12,7 @@ function formatDate(value) {
 }
 
 export default function NotificationCenter() {
+  const navigate = useNavigate();
   const { user } = useAuth();
   const {
     notifications,
@@ -68,6 +69,10 @@ export default function NotificationCenter() {
   const browserSupported = canSendBrowserNotifications() &&
     'serviceWorker' in navigator && 'PushManager' in window;
 
+  if (!user) return null;
+
+  const unread = notifications.filter((n) => !n.read_at);
+
   return (
     <div className="relative">
       <button
@@ -111,11 +116,11 @@ export default function NotificationCenter() {
           <div className="max-h-64 overflow-y-auto">
             {!ready ? (
               <p className="px-4 py-6 text-center text-sm text-muted">Loading notifications…</p>
-            ) : notifications.length === 0 ? (
-              <p className="px-4 py-6 text-center text-sm text-muted">No notifications yet.</p>
+            ) : unread.length === 0 ? (
+              <p className="px-4 py-6 text-center text-sm text-muted">All caught up.</p>
             ) : (
               <ul>
-                {notifications.map((notification) => {
+                {unread.map((notification) => {
                   const content = (
                     <>
                       <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${notification.read_at ? 'bg-transparent' : 'bg-brand-light'}`} aria-hidden="true" />
@@ -199,6 +204,15 @@ export default function NotificationCenter() {
                 {message || error}
               </p>
             )}
+          </div>
+          <div className="border-t border-ink-border px-4 py-2.5">
+            <button
+              type="button"
+              onClick={() => { setOpen(false); navigate('/account#notifications'); }}
+              className="text-[11px] font-semibold text-brand-light hover:underline"
+            >
+              Notification settings →
+            </button>
           </div>
         </section>
       )}

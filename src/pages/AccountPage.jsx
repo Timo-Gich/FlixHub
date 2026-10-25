@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import { useAuth } from '../context/AuthContext';
 import { useLibrary } from '../hooks/useLibrary';
 import { signOut } from '../services/authService';
+import NotificationCenter from '../components/NotificationCenter';
 import { uploadAvatar, removeAvatar, fetchProfileAvatar, validateAvatarFile } from '../services/avatarService';
 
 function SignedInBody({ userId, oauthAvatar, displayName, email, provider, memberSince, syncing, counts, signingOut, error, onSignOut }) {
@@ -219,6 +220,9 @@ function SignedInBody({ userId, oauthAvatar, displayName, email, provider, membe
           {signingOut ? 'Signing out…' : 'Sign out'}
         </button>
         </div>
+        <div className="mt-6">
+          <NotificationCenter />
+        </div>
       </section>
       {error && (
         <p role="alert" className="mt-4 rounded-md border border-brand/40 bg-brand/10 px-4 py-3 text-sm text-brand-light">
@@ -286,6 +290,13 @@ function SignedInBody({ userId, oauthAvatar, displayName, email, provider, membe
 export default function AccountPage() {
   const { user, configured, loading } = useAuth();
   const { watchLater, history, favoritesLive, syncing } = useLibrary();
+  const location = useLocation();
+  useEffect(() => {
+    if (location.hash === '#notifications') {
+      const el = document.getElementById('notification-settings');
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, [location.hash]);
   const navigate = useNavigate();
   const [signingOut, setSigningOut] = useState(false);
   const [error, setError] = useState(null);

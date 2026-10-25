@@ -42,6 +42,7 @@ export function NotificationsProvider({ children }) {
   settingsRef.current = settings;
 
   const showToast = useCallback((notification) => {
+    if (!userId) return;
     if (settingsRef.current.in_app_enabled) {
       setToast(notification);
       clearTimeout(toastTimer.current);
@@ -97,6 +98,7 @@ export function NotificationsProvider({ children }) {
   }, [userId, ready, receiveNotification]);
 
   const createSmartReminder = useCallback(async () => {
+    if (!userId) return;
     if (!settingsRef.current.notify_continue_watching) return;
     let history = getHistory();
     if (userId) {
@@ -158,7 +160,7 @@ export function NotificationsProvider({ children }) {
   }, [userId, session?.access_token, receiveNotification]);
 
   useEffect(() => {
-    if (!ready || !settings.notify_continue_watching) return undefined;
+    if (!userId || !ready || !settings.notify_continue_watching) return undefined;
     let active = true;
     const check = () => {
       if (active && document.visibilityState === 'visible') createSmartReminder();
@@ -173,6 +175,7 @@ export function NotificationsProvider({ children }) {
 
   useEffect(() => {
     const onMessage = (event) => {
+      if (!userId) return;
       if (event.data?.type !== 'flixhub:push') return;
       const notification = {
         id: `push-${Date.now()}`,

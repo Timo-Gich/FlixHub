@@ -1,28 +1,8 @@
-import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { fetchProfileAvatar } from '../services/avatarService';
 
-/**
- * Right-side account control: sign-in icon for guests, avatar link to
- * /account for signed-in users (no dropdown — the account page owns
- * profile, library links and sign-out).
- */
 export default function AccountMenu() {
-  const { user, configured } = useAuth();
-  const [customAvatar, setCustomAvatar] = useState(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    if (user?.id) {
-      fetchProfileAvatar(user.id).then((url) => {
-        if (!cancelled) setCustomAvatar(url);
-      });
-    } else {
-      setCustomAvatar(null);
-    }
-    return () => { cancelled = true; };
-  }, [user?.id]);
+  const { user, configured, avatar } = useAuth();
 
   if (!configured) return null;
 
@@ -47,7 +27,7 @@ export default function AccountMenu() {
   const meta = user?.user_metadata || {};
   const label = meta.full_name || meta.name || user?.email || 'Account';
   const initial = String(label).trim().charAt(0).toUpperCase() || 'F';
-  const avatar = customAvatar || meta.avatar_url || meta.picture || null;
+  const img = avatar || meta.avatar_url || meta.picture || null;
 
   return (
     <Link
@@ -58,8 +38,8 @@ export default function AccountMenu() {
                  bg-ink-raised text-sm font-black text-white ring-1 ring-ink-border
                  transition hover:ring-brand/60"
     >
-      {avatar ? (
-        <img src={avatar} alt="" className="h-full w-full object-cover" />
+      {img ? (
+        <img src={img} alt="" className="h-full w-full object-cover" />
       ) : (
         initial
       )}

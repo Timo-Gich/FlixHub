@@ -1,14 +1,14 @@
 // ----------------------------------------------------------------------------
 // Library persistence layer for Watch Later + History.
 //
-// Everything is stored in localStorage (no backend yet). A lightweight custom
-// event broadcasts changes so any component can re-read the latest state and
-// stay in sync (e.g. a bookmark toggled on one card updates all cards).
+// Guest library data and the signed-in Supabase mirror share these localStorage
+// keys. Signed-in writes use cache helpers only after their cloud write succeeds.
 // ----------------------------------------------------------------------------
 
 const WATCH_LATER_KEY = 'flixhub.watchLater';
 const HISTORY_KEY = 'flixhub.history';
 const FAVORITES_LIVE_KEY = 'flixhub.favoritesLive';
+const GUEST_LIBRARY_PENDING_KEY = 'flixhub.guestLibraryPending';
 const CHANGE_EVENT = 'flixhub:library';
 
 // Hard cap for history — oldest entries are trimmed past this.
@@ -27,12 +27,104 @@ function readJSON(key, fallback) {
   }
 }
 
-function writeJSON(key, value) {
+function writeJSON(key, value, guestChange = true) {
   try {
     localStorage.setItem(key, JSON.stringify(value));
+    if (guestChange) localStorage.setItem(GUEST_LIBRARY_PENDING_KEY, '1');
   } catch {
     // storage may be full/blocked; fail silently rather than crashing the UI
   }
+  notifyChange();
+}
+
+function historyKey(entry) {
+  return `${entry?.movie?.id}|${entry?.season ?? 0}|${entry?.episode ?? 0}`;
+}
+
+function updateCacheList(key, update) {
+  const next = update(readJSON(key, []));
+  writeJSON(key, next, false);
+}
+
+export function replaceWatchLaterCache(items) {
+  writeJSON(WATCH_LATER_KEY, items, false);
+}
+
+export function replaceHistoryCache(items) {
+  writeJSON(HISTORY_KEY, items, false);
+}
+
+export function replaceFavoritesLiveCache(items) {
+  writeJSON(FAVORITES_LIVE_KEY, items, false);
+}
+
+export function upsertWatchLaterCache(entry) {
+  updateCacheList(WATCH_LATER_KEY, (items) => [
+    entry,
+    ...items.filter((item) => item?.movie?.id !== entry?.movie?.id),
+  ]);
+}
+
+export function removeWatchLaterCache(id) {
+  updateCacheList(WATCH_LATER_KEY, (items) => items.filter((item) => item?.movie?.id !== id));
+}
+
+export function upsertHistoryCache(entry) {
+  updateCacheList(HISTORY_KEY, (items) => {
+    const key = historyKey(entry);
+    return [entry, ...items.filter((item) => historyKey(item) !== key)].slice(0, MAX_HISTORY);
+  });
+}
+
+export function replaceHistoryForMediaCache(id, entries) {
+  updateCacheList(HISTORY_KEY, (items) => [
+    ...entries,
+    ...items.filter((item) => item?.movie?.id !== id),
+  ].slice(0, MAX_HISTORY));
+}
+
+export function removeHistoryCache(id) {
+  updateCacheList(HISTORY_KEY, (items) => items.filter((item) => item?.movie?.id !== id));
+}
+
+export function clearHistoryCache() {
+  replaceHistoryCache([]);
+}
+
+export function upsertFavoritesLiveCache(entry) {
+  const key = entry?.channel?.id ?? entry?.channel?.name;
+  updateCacheList(FAVORITES_LIVE_KEY, (items) => [
+    entry,
+    ...items.filter((item) => (item?.channel?.id ?? item?.channel?.name) !== key),
+  ]);
+}
+
+export function removeFavoritesLiveCache(id) {
+  updateCacheList(FAVORITES_LIVE_KEY, (items) => (
+    items.filter((item) => (item?.channel?.id ?? item?.channel?.name) !== id)
+  ));
+}
+
+export function hasPendingGuestLibrary() {
+  try {
+    return localStorage.getItem(GUEST_LIBRARY_PENDING_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+export function clearPendingGuestLibrary() {
+  try {
+    localStorage.removeItem(GUEST_LIBRARY_PENDING_KEY);
+  } catch {
+    // storage may be blocked
+  }
+}
+
+export function clearLibraryCache() {
+  [WATCH_LATER_KEY, HISTORY_KEY, FAVORITES_LIVE_KEY, GUEST_LIBRARY_PENDING_KEY].forEach((key) => {
+    try { localStorage.removeItem(key); } catch { /* storage may be blocked */ }
+  });
   notifyChange();
 }
 
@@ -113,14 +205,19 @@ export function logPlayed(movie, opts = {}) {
   // Pull out any existing entry for this title so a re-watch moves it to the
   // front (and keeps episode metadata) without discarding saved progress.
   const existing = items.find((e) => e.movie.id === movie.id);
-  // Re-logging the exact same episode (or a movie) should keep the progress
-  // bar; switching to a different episode resets it so it tracks the new one.
-  const sameEpisode =
-    existing &&
-    existing.type === (opts.type || undefined) &&
-    existing.season === opts.season &&
-    existing.episode === opts.episode;
-  const merged = {
+  const merged = createPlayedEntry(movie, opts, existing);
+  let next = [merged, ...items.filter((e) => e.movie.id !== movie.id)];
+  if (next.length > MAX_HISTORY) next = next.slice(0, MAX_HISTORY);
+  writeJSON(HISTORY_KEY, next);
+  return merged;
+}
+
+export function createPlayedEntry(movie, opts = {}, existing) {
+  const sameEpisode = existing
+    && existing.type === (opts.type || undefined)
+    && existing.season === opts.season
+    && existing.episode === opts.episode;
+  const entry = {
     movie: snapshot(movie),
     watchedAt: Date.now(),
     progressSeconds: sameEpisode ? existing.progressSeconds || 0 : 0,
@@ -129,14 +226,10 @@ export function logPlayed(movie, opts = {}) {
     season: opts.season,
     episode: opts.episode,
   };
-  // Keep a prior (non-zero) duration when the fresh title reports none (e.g.
-  // most TV series have no `runtime`), so Continue Watching still knows a length.
-  if (!merged.durationSeconds && existing?.durationSeconds) {
-    merged.durationSeconds = existing.durationSeconds;
+  if (!entry.durationSeconds && existing?.durationSeconds) {
+    entry.durationSeconds = existing.durationSeconds;
   }
-  let next = [merged, ...items.filter((e) => e.movie.id !== movie.id)];
-  if (next.length > MAX_HISTORY) next = next.slice(0, MAX_HISTORY);
-  writeJSON(HISTORY_KEY, next);
+  return entry;
 }
 
 /**
@@ -150,25 +243,29 @@ export function logPlayed(movie, opts = {}) {
  */
 export function updateWatchProgress(id, seconds, durationSeconds, opts = {}) {
   if (id == null) return;
+  const result = withWatchProgress(getHistory(), id, seconds, durationSeconds, opts);
+  if (result.changed) writeJSON(HISTORY_KEY, result.items);
+}
+
+export function withWatchProgress(items, id, seconds, durationSeconds, opts = {}) {
+  if (id == null) return { items, changed: false };
   const { season, episode } = opts;
-  const items = getHistory();
   let changed = false;
-  const next = items.map((e) => {
-    if (e.movie.id !== id) return e;
-    // Skip if this tick belongs to a different episode of the series.
-    if (season != null && (e.season !== season || e.episode !== episode)) return e;
-    if (seconds > (e.progressSeconds || 0)) {
+  const next = items.map((entry) => {
+    if (entry.movie.id !== id) return entry;
+    if (season != null && (entry.season !== season || entry.episode !== episode)) return entry;
+    if (seconds > (entry.progressSeconds || 0)) {
       changed = true;
       return {
-        ...e,
+        ...entry,
         progressSeconds: Math.round(seconds),
-        durationSeconds: durationSeconds || e.durationSeconds || 0,
+        durationSeconds: durationSeconds || entry.durationSeconds || 0,
         updatedAt: Date.now(),
       };
     }
-    return e;
+    return entry;
   });
-  if (changed) writeJSON(HISTORY_KEY, next);
+  return { items: changed ? next : items, changed };
 }
 
 export function removeFromHistory(id) {

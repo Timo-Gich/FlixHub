@@ -5,7 +5,7 @@ import Footer from '../components/Footer';
 import ConfirmDialog from '../components/ConfirmDialog';
 import SyncNudge from '../components/SyncNudge';
 import { MAX_HISTORY } from '../services/libraryService';
-import { useLibrary } from '../hooks/useLibrary';
+import { useLibrary } from '../hooks/useLibrary.jsx';
 import { getPosterUrl, formatYear } from '../services/tmdbService';
 
 // Swipe-to-remove tuning.

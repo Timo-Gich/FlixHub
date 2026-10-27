@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { useLibrary } from '../hooks/useLibrary';
+import { useLibrary } from '../hooks/useLibrary.jsx';
 import { programmeProgress, formatRange } from '../services/liveTvService';
 
 /**

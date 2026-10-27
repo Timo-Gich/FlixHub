@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useLibrary } from '../hooks/useLibrary';
+import { useLibrary } from '../hooks/useLibrary.jsx';
 
 /**
  * Compact Watchlist (bookmark) toggle for search rows.

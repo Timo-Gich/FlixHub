@@ -8,7 +8,7 @@ import {
   fetchPlaylist, EPG_REGIONS, fetchEPGForRegions, getRegionForCountry,
   matchProgrammes, pickFeaturedOnNow, sliceWindow,
 } from '../services/liveTvService';
-import { useLibrary } from '../hooks/useLibrary';
+import { useLibrary } from '../hooks/useLibrary.jsx';
 
 const REGION_KEY = 'flixhub.liveRegion';
 const VIEW_KEY = 'flixhub.liveView';

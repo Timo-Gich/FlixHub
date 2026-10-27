@@ -4,7 +4,7 @@ import VideoPlayer from '../components/VideoPlayer';
 import { fetchTVDetails } from '../services/tmdbService';
 import { useMovieData } from '../hooks/useMovieData';
 import { FINISH_THRESHOLD } from '../services/libraryService';
-import { useLibrary } from '../hooks/useLibrary';
+import { useLibrary } from '../hooks/useLibrary.jsx';
 import { saveLastSeason, markEpisodeWatched } from '../services/seasonMem';
 
 // Only treat an episode as "started" after this much real watch time (in

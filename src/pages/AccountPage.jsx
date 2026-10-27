@@ -3,7 +3,7 @@ import { Link, useNavigate, useLocation } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import { useAuth } from '../context/AuthContext';
-import { useLibrary } from '../hooks/useLibrary';
+import { useLibrary } from '../hooks/useLibrary.jsx';
 import { deleteAccount, signOut } from '../services/authService';
 import NotificationCenter from '../components/NotificationCenter';
 import ConfirmDialog from '../components/ConfirmDialog';
@@ -430,3 +430,4 @@ export default function AccountPage() {
     </div>
   );
 }
+

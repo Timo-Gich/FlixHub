@@ -3,7 +3,7 @@ import { useParams } from 'react-router-dom';
 import VideoPlayer from '../components/VideoPlayer';
 import { fetchMovieDetails } from '../services/tmdbService';
 import { useMovieData } from '../hooks/useMovieData';
-import { useLibrary } from '../hooks/useLibrary';
+import { useLibrary } from '../hooks/useLibrary.jsx';
 
 /**
  * /watch/:id - movie player with a server selector (2Embed / VidSrc / VidCore).

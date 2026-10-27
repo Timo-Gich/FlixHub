@@ -4,7 +4,7 @@ import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import MovieCard from '../components/MovieCard';
 import SyncNudge from '../components/SyncNudge';
-import { useLibrary } from '../hooks/useLibrary';
+import { useLibrary } from '../hooks/useLibrary.jsx';
 
 const SORT_OPTIONS = [
   { value: 'recent', label: 'Recently added' },

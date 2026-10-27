@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { getPosterUrl, formatRating, formatYear } from '../services/tmdbService';
-import { useLibrary } from '../hooks/useLibrary';
+import { useLibrary } from '../hooks/useLibrary.jsx';
 import { gradients } from '../data/movies';
 
 /**

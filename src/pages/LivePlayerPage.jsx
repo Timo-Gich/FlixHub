@@ -23,7 +23,7 @@ import {
   getRegionByCode,
   getRegionForCountry,
 } from '../services/liveTvService';
-import { useLibrary } from '../hooks/useLibrary';
+import { useLibrary } from '../hooks/useLibrary.jsx';
 
 const REGION_KEY = 'flixhub.liveRegion';
 // Public IPTV streams go offline a lot — if the player hasn't produced any media
@@ -513,3 +513,4 @@ return (
     </div>
   );
 }
+

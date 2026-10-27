@@ -16,6 +16,7 @@ import ImdbDetailPage from './pages/ImdbDetailPage';
 import ImdbWatchPage from './pages/ImdbWatchPage';
 import InfoPage from './pages/InfoPage';
 import { AuthProvider } from './context/AuthContext';
+import { LibraryProvider } from './hooks/useLibrary.jsx';
 import { NotificationsProvider } from './context/NotificationsContext';
 import BottomNav from './components/BottomNav';
 import LoginPage from './pages/LoginPage';
@@ -81,6 +82,7 @@ function ScrollMem() {
 export default function App() {
   return (
     <AuthProvider>
+    <LibraryProvider>
     <BrowserRouter>
       <NotificationsProvider>
       <VercelAnalytics />
@@ -128,6 +130,7 @@ export default function App() {
       <div className="h-14 md:hidden" aria-hidden="true" />
       </NotificationsProvider>
     </BrowserRouter>
+    </LibraryProvider>
     </AuthProvider>
   );
 }

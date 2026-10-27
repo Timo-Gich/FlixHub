@@ -6,7 +6,7 @@ import MovieCard from '../components/MovieCard';
 import Footer from '../components/Footer';
 import { fetchTrendingMovies, fetchPopularMovies } from '../services/tmdbService';
 import { FINISH_THRESHOLD } from '../services/libraryService';
-import { useLibrary } from '../hooks/useLibrary';
+import { useLibrary } from '../hooks/useLibrary.jsx';
 
 /**
  * Home page: the fixed navbar, a full-width trending hero carousel, a

@@ -73,7 +73,21 @@ function sortHistory(items) {
  * users read/write Supabase with a local mirror for instant UI updates.
  * On first sign-in, local items are merged up into the cloud once.
  */
+import { createContext, useContext } from 'react';
+
+const LibraryContext = createContext(null);
+
+export function LibraryProvider({ children }) {
+  const value = useLibraryState();
+  return <LibraryContext.Provider value={value}>{children}</LibraryContext.Provider>;
+}
+
 export function useLibrary() {
+  const ctx = useContext(LibraryContext);
+  if (!ctx) throw new Error('useLibrary must be used within LibraryProvider');
+  return ctx;
+}
+function useLibraryState() {
   const { user, isGuest } = useAuth();
   const userId = user?.id ?? null;
   const [watchLater, setWatchLater] = useState(() => local.getWatchLater());

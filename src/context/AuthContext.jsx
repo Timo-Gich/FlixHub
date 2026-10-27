@@ -11,7 +11,9 @@ const AuthContext = createContext({
   isGuest: true,
   refresh: async () => {},
   avatar: null,
+  avatarLoading: false,
   refreshAvatar: async () => {},
+  updateAvatar: () => {},
 });
 
 export function AuthProvider({ children }) {
@@ -20,11 +22,18 @@ export function AuthProvider({ children }) {
   const sessionRef = useRef(null);
   const [loading, setLoading] = useState(() => configured);
   const [avatar, setAvatar] = useState(null);
+  const [avatarLoading, setAvatarLoading] = useState(() => configured);
 
   const applySession = useCallback((nextSession) => {
     const previousUserId = sessionRef.current?.user?.id;
     const nextUserId = nextSession?.user?.id;
-    if (previousUserId && previousUserId !== nextUserId) clearLibraryCache();
+    if (previousUserId !== nextUserId) {
+      if (previousUserId) clearLibraryCache();
+      setAvatar(null);
+      setAvatarLoading(Boolean(nextUserId));
+    } else if (!nextUserId) {
+      setAvatarLoading(false);
+    }
     sessionRef.current = nextSession;
     setSession(nextSession);
   }, []);
@@ -34,8 +43,14 @@ export function AuthProvider({ children }) {
     if (!id) { setAvatar(null); return null; }
     const url = await fetchProfileAvatar(id);
     setAvatar(url);
+    setAvatarLoading(false);
     return url;
   }, [session?.user?.id]);
+
+  const updateAvatar = useCallback((url) => {
+    setAvatar(url);
+    setAvatarLoading(false);
+  }, []);
 
   const refresh = useCallback(async () => {
     const sb = getSupabase();
@@ -45,9 +60,18 @@ export function AuthProvider({ children }) {
   }, [applySession]);
 
   useEffect(() => {
-    if (!session?.user?.id) { setAvatar(null); return; }
+    if (!session?.user?.id) {
+      setAvatar(null);
+      setAvatarLoading(false);
+      return;
+    }
     let cancelled = false;
-    fetchProfileAvatar(session.user.id).then((url) => { if (!cancelled) setAvatar(url); });
+    fetchProfileAvatar(session.user.id).then((url) => {
+      if (!cancelled) {
+        setAvatar(url);
+        setAvatarLoading(false);
+      }
+    });
     return () => { cancelled = true; };
   }, [session?.user?.id]);
 
@@ -86,9 +110,11 @@ export function AuthProvider({ children }) {
       isGuest: !session?.user,
       refresh,
       avatar,
+      avatarLoading,
       refreshAvatar,
+      updateAvatar,
     }),
-    [session, loading, configured, refresh, avatar, refreshAvatar],
+    [session, loading, configured, refresh, avatar, avatarLoading, refreshAvatar, updateAvatar],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

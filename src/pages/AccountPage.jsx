@@ -7,9 +7,9 @@ import { useLibrary } from '../hooks/useLibrary.jsx';
 import { deleteAccount, signOut } from '../services/authService';
 import NotificationCenter from '../components/NotificationCenter';
 import ConfirmDialog from '../components/ConfirmDialog';
-import { uploadAvatar, removeAvatar, fetchProfileAvatar, validateAvatarFile } from '../services/avatarService';
+import { uploadAvatar, removeAvatar, validateAvatarFile } from '../services/avatarService';
 
-function SignedInBody({ userId, oauthAvatar, displayName, email, provider, memberSince, syncing, counts, signingOut, deletingAccount, deleteError, error, onSignOut, onDeleteAccount }) {
+function SignedInBody({ userId, customAvatar, avatarLoading, onAvatarChange, oauthAvatar, displayName, email, provider, memberSince, syncing, counts, signingOut, deletingAccount, deleteError, error, onSignOut, onDeleteAccount }) {
   const stats = [
     {
       label: 'Watchlist', value: counts.watchLater, to: '/watch-later',
@@ -42,21 +42,12 @@ function SignedInBody({ userId, oauthAvatar, displayName, email, provider, membe
       ),
     },
   ];
-  const [customAvatar, setCustomAvatar] = useState(null);
   const [avatarBusy, setAvatarBusy] = useState(false);
   const [avatarError, setAvatarError] = useState(null);
   const fileRef = useRef(null);
   const avatarWrapRef = useRef(null);
 
-  useEffect(() => {
-    let cancelled = false;
-    fetchProfileAvatar(userId).then((url) => {
-      if (!cancelled) setCustomAvatar(url);
-    });
-    return () => { cancelled = true; };
-  }, [userId]);
-
-  const avatar = customAvatar || oauthAvatar || null;
+  const avatar = customAvatar || (!avatarLoading && oauthAvatar) || null;
   const hasCustom = Boolean(customAvatar);
 
   const onPickFile = async (e) => {
@@ -72,7 +63,7 @@ function SignedInBody({ userId, oauthAvatar, displayName, email, provider, membe
     setAvatarError(null);
     try {
       const url = await uploadAvatar(userId, file);
-      setCustomAvatar(url.split('?')[0]);
+      onAvatarChange(url);
     } catch (err) {
       setAvatarError(err.message || 'Upload failed. Try again.');
     } finally {
@@ -85,7 +76,7 @@ function SignedInBody({ userId, oauthAvatar, displayName, email, provider, membe
     setAvatarError(null);
     try {
       await removeAvatar(userId);
-      setCustomAvatar(null);
+      onAvatarChange(null);
     } catch (err) {
       setAvatarError(err.message || 'Remove failed. Try again.');
     } finally {
@@ -265,7 +256,7 @@ function SignedInBody({ userId, oauthAvatar, displayName, email, provider, membe
 }
 
 export default function AccountPage() {
-  const { user, configured, loading } = useAuth();
+  const { user, configured, loading, avatar: customAvatar, avatarLoading, updateAvatar } = useAuth();
   const { watchLater, history, favoritesLive, syncing } = useLibrary();
   const location = useLocation();
   useEffect(() => {
@@ -397,6 +388,9 @@ export default function AccountPage() {
         ) : (
           <SignedInBody
             userId={user.id}
+            customAvatar={customAvatar}
+            avatarLoading={avatarLoading}
+            onAvatarChange={updateAvatar}
             oauthAvatar={avatar}
             displayName={displayName}
             email={email}
@@ -430,4 +424,3 @@ export default function AccountPage() {
     </div>
   );
 }
-

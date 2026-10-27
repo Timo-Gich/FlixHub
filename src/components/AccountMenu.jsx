@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
 export default function AccountMenu() {
-  const { user, configured, avatar } = useAuth();
+  const { user, configured, avatar, avatarLoading } = useAuth();
 
   if (!configured) return null;
 
@@ -27,7 +27,7 @@ export default function AccountMenu() {
   const meta = user?.user_metadata || {};
   const label = meta.full_name || meta.name || user?.email || 'Account';
   const initial = String(label).trim().charAt(0).toUpperCase() || 'F';
-  const img = avatar || meta.avatar_url || meta.picture || null;
+  const img = avatarLoading ? null : avatar || meta.avatar_url || meta.picture || null;
 
   return (
     <Link

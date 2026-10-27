@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import webpush from 'web-push';
+import { configureVapid, getAdminClient } from './_lib/push.mjs';
 
 const MAX_TITLE_LENGTH = 100;
 const MAX_BODY_LENGTH = 240;
@@ -25,19 +26,20 @@ function validAppPath(value) {
   }
 }
 
-function getAdminClient() {
-  const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !key) throw new Error('Server notification credentials are not configured.');
-  return createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
-}
-
 export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store');
   if (req.method === 'GET') {
-    const publicKey = process.env.VAPID_PUBLIC_KEY || '';
-    if (!publicKey) return json(res, 503, { error: 'Background notifications are not configured.' });
-    return json(res, 200, { publicKey });
+    try {
+      configureVapid();
+      getAdminClient();
+      const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+      const anonKey = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY;
+      if (!supabaseUrl || !anonKey) throw new Error('Supabase authentication credentials are not configured.');
+    } catch (error) {
+      console.error('[push] server configuration is invalid', error);
+      return json(res, 503, { error: 'Push server configuration is incomplete or invalid.' });
+    }
+    return json(res, 200, { publicKey: process.env.VAPID_PUBLIC_KEY });
   }
   if (req.method !== 'POST') {
     res.setHeader('Allow', 'GET, POST');
@@ -47,11 +49,11 @@ export default async function handler(req, res) {
   const token = getBearerToken(req);
   if (!token) return json(res, 401, { error: 'Sign in is required.' });
 
-  const vapidPublic = process.env.VAPID_PUBLIC_KEY;
-  const vapidPrivate = process.env.VAPID_PRIVATE_KEY;
-  const vapidSubject = process.env.VAPID_SUBJECT;
-  if (!vapidPublic || !vapidPrivate || !vapidSubject) {
-    return json(res, 503, { error: 'Background notifications are not configured on the server.' });
+  try {
+    configureVapid();
+  } catch (error) {
+    console.error('[push] VAPID configuration is invalid', error);
+    return json(res, 503, { error: 'Push server configuration is incomplete or invalid.' });
   }
 
   let admin;
@@ -98,7 +100,6 @@ export default async function handler(req, res) {
     tag: String(payload.tag || `flixhub-${Date.now()}`).slice(0, 100),
   });
 
-  webpush.setVapidDetails(vapidSubject, vapidPublic, vapidPrivate);
   const outcomes = await Promise.allSettled(subscriptions.map(async (row) => {
     try {
       await webpush.sendNotification(

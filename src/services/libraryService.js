@@ -156,6 +156,7 @@ function snapshot(movie) {
     vote_average: movie.vote_average,
     original_language: movie.original_language,
     overview: movie.overview,
+    genre_ids: movie.genre_ids || [],
   };
 }
 

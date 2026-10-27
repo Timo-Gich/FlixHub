@@ -35,12 +35,16 @@ function requireSupabase() {
 }
 
 export async function fetchNotifications(userId) {
-  if (!userId) return readJSON(GUEST_NOTIFICATIONS_KEY, []);
+  const now = new Date().toISOString();
+  if (!userId) {
+    return readJSON(GUEST_NOTIFICATIONS_KEY, []).filter((item) => !item.expires_at || item.expires_at > now);
+  }
   const sb = requireSupabase();
   const { data, error } = await sb
     .from('notifications')
     .select('*')
     .eq('user_id', userId)
+    .gt('expires_at', now)
     .order('created_at', { ascending: false })
     .limit(50);
   if (error) throw error;
@@ -80,13 +84,17 @@ export async function saveNotificationSettings(userId, settings) {
 
 export async function createNotification(userId, notification) {
   if (!userId) {
-    const items = readJSON(GUEST_NOTIFICATIONS_KEY, []);
+    const now = new Date();
+    const items = readJSON(GUEST_NOTIFICATIONS_KEY, []).filter(
+      (item) => !item.expires_at || Date.parse(item.expires_at) > now.getTime(),
+    );
     if (items.some((item) => item.dedupe_key === notification.dedupe_key)) return null;
     const item = {
       id: globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`,
       ...notification,
       read_at: null,
       created_at: new Date().toISOString(),
+      expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
     };
     writeJSON(GUEST_NOTIFICATIONS_KEY, [item, ...items].slice(0, 50));
     return item;
@@ -100,6 +108,7 @@ export async function createNotification(userId, notification) {
         type: notification.type,
         payload: notification.payload,
         dedupe_key: notification.dedupe_key,
+        expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
       },
       { onConflict: 'user_id,dedupe_key', ignoreDuplicates: true },
     )

@@ -12,13 +12,23 @@ export function configureVapid() {
   const vapidPublic = process.env.VAPID_PUBLIC_KEY;
   const vapidPrivate = process.env.VAPID_PRIVATE_KEY;
   const vapidSubject = process.env.VAPID_SUBJECT;
-  if (!vapidPublic || !vapidPrivate || !vapidSubject) return false;
-  webpush.setVapidDetails(vapidSubject, vapidPublic, vapidPrivate);
+  if (!vapidPublic || !vapidPrivate || !vapidSubject) {
+    throw new Error('VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, and VAPID_SUBJECT must all be configured.');
+  }
+  try {
+    webpush.setVapidDetails(vapidSubject, vapidPublic, vapidPrivate);
+  } catch (error) {
+    throw new Error('VAPID configuration is invalid.', { cause: error });
+  }
   return true;
 }
 
 export async function sendPushToUser(admin, userId, payload) {
-  const { data: subs } = await admin.from('push_subscriptions').select('id, endpoint, p256dh, auth').eq('user_id', userId);
+  const { data: subs, error } = await admin
+    .from('push_subscriptions')
+    .select('id, endpoint, p256dh, auth')
+    .eq('user_id', userId);
+  if (error) throw error;
   if (!subs?.length) return { sent: 0, failed: 0 };
   const message = JSON.stringify(payload);
   const outcomes = await Promise.allSettled(subs.map(async (row) => {
@@ -27,7 +37,12 @@ export async function sendPushToUser(admin, userId, payload) {
       return true;
     } catch (error) {
       if (error.statusCode === 404 || error.statusCode === 410) {
-        await admin.from('push_subscriptions').delete().eq('id', row.id).eq('user_id', userId);
+        const { error: deleteError } = await admin
+          .from('push_subscriptions')
+          .delete()
+          .eq('id', row.id)
+          .eq('user_id', userId);
+        if (deleteError) console.error('[push] could not remove expired subscription', deleteError);
         return false;
       }
       throw error;

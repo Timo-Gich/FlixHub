@@ -68,10 +68,15 @@ create table if not exists public.notifications (
   dedupe_key text,
   read_at timestamptz,
   created_at timestamptz not null default now(),
+  expires_at timestamptz not null default (now() + interval '30 days'),
   unique (user_id, dedupe_key)
 );
+alter table public.notifications
+  add column if not exists expires_at timestamptz not null default (now() + interval '30 days');
 create index if not exists notifications_user_created_idx
   on public.notifications (user_id, created_at desc);
+create index if not exists notifications_expires_at_idx
+  on public.notifications (expires_at);
 
 -- Push endpoints are private credentials and are only readable by the push API
 -- using the server-side service role, never by another signed-in user.

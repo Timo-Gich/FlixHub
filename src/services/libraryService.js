@@ -18,6 +18,29 @@ export const MAX_HISTORY = 200;
 // by Continue Watching ordering and the player's Back-link auto-advance decision.
 export const FINISH_THRESHOLD = 0.98;
 
+function historyTimestamp(entry) {
+  return Number(entry?.updatedAt || entry?.watchedAt) || 0;
+}
+
+function historyMediaType(entry) {
+  return entry.type
+    || entry.movie.media_type
+    || (entry.movie.name && !entry.movie.title ? 'tv' : 'movie');
+}
+
+export function latestHistoryByTitle(items = []) {
+  const latest = new Map();
+  for (const entry of items) {
+    if (entry?.movie?.id == null) continue;
+    const key = `${historyMediaType(entry)}|${entry.movie.id}`;
+    const previous = latest.get(key);
+    if (!previous || historyTimestamp(entry) > historyTimestamp(previous)) {
+      latest.set(key, entry);
+    }
+  }
+  return [...latest.values()].sort((a, b) => historyTimestamp(b) - historyTimestamp(a));
+}
+
 function readJSON(key, fallback) {
   try {
     const raw = localStorage.getItem(key);

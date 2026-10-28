@@ -5,7 +5,7 @@ import MovieRow from '../components/MovieRow';
 import MovieCard from '../components/MovieCard';
 import Footer from '../components/Footer';
 import { fetchTrendingMovies, fetchPopularMovies } from '../services/tmdbService';
-import { FINISH_THRESHOLD } from '../services/libraryService';
+import { FINISH_THRESHOLD, latestHistoryByTitle } from '../services/libraryService';
 import { useLibrary } from '../hooks/useLibrary.jsx';
 
 /**
@@ -26,16 +26,7 @@ export default function HomePage() {
 
   // "Continue Watching" shows the latest entry per title, with in-progress
   // titles first. Cloud rows with a missing snapshot are skipped.
-  const validHistory = history.filter((entry) => entry?.movie?.id != null);
-  const latestByTitle = new Map();
-  for (const entry of validHistory) {
-    const key = `${entry.type || entry.movie.media_type || 'movie'}-${entry.movie.id}`;
-    const previous = latestByTitle.get(key);
-    if (!previous || (entry.updatedAt || entry.watchedAt || 0) > (previous.updatedAt || previous.watchedAt || 0)) {
-      latestByTitle.set(key, entry);
-    }
-  }
-  const latestHistory = [...latestByTitle.values()];
+  const latestHistory = latestHistoryByTitle(history);
   const continueWatching = [
     ...latestHistory.filter((entry) => !isFinished(entry)),
     ...latestHistory.filter(isFinished),

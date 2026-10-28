@@ -4,7 +4,7 @@ import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import ConfirmDialog from '../components/ConfirmDialog';
 import SyncNudge from '../components/SyncNudge';
-import { MAX_HISTORY } from '../services/libraryService';
+import { latestHistoryByTitle, MAX_HISTORY } from '../services/libraryService';
 import { useLibrary } from '../hooks/useLibrary.jsx';
 import { getPosterUrl, formatYear } from '../services/tmdbService';
 
@@ -38,6 +38,9 @@ function HistoryRow({ entry, onRemove }) {
   // Route to the matching detail page: TV shows to /tv/:id, movies to /movie/:id.
   const isTv = entry.type === 'tv' || movie.media_type === 'tv';
   const watchHref = isTv ? `/tv/${movie.id}` : `/movie/${movie.id}`;
+  const episodeLabel = isTv && entry.season != null && entry.episode != null
+    ? `S${entry.season} E${entry.episode}`
+    : null;
   const [tx, setTx] = useState(0);
   const [dragging, setDragging] = useState(false);
   const startRef = useRef(null);
@@ -120,7 +123,7 @@ function HistoryRow({ entry, onRemove }) {
         <span className="flex min-w-0 flex-1 flex-col">
           <span className="line-clamp-1 text-sm font-semibold text-foreground">{movie.title}</span>
           <span className="mt-0.5 text-xs text-muted">
-            {[year, timeLabel(entry.watchedAt)].filter(Boolean).join(' · ')}
+            {[episodeLabel, year, timeLabel(entry.watchedAt)].filter(Boolean).join(' · ')}
           </span>
         </span>
 
@@ -151,6 +154,7 @@ function HistoryRow({ entry, onRemove }) {
  */
 export default function HistoryPage() {
   const { history: items, removeHistory, clearAllHistory, syncing } = useLibrary();
+  const displayItems = latestHistoryByTitle(items);
   const [confirmClear, setConfirmClear] = useState(false);
 
   const removeById = (id) => {
@@ -168,8 +172,7 @@ export default function HistoryPage() {
   // snapshot are skipped so one corrupt cloud row can't blank the page.
   const groups = [];
   const seen = new Set();
-  for (const entry of items) {
-    if (entry?.movie?.id == null) continue;
+  for (const entry of displayItems) {
     const key = dayLabel(entry.watchedAt);
     if (!seen.has(key)) {
       seen.add(key);
@@ -186,7 +189,7 @@ export default function HistoryPage() {
         <div className="flex flex-wrap items-center gap-3">
           <h1 className="text-2xl font-black text-white">Watch History</h1>
           <span className="w-fit rounded bg-ink-raised px-2 py-0.5 text-xs font-semibold text-muted">
-            {items.length} watched{syncing ? ' · syncing…' : ''}
+            {displayItems.length} title{displayItems.length === 1 ? '' : 's'} watched{syncing ? ' · syncing…' : ''}
           </span>
           {items.length > 0 && (
             <button
@@ -200,7 +203,7 @@ export default function HistoryPage() {
           )}
         </div>
 
-        <SyncNudge hasItems={items.length > 0} />
+        <SyncNudge hasItems={displayItems.length > 0} />
 
         {items.length >= MAX_HISTORY && (
           <p className="mt-1 text-xs text-muted">
@@ -208,11 +211,11 @@ export default function HistoryPage() {
           </p>
         )}
 
-        {items.length === 0 ? (
+        {displayItems.length === 0 ? (
           <div className="mt-10 rounded-md border border-ink-border bg-ink-soft px-6 py-16 text-center">
             <p className="text-3xl font-black text-white">No watch history yet</p>
             <p className="mx-auto mt-2 max-w-md text-sm text-muted">
-              Movies you play will show up here, grouped by day.
+              Movies and shows you watch will show up here, grouped by day.
             </p>
             <Link
               to="/"
@@ -248,9 +251,9 @@ export default function HistoryPage() {
         open={confirmClear}
         title="Clear watch history?"
         message={
-          items.length > 0
-            ? `This will permanently remove all ${items.length} watched title${
-                items.length === 1 ? '' : 's'
+          displayItems.length > 0
+            ? `This will permanently remove all ${displayItems.length} title${
+                displayItems.length === 1 ? '' : 's'
               } from your history. This can't be undone.`
             : "This will permanently remove your entire watch history. This can't be undone."
         }

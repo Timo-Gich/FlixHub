@@ -4,6 +4,7 @@ import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import { useAuth } from '../context/AuthContext';
 import { useLibrary } from '../hooks/useLibrary.jsx';
+import { latestHistoryByTitle } from '../services/libraryService';
 import { deleteAccount, signOut } from '../services/authService';
 import NotificationCenter from '../components/NotificationCenter';
 import ConfirmDialog from '../components/ConfirmDialog';
@@ -397,7 +398,7 @@ export default function AccountPage() {
             provider={provider}
             memberSince={memberSince}
             syncing={syncing}
-            counts={{ watchLater: watchLater.length, history: history.length, favoritesLive: favoritesLive.length }}
+            counts={{ watchLater: watchLater.length, history: latestHistoryByTitle(history).length, favoritesLive: favoritesLive.length }}
             signingOut={signingOut}
             deletingAccount={deletingAccount}
             deleteError={deleteError}

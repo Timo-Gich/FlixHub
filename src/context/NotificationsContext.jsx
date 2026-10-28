@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from './AuthContext';
 import { fetchCloudLibrary } from '../services/cloudLibrary';
-import { getHistory, subscribeLibrary } from '../services/libraryService';
+import { getHistory, latestHistoryByTitle, subscribeLibrary } from '../services/libraryService';
 import {
   createNotification,
   DEFAULT_NOTIFICATION_SETTINGS,
@@ -21,7 +21,7 @@ const NotificationsContext = createContext(null);
 const FINISH_THRESHOLD = 0.98;
 
 function getUnfinishedHistory(history) {
-  return history.filter((entry) => {
+  return latestHistoryByTitle(history).filter((entry) => {
     const duration = Number(entry.durationSeconds) || 0;
     const progress = Number(entry.progressSeconds) || 0;
     return entry?.movie?.id != null && duration > 0 && progress > 0 && progress < duration * FINISH_THRESHOLD;

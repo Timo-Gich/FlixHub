@@ -291,13 +291,12 @@ function useLibraryState() {
         setHistoryValue(restored);
         pendingProgress.current.delete(key);
       });
-      if (activeUserId.current === userId) showLibraryError('Your watch progress could not be saved.');
       if (pendingProgress.current.size) {
         clearTimeout(progressTimer.current);
         progressTimer.current = setTimeout(flushProgress, PROGRESS_DEBOUNCE_MS);
       }
     }
-  }, [userId, setHistoryValue, showLibraryError]);
+  }, [userId, setHistoryValue]);
 
   const toggleSaved = useCallback(
     async (movie) => {

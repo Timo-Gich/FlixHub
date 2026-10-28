@@ -1,9 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from './AuthContext';
-import { fetchCloudLibrary } from '../services/cloudLibrary';
-import { getHistory, latestHistoryByTitle, subscribeLibrary } from '../services/libraryService';
 import {
-  createNotification,
   DEFAULT_NOTIFICATION_SETTINGS,
   enablePushNotifications,
   fetchNotificationSettings,
@@ -18,15 +15,6 @@ import {
 import Toast from '../components/Toast';
 
 const NotificationsContext = createContext(null);
-const FINISH_THRESHOLD = 0.98;
-
-function getUnfinishedHistory(history) {
-  return latestHistoryByTitle(history).filter((entry) => {
-    const duration = Number(entry.durationSeconds) || 0;
-    const progress = Number(entry.progressSeconds) || 0;
-    return entry?.movie?.id != null && duration > 0 && progress > 0 && progress < duration * FINISH_THRESHOLD;
-  }).sort((a, b) => (b.updatedAt || b.watchedAt || 0) - (a.updatedAt || a.watchedAt || 0));
-}
 
 export function NotificationsProvider({ children }) {
   const { user, session } = useAuth();
@@ -39,11 +27,18 @@ export function NotificationsProvider({ children }) {
   const toastTimer = useRef(null);
   const settingsRef = useRef(settings);
   const seenNotificationIds = useRef(new Set());
+  const recentToastTags = useRef(new Set());
   settingsRef.current = settings;
 
   const showToast = useCallback((notification) => {
     if (!userId) return;
     if (settingsRef.current.notifications_enabled && settingsRef.current.in_app_enabled) {
+      const tag = notification.payload?.tag || notification.dedupe_key;
+      if (tag && recentToastTags.current.has(tag)) return;
+      if (tag) {
+        recentToastTags.current.add(tag);
+        setTimeout(() => recentToastTags.current.delete(tag), 15000);
+      }
       setToast(notification);
       clearTimeout(toastTimer.current);
       toastTimer.current = setTimeout(() => setToast(null), 6500);
@@ -97,82 +92,6 @@ export function NotificationsProvider({ children }) {
     });
   }, [userId, ready, receiveNotification]);
 
-  const createSmartReminder = useCallback(async () => {
-    if (!userId) return;
-    if (!settingsRef.current.notifications_enabled || !settingsRef.current.notify_continue_watching) return;
-    let history = getHistory();
-    if (userId) {
-      try {
-        const cloud = await fetchCloudLibrary(userId);
-        const byEpisode = new Map(cloud.history.map((entry) => [
-          `${entry.movie.id}:${entry.season || 0}:${entry.episode || 0}`,
-          entry,
-        ]));
-        history.forEach((entry) => {
-          const key = `${entry.movie.id}:${entry.season || 0}:${entry.episode || 0}`;
-          const previous = byEpisode.get(key);
-          if (!previous || (entry.updatedAt || entry.watchedAt || 0) > (previous.updatedAt || previous.watchedAt || 0)) {
-            byEpisode.set(key, entry);
-          }
-        });
-        history = [...byEpisode.values()];
-      } catch (historyError) {
-        console.warn('[notifications] could not refresh cloud history', historyError);
-      }
-    }
-
-    const entry = getUnfinishedHistory(history)[0];
-    if (!entry) return;
-    const title = entry.movie.title || entry.movie.name || 'your title';
-    const episodeLabel = entry.type === 'tv' && entry.season && entry.episode
-      ? ` · S${entry.season} E${entry.episode}`
-      : '';
-    const href = entry.type === 'tv' && entry.season && entry.episode
-      ? `/watch/tv/${entry.movie.id}/${entry.season}/${entry.episode}`
-      : `/watch/${entry.movie.id}`;
-    const notification = {
-      type: 'continue_watching',
-      dedupe_key: `continue-watching:${entry.movie.id}:${entry.season || 0}:${entry.episode || 0}:${new Date().toISOString().slice(0, 10)}`,
-      payload: { title: 'Continue watching', body: `Pick up ${title}${episodeLabel} where you left off.`, href },
-    };
-
-    try {
-      const created = await createNotification(userId, notification);
-      if (!created) return;
-      receiveNotification(created);
-      if (userId && settingsRef.current.notifications_enabled && settingsRef.current.browser_enabled && session?.access_token) {
-        try {
-          await sendPushNotification(session.access_token, {
-            title: notification.payload.title,
-            body: notification.payload.body,
-            url: notification.payload.href,
-            tag: notification.dedupe_key,
-          });
-        } catch (pushError) {
-          console.error('[notifications] background delivery failed', pushError);
-          setError(pushError.message || 'Background notification delivery failed.');
-        }
-      }
-    } catch (createError) {
-      console.error('[notifications] failed to create continue-watching reminder', createError);
-      setError('Could not save a notification. Apply the latest supabase/schema.sql migration.');
-    }
-  }, [userId, session?.access_token, receiveNotification]);
-
-  useEffect(() => {
-    if (!userId || !ready || !settings.notifications_enabled || !settings.notify_continue_watching) return undefined;
-    let active = true;
-    const check = () => {
-      if (active && document.visibilityState === 'visible') createSmartReminder();
-    };
-    check();
-    document.addEventListener('visibilitychange', check);
-    return () => {
-      active = false;
-      document.removeEventListener('visibilitychange', check);
-    };
-  }, [ready, settings.notifications_enabled, settings.notify_continue_watching, createSmartReminder]);
-
   useEffect(() => {
     const onMessage = (event) => {
       if (!userId) return;
@@ -186,6 +105,7 @@ export function NotificationsProvider({ children }) {
           title: event.data.title,
           body: event.data.body,
           href: event.data.url,
+          tag: event.data.tag,
         },
       };
       showToast(notification);

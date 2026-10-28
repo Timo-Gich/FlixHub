@@ -4,6 +4,7 @@ import { getAdminClient, configureVapid, sendPushToUser } from '../_lib/push.mjs
 const TMDB_BASE_URL = 'https://api.themoviedb.org/3';
 const TMDB_TIMEOUT_MS = 12000;
 const NOTIFICATION_TTL_DAYS = 30;
+const CONTINUE_REMINDER_INTERVAL_DAYS = 7;
 const RECENT_RELEASE_DAYS = 7;
 const USER_BATCH_SIZE = 250;
 const USER_CONCURRENCY = 4;
@@ -240,11 +241,79 @@ async function buildUserCandidates(admin, userId, trending, apiKey, now) {
   return candidates;
 }
 
+async function buildContinueWatchingCandidate(admin, userId, now) {
+  const { data: history, error: historyError } = await admin.from('history_items')
+    .select('media_id, snapshot, progress_seconds, duration_seconds, type, season, episode, watched_at, updated_at')
+    .eq('user_id', userId)
+    .order('updated_at', { ascending: false })
+    .limit(200);
+  if (historyError) throw historyError;
+
+  const latestByTitle = new Map();
+  for (const entry of history || []) {
+    const type = mediaType(entry);
+    const id = String(entry.media_id);
+    const titleKey = `${type}:${id}`;
+    if (!latestByTitle.has(titleKey)) latestByTitle.set(titleKey, entry);
+  }
+
+  const unfinished = [...latestByTitle.values()].filter((entry) => {
+    const progress = Number(entry.progress_seconds) || 0;
+    const duration = Number(entry.duration_seconds) || 0;
+    return entry.snapshot && progress > 0 && duration > 0 && progress < duration * 0.98;
+  }).sort((a, b) => Date.parse(a.updated_at || a.watched_at) - Date.parse(b.updated_at || b.watched_at));
+  if (!unfinished.length) return null;
+
+  const { data: previousReminders, error: reminderError } = await admin.from('notifications')
+    .select('dedupe_key, created_at')
+    .eq('user_id', userId)
+    .eq('type', 'continue_watching')
+    .order('created_at', { ascending: false })
+    .limit(1000);
+  if (reminderError) throw reminderError;
+
+  const lastReminderAt = Date.parse(previousReminders?.[0]?.created_at || '');
+  if (Number.isFinite(lastReminderAt)
+    && now.getTime() - lastReminderAt < CONTINUE_REMINDER_INTERVAL_DAYS * 24 * 60 * 60 * 1000) {
+    return null;
+  }
+
+  const existingKeys = (previousReminders || []).map((reminder) => reminder.dedupe_key).filter(Boolean);
+  const entry = unfinished.find((candidate) => {
+    const type = mediaType(candidate);
+    const id = String(candidate.media_id);
+    const season = Number(candidate.season) || 0;
+    const episode = Number(candidate.episode) || 0;
+    const key = `continue-watching:${type}:${id}:${season}:${episode}`;
+    const legacyKeyPrefix = `continue-watching:${id}:${season}:${episode}:`;
+    return !existingKeys.some((existingKey) => existingKey === key || existingKey.startsWith(legacyKeyPrefix));
+  });
+  if (!entry) return null;
+
+  const type = mediaType(entry);
+  const id = String(entry.media_id);
+  const season = Number(entry.season) || 0;
+  const episode = Number(entry.episode) || 0;
+  const title = titleOf(entry.snapshot);
+  const episodeLabel = type === 'tv' && season && episode ? ` · S${season} E${episode}` : '';
+  const href = type === 'tv'
+    ? season && episode ? `/watch/tv/${id}/${season}/${episode}` : `/tv/${id}`
+    : `/watch/${id}`;
+  const key = `continue-watching:${type}:${id}:${season}:${episode}`;
+  return makeCandidate(
+    'continue_watching',
+    key,
+    'Continue watching',
+    `Pick up ${title}${episodeLabel} where you left off.`,
+    href,
+  );
+}
+
 async function getEnabledSettings(admin) {
   const settings = [];
   for (let offset = 0; ; offset += USER_BATCH_SIZE) {
     const { data, error } = await admin.from('notification_settings')
-      .select('user_id, notifications_enabled, browser_enabled')
+      .select('user_id, notifications_enabled, browser_enabled, notify_continue_watching')
       .eq('notifications_enabled', true)
       .range(offset, offset + USER_BATCH_SIZE - 1);
     if (error) throw error;
@@ -262,7 +331,7 @@ export default async function handler(req, res) {
   }
 
   const authorized = isAuthorized(req);
-  if (authorized === null) return json(res, 503, { error: 'CRON_SECRET is not configured on the server.' });
+  if (authorized === null) return json(res, 503, { error: 'CRON_SECRET or SECRET is not configured on the server.' });
   if (!authorized) return json(res, 401, { error: 'Unauthorized.' });
 
   let admin;
@@ -273,7 +342,10 @@ export default async function handler(req, res) {
     return json(res, 503, { error: 'Notification database credentials are not configured.' });
   }
 
-  const cleanup = await admin.from('notifications').delete().lt('expires_at', new Date().toISOString());
+  const cleanup = await admin.from('notifications')
+    .delete()
+    .neq('type', 'continue_watching')
+    .lt('expires_at', new Date().toISOString());
   if (cleanup.error) return json(res, 500, { error: 'Could not clean up expired notifications.' });
 
   let settings;
@@ -295,38 +367,55 @@ export default async function handler(req, res) {
   }
 
   const apiKey = process.env.TMDB_API_KEY;
-  if (!apiKey) return json(res, 503, { error: 'TMDB_API_KEY is not configured on the server.' });
-
   let trending;
-  try {
-    trending = await fetchTMDB('/trending/all/day', apiKey);
-  } catch (error) {
-    console.error('[notifications cron] could not load trending titles', error);
-    return json(res, 502, { error: 'Could not load current titles from TMDb.' });
+  let discoveryError;
+  if (!apiKey) {
+    discoveryError = 'TMDB_API_KEY is not configured on the server.';
+    console.error(`[notifications cron] ${discoveryError}`);
+  } else {
+    try {
+      trending = await fetchTMDB('/trending/all/day', apiKey);
+    } catch (error) {
+      discoveryError = 'Could not load current titles from TMDb.';
+      console.error('[notifications cron] could not load trending titles', error);
+    }
   }
 
   let totalInserted = 0;
   let totalPushed = 0;
   let pushFailures = 0;
-  let candidateFailures = 0;
+  let candidateFailures = discoveryError ? 1 : 0;
   const expiresAt = new Date(Date.now() + NOTIFICATION_TTL_DAYS * 24 * 60 * 60 * 1000).toISOString();
 
   for (let offset = 0; offset < settings.length; offset += USER_CONCURRENCY) {
     const batch = settings.slice(offset, offset + USER_CONCURRENCY);
     await Promise.all(batch.map(async (setting) => {
-      let candidates;
-      try {
-        candidates = await buildUserCandidates(admin, setting.user_id, trending, apiKey, new Date());
-      } catch (error) {
-        candidateFailures++;
-        console.error(`[notifications cron] candidate generation failed for user ${setting.user_id}`, error);
-        return;
+      const candidates = [];
+      if (trending && apiKey) {
+        try {
+          candidates.push(...await buildUserCandidates(admin, setting.user_id, trending, apiKey, new Date()));
+        } catch (error) {
+          candidateFailures++;
+          console.error(`[notifications cron] discovery candidate generation failed for user ${setting.user_id}`, error);
+        }
+      }
+      if (setting.notify_continue_watching) {
+        try {
+          const continueCandidate = await buildContinueWatchingCandidate(admin, setting.user_id, new Date());
+          if (continueCandidate) candidates.push(continueCandidate);
+        } catch (error) {
+          candidateFailures++;
+          console.error(`[notifications cron] continue-watching candidate generation failed for user ${setting.user_id}`, error);
+        }
       }
 
       for (const candidate of candidates) {
+        const notificationExpiresAt = candidate.type === 'continue_watching'
+          ? '9999-12-31T23:59:59.999Z'
+          : expiresAt;
         const { data: inserted, error } = await admin.from('notifications')
           .upsert(
-            { user_id: setting.user_id, ...candidate, expires_at: expiresAt },
+            { user_id: setting.user_id, ...candidate, expires_at: notificationExpiresAt },
             { onConflict: 'user_id,dedupe_key', ignoreDuplicates: true },
           )
           .select('id')
@@ -365,5 +454,6 @@ export default async function handler(req, res) {
     pushed: totalPushed,
     pushFailures,
     candidateFailures,
+    discoveryError,
   });
 }

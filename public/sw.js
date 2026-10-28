@@ -34,19 +34,20 @@ self.addEventListener('push', (event) => {
   const title = String(payload.title || 'FlixHub').slice(0, 100);
   const body = String(payload.body || 'You have a new notification.').slice(0, 240);
   const url = safeAppPath(payload.url);
+  const tag = String(payload.tag || 'flixhub-notification').slice(0, 100);
 
   event.waitUntil((async () => {
     const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
     const focused = clients.find((client) => client.visibilityState === 'visible' && 'focus' in client);
     if (focused) {
-      focused.postMessage({ type: 'flixhub:push', title, body, url });
+      focused.postMessage({ type: 'flixhub:push', title, body, url, tag });
       return;
     }
     await self.registration.showNotification(title, {
       body,
       icon: '/icons/icon-192.png',
       badge: '/icons/icon-192.png',
-      tag: String(payload.tag || 'flixhub-notification').slice(0, 100),
+      tag,
       data: { url },
     });
   })());

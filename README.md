@@ -22,7 +22,7 @@ A Netflix-inspired streaming web application for discovering, browsing, and watc
 
 ## Live TV guide/grid view
 
-![alt text](<live tv-1.png>)
+![alt text](<live tv.png>)
 
 
 ## Account page

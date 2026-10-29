@@ -2,10 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import Footer from '../components/Footer';
 import {
-  LiveButton,
   MediaPlayer,
   MediaProvider,
-  useMediaState,
 } from '@vidstack/react';
 import Hls from 'hls.js';
 import {
@@ -41,10 +39,7 @@ const HLS_CONFIG = {
   backBufferLength: 10,
   initialLiveManifestSize: 1,
   lowLatencyMode: true,
-  liveSyncDurationCount: 3,
-  liveMaxLatencyDurationCount: 5,
-  liveDurationInfinity: true,
-  maxLiveSyncPlaybackRate: 1.5,
+  maxLiveSyncPlaybackRate: 1.1,
   enableWorker: true,
 };
 
@@ -76,26 +71,6 @@ function formatClock(ms) {
   const d = new Date(ms);
   return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
-
-function LiveStatusButton() {
-  const behindLiveEdge = useMediaState('userBehindLiveEdge');
-
-  return (
-    <LiveButton
-      className="vds-live-button"
-      aria-label={behindLiveEdge ? 'Go live' : 'Live'}
-    >
-      <span className="vds-live-button-text inline-flex items-center gap-1.5">
-        <span
-          className="h-1.5 w-1.5 rounded-full bg-red-600"
-          aria-hidden="true"
-        />
-        {behindLiveEdge ? 'Go Live' : 'LIVE'}
-      </span>
-    </LiveButton>
-  );
-}
-
 /**
  * /live/:channelId — self-hosted HLS player + EPG rail (Now/Up next).
  */
@@ -121,7 +96,6 @@ export default function LivePlayerPage() {
   const stallArmedRef = useRef(false);
   const autoReloadedRef = useRef(false);
   const [stallReloadKey, setStallReloadKey] = useState(0);
-  const hlsRef = useRef(null);
 
   // src strategy: hit the raw stream first, fall back to the serverless proxy.
   const playerSrc = (() => {
@@ -260,37 +234,6 @@ export default function LivePlayerPage() {
     setStatus('healthy');
   };
 
-  const catchUpToLive = (hls = hlsRef.current) => {
-    if (
-      !hls?.media ||
-      hls.liveSyncPosition == null ||
-      !Number.isFinite(hls.liveSyncPosition) ||
-      hls.latency <= hls.maxLatency
-    ) {
-      return;
-    }
-
-    hls.media.currentTime = hls.liveSyncPosition;
-  };
-
-  const onHlsInstance = (event) => {
-    const hls = event.detail;
-    hlsRef.current = hls;
-
-    const recoverToLiveEdge = () => {
-      if (hlsRef.current === hls) catchUpToLive(hls);
-    };
-    const clearInstance = () => {
-      hls.off(Hls.Events.FRAG_BUFFERED, recoverToLiveEdge);
-      hls.off(Hls.Events.ERROR, recoverToLiveEdge);
-      if (hlsRef.current === hls) hlsRef.current = null;
-    };
-
-    hls.on(Hls.Events.FRAG_BUFFERED, recoverToLiveEdge);
-    hls.on(Hls.Events.ERROR, recoverToLiveEdge);
-    hls.on(Hls.Events.DESTROYING, clearInstance);
-  };
-
   const clearStallTimer = () => {
     if (stallTimerRef.current) {
       clearTimeout(stallTimerRef.current);
@@ -300,14 +243,12 @@ export default function LivePlayerPage() {
   };
 
   const onPlaying = () => {
-    catchUpToLive();
     clearStallTimer();
     autoReloadedRef.current = false; // a new stall episode may reload again
     markActive();
   };
   // Time advancing means we are definitely not stalled.
   const onTimeUpdate = () => {
-    catchUpToLive();
     clearStallTimer();
     markActive();
   };
@@ -462,22 +403,16 @@ return (
             <MediaPlayer
               key={`${playerSrc}#retry-${retryKey}#stall-${stallReloadKey}`}
               src={playerSrc}
-              streamType="live"
               playsInline
               autoPlay
               onPlaying={onPlaying}
               onTimeUpdate={onTimeUpdate}
               onError={onError}
               onHlsError={onHlsError}
-              onHlsInstance={onHlsInstance}
               onWaiting={onWaiting}
             >
               <MediaProvider library={Hls} config={HLS_CONFIG} />
-              <DefaultVideoLayout
-                icons={defaultLayoutIcons}
-                noScrubber={false}
-                slots={{ liveButton: <LiveStatusButton /> }}
-              />
+              <DefaultVideoLayout icons={defaultLayoutIcons} noScrubber={false} />
             </MediaPlayer>
           )}
 
@@ -578,3 +513,4 @@ return (
     </div>
   );
 }
+

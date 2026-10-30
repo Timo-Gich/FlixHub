@@ -203,6 +203,7 @@ export default function TVDetailPage() {
               rating={rating}
               overview={overview}
               playHref={playHref}
+              watchlistMovie={{ ...series, media_type: 'tv' }}
             />
           </>
         )}

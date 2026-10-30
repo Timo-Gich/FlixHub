@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import BookmarkButton from './BookmarkButton';
 
 /**
  * Shared VidBox-style hero header for movie and TV detail pages.
@@ -16,6 +17,7 @@ import { Link } from 'react-router-dom';
  *   - rating      : formatted rating string (e.g. "8.5") or null
  *   - overview    : synopsis text
  *   - playHref    : route the red Play button links to (e.g. /watch/:id)
+ *   - watchlistMovie : optional TMDb movie to show a Watchlist button for
  */
 export default function DetailHero({
   backdropUrl,
@@ -27,6 +29,7 @@ export default function DetailHero({
   rating,
   overview,
   playHref,
+  watchlistMovie,
 }) {
   return (
     <section className="relative overflow-hidden bg-ink pt-20 sm:pt-24">
@@ -101,18 +104,23 @@ export default function DetailHero({
             </p>
           )}
 
-          {playHref && (
-            <Link
-              to={playHref}
-              className="mt-6 inline-flex items-center gap-2 rounded-md bg-brand px-8 py-3 text-base font-bold text-white
-                         shadow-md shadow-brand/40 transition hover:bg-brand-dark focus:outline-none
-                         focus-visible:ring-2 focus-visible:ring-white/70 active:scale-[0.98]"
-            >
-              <svg viewBox="0 0 24 24" className="h-5 w-5 fill-current" aria-hidden="true">
-                <path d="M8 5v14l11-7z" />
-              </svg>
-              Play
-            </Link>
+          {(playHref || watchlistMovie) && (
+            <div className="mt-6 flex flex-wrap items-center justify-center gap-3 md:justify-start">
+              {playHref && (
+                <Link
+                  to={playHref}
+                  className="inline-flex items-center gap-2 rounded-md bg-brand px-8 py-3 text-base font-bold text-white
+                             shadow-md shadow-brand/40 transition hover:bg-brand-dark focus:outline-none
+                             focus-visible:ring-2 focus-visible:ring-white/70 active:scale-[0.98]"
+                >
+                  <svg viewBox="0 0 24 24" className="h-5 w-5 fill-current" aria-hidden="true">
+                    <path d="M8 5v14l11-7z" />
+                  </svg>
+                  Play
+                </Link>
+              )}
+              {watchlistMovie && <BookmarkButton movie={watchlistMovie} variant="detail" />}
+            </div>
           )}
         </div>
       </div>

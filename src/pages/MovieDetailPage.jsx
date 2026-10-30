@@ -73,6 +73,7 @@ export default function MovieDetailPage() {
               rating={rating}
               overview={overview}
               playHref={playHref}
+              watchlistMovie={movie}
             />
 
             <CastRow people={movie.credits?.cast} />

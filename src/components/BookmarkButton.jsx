@@ -12,7 +12,7 @@ import { useLibrary } from '../hooks/useLibrary.jsx';
  * Props:
  *   - movie : a TMDb / IMDb search result object
  */
-export default function BookmarkButton({ movie }) {
+export default function BookmarkButton({ movie, variant = 'compact' }) {
   const { isSaved, toggleSaved } = useLibrary();
   const [saved, setSaved] = useState(() => (movie?.id ? isSaved(movie.id) : false));
 
@@ -29,6 +29,7 @@ export default function BookmarkButton({ movie }) {
     e.stopPropagation();
     toggleSaved(movie).then((next) => setSaved(next));
   };
+  const prominent = variant === 'detail';
 
   return (
     <button
@@ -37,19 +38,31 @@ export default function BookmarkButton({ movie }) {
       aria-pressed={saved}
       aria-label={saved ? 'Remove from Watchlist' : 'Add to Watchlist'}
       title={saved ? 'Remove from Watchlist' : 'Add to Watchlist'}
-      className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition hover:scale-105 ${
-        saved ? 'bg-ink-raised text-brand ring-1 ring-brand/60' : 'bg-black/60 text-white'
-      }`}
+      className={`inline-flex shrink-0 items-center justify-center gap-2 rounded-md font-bold transition
+        focus:outline-none focus-visible:ring-2 focus-visible:ring-white/70 active:scale-[0.98] ${
+          prominent
+            ? `px-5 py-3 text-base ${
+                saved
+                  ? 'bg-ink-raised text-brand ring-1 ring-brand/60 hover:bg-ink-soft'
+                  : 'border border-white/30 bg-black/50 text-white hover:bg-white/10'
+              }`
+            : `h-8 w-8 rounded-full hover:scale-105 ${
+                saved ? 'bg-ink-raised text-brand ring-1 ring-brand/60' : 'bg-black/60 text-white'
+              }`
+        }`}
     >
       <svg
         viewBox="0 0 24 24"
-        className={`h-4 w-4 ${saved ? 'fill-brand' : 'fill-none stroke-current'}`}
+        className={`${prominent ? 'h-5 w-5' : 'h-4 w-4'} ${
+          saved ? 'fill-brand' : 'fill-none stroke-current'
+        }`}
         strokeWidth="2"
         strokeLinejoin="round"
         aria-hidden="true"
       >
         <path d="M6 3h12v18l-6-4-6 4V3z" />
       </svg>
+      {prominent && (saved ? 'In Watchlist' : 'Add to Watchlist')}
     </button>
   );
 }

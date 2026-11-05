@@ -39,7 +39,7 @@ A Netflix-inspired streaming web application for discovering, browsing, and watc
 - **Watch Player** - Stream movies and TV episodes through six embed provider servers (VidSrc, VidCore, 2Embed, VidFast, VidRock, PrimeSrc) with a server selector.
 - **Live TV** - Browse live channels from the iptv-org playlist, view EPG program guides, see on-now/next programming, and favorite channels. A CORS proxy and HLS stream proxy handle streams that block direct browser playback.
 - **Continue Watching** - Automatically tracks watch progress and surfaces unfinished titles at the top of the home page.
-- **Watchlist & History** - Save titles to Watch Later and a chronological watch history (up to 200 entries).
+- **Watchlist & History** - Save titles into named watchlist collections, filter the watchlist by folder, and keep a chronological watch history (up to 200 entries).
 - **Optional Accounts** - Sign in with Google OAuth or email magic link via Supabase. Guest mode works out of the box using localStorage. Library data syncs to the cloud on sign-in and merges with local data.
 - **Notifications** - In-app notification bell with a dropdown. Browser push notifications (Web Push) deliver alerts to opted-in subscribed devices. A daily cron job generates relevant notifications based on the user's watch history and watchlist.
 - **Progressive Web App** - Service worker provides offline app shell caching and installability on desktop and mobile.
@@ -122,6 +122,7 @@ flixhub/
     App.jsx                 # Root component with routing
   supabase/
     schema.sql              # Database schema (profiles, watchlist, history, etc.)
+    collections-migration.sql # Add collections to an existing Supabase project
   docs/                     # Documentation
   index.html
   vercel.json               # Vercel deployment config
@@ -196,6 +197,8 @@ All variables are defined in `.env` (copy from `.env.example`).
 | `VITE_SUPABASE_ANON_KEY` | Your Supabase anon (public) key. |
 
 When both are set, the app switches from guest mode to signed-in mode. When either is missing, the app runs in guest-only mode using localStorage.
+
+For a new Supabase project, run [`supabase/schema.sql`](./supabase/schema.sql) in the SQL Editor. To add Collections to an existing project, run [`supabase/collections-migration.sql`](./supabase/collections-migration.sql) first; it adds owner-only RLS and enables collection realtime events.
 
 ### Server-side (push notifications)
 
@@ -291,7 +294,7 @@ Client-side routing via React Router DOM v7. The router is configured in `src/Ap
 | `/search` | Search results (TMDb + IMDb fallback) |
 | `/live` | Live TV browser (guide and grid views) |
 | `/live/:channelId` | Live channel player |
-| `/watch-later` | Watchlist page |
+| `/watch-later`, `/watchlist` | Watchlist page |
 | `/history` | Watch history page |
 | `/new-popular` | New and popular content |
 | `/login` | Sign in page |
@@ -343,7 +346,7 @@ The watch player uses iframe embeds from six third-party providers. The server s
 - **Service worker** -- Registered automatically on load. It never intercepts `/api/*`, media files, Range requests, or third-party resources.
 - **Watch progress** -- Progress is tracked in 5-second intervals and only ever increases, preventing quick visits or backward scrubbing from reducing recorded progress. A title is considered "finished" at 98% of its duration.
 - **Library sync** -- On first sign-in, local library data (watchlist, history, favorites) is merged with cloud data. Conflicts resolve by newest timestamp; progress values keep the maximum. A merge flag in `sessionStorage` prevents re-merging on session restarts.
-- **Realtime subscriptions** -- The library hook maintains a shared Supabase Realtime channel per user (deduplicated across all mounted components) to propagate library changes without duplicate channel subscriptions.
+- **Realtime subscriptions** -- The library hook maintains a shared Supabase Realtime channel per user (deduplicated across all mounted components) to propagate watchlist, collection, and other library changes without duplicate channel subscriptions.
 
 ---
 

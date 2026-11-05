@@ -12,6 +12,16 @@ create table if not exists public.profiles (
   created_at timestamptz not null default now()
 );
 
+-- Watchlist collections belong to one user and contain zero or more titles.
+create table if not exists public.collections (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users (id) on delete cascade,
+  name text not null,
+  created_at timestamptz not null default now()
+);
+create index if not exists collections_user_created_idx
+  on public.collections (user_id, created_at);
+
 -- Watchlist: one row per (user, title).
 create table if not exists public.watchlist_items (
   user_id uuid not null references auth.users (id) on delete cascade,
@@ -19,8 +29,11 @@ create table if not exists public.watchlist_items (
   media_type text not null default 'movie',
   snapshot jsonb not null,
   saved_at timestamptz not null default now(),
+  collection_id uuid references public.collections (id) on delete set null,
   primary key (user_id, media_id)
 );
+alter table public.watchlist_items
+  add column if not exists collection_id uuid references public.collections (id) on delete set null;
 
 -- History: one row per (user, title, season, episode). Movies use NULL season
 -- and episode. Progress only ever increases (enforced client-side + here via
@@ -118,6 +131,7 @@ create trigger on_auth_user_created
 
 -- Row Level Security: users can only read/write their own rows.
 alter table public.profiles enable row level security;
+alter table public.collections enable row level security;
 alter table public.watchlist_items enable row level security;
 alter table public.history_items enable row level security;
 alter table public.favorites_live enable row level security;
@@ -132,6 +146,10 @@ create policy "profiles self read" on public.profiles
 drop policy if exists "profiles self update" on public.profiles;
 create policy "profiles self update" on public.profiles
   for update using (auth.uid() = id) with check (auth.uid() = id);
+
+drop policy if exists "collections owner" on public.collections;
+create policy "collections owner" on public.collections
+  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
 drop policy if exists "watchlist owner" on public.watchlist_items;
 create policy "watchlist owner" on public.watchlist_items
@@ -159,6 +177,14 @@ create policy "push subscriptions owner" on public.push_subscriptions
 
 do $$
 begin
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime'
+      and schemaname = 'public'
+      and tablename = 'collections'
+  ) then
+    alter publication supabase_realtime add table public.collections;
+  end if;
   if not exists (
     select 1 from pg_publication_tables
     where pubname = 'supabase_realtime'

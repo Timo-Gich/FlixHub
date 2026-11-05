@@ -10,6 +10,10 @@ import {
   clearCloudHistory,
   upsertCloudFavLive,
   deleteCloudFavLive,
+  createCloudCollection,
+  renameCloudCollection,
+  deleteCloudCollection,
+  moveCloudWatchLater,
 } from '../services/cloudLibrary';
 import { mergeWatchLater, mergeHistory, mergeFavoritesLive } from '../services/mergeLibrary';
 import { getSupabase } from '../services/supabaseClient';
@@ -22,8 +26,14 @@ import {
   removeHistoryCache,
   removeWatchLaterCache,
   replaceFavoritesLiveCache,
+  replaceCollectionsCache,
+  createLocalCollection,
+  deleteLocalCollection,
+  moveLocalWatchLater,
   replaceHistoryCache,
   replaceWatchLaterCache,
+  saveToWatchLater,
+  updateLocalCollection,
   upsertFavoritesLiveCache,
   upsertHistoryCache,
   upsertWatchLaterCache,
@@ -54,6 +64,7 @@ function attachRealtime(userId, reload) {
       });
     };
     channel.on('postgres_changes', { event: '*', schema: 'public', table: 'watchlist_items', filter: `user_id=eq.${userId}` }, fanOut);
+    channel.on('postgres_changes', { event: '*', schema: 'public', table: 'collections', filter: `user_id=eq.${userId}` }, fanOut);
     channel.on('postgres_changes', { event: '*', schema: 'public', table: 'history_items', filter: `user_id=eq.${userId}` }, fanOut);
     channel.on('postgres_changes', { event: '*', schema: 'public', table: 'favorites_live', filter: `user_id=eq.${userId}` }, fanOut);
     channel.subscribe();
@@ -127,17 +138,20 @@ function useLibraryState() {
   const userId = user?.id ?? null;
   const activeUserId = useRef(userId);
   const [watchLater, setWatchLater] = useState(() => local.getWatchLater());
+  const [collections, setCollections] = useState(() => local.getCollections());
   const [history, setHistory] = useState(() => local.getHistory());
   const [favoritesLive, setFavoritesLive] = useState(() => local.getFavoritesLive());
   const [syncing, setSyncing] = useState(false);
   const [libraryError, setLibraryError] = useState('');
   const watchLaterRef = useRef(watchLater);
+  const collectionsRef = useRef(collections);
   const historyRef = useRef(history);
   const favoritesLiveRef = useRef(favoritesLive);
   const progressTimer = useRef(null);
   const pendingProgress = useRef(new Map());
 
   watchLaterRef.current = watchLater;
+  collectionsRef.current = collections;
   historyRef.current = history;
   favoritesLiveRef.current = favoritesLive;
   activeUserId.current = userId;
@@ -147,6 +161,11 @@ function useLibraryState() {
     watchLaterRef.current = sorted;
     setWatchLater(sorted);
     return sorted;
+  }, []);
+  const setCollectionsValue = useCallback((items) => {
+    collectionsRef.current = items;
+    setCollections(items);
+    return items;
   }, []);
   const setHistoryValue = useCallback((items) => {
     const sorted = sortHistory(items);
@@ -161,12 +180,14 @@ function useLibraryState() {
   }, []);
   const applyCloudLibrary = useCallback((cloud) => {
     const nextWatchLater = setWatchLaterValue(cloud.watchLater);
+    const nextCollections = setCollectionsValue(cloud.collections || []);
     const nextHistory = setHistoryValue(cloud.history);
     const nextFavoritesLive = setFavoritesLiveValue(cloud.favoritesLive);
     replaceWatchLaterCache(nextWatchLater);
+    replaceCollectionsCache(nextCollections);
     replaceHistoryCache(nextHistory);
     replaceFavoritesLiveCache(nextFavoritesLive);
-  }, [setWatchLaterValue, setHistoryValue, setFavoritesLiveValue]);
+  }, [setWatchLaterValue, setCollectionsValue, setHistoryValue, setFavoritesLiveValue]);
   const showLibraryError = useCallback((message) => {
     setLibraryError(message);
   }, []);
@@ -176,16 +197,18 @@ function useLibraryState() {
     if (userId) return;
     return local.subscribeLibrary(() => {
       setWatchLaterValue(local.getWatchLater());
+      setCollectionsValue(local.getCollections());
       setHistoryValue(local.getHistory());
       setFavoritesLiveValue(local.getFavoritesLive());
     });
-  }, [userId, setWatchLaterValue, setHistoryValue, setFavoritesLiveValue]);
+  }, [userId, setWatchLaterValue, setCollectionsValue, setHistoryValue, setFavoritesLiveValue]);
 
   // Cloud snapshots replace the mirror. Only explicitly marked guest data may
   // be merged, and only during the user's first successful cloud sync.
   useEffect(() => {
     if (!userId) {
       setWatchLaterValue(local.getWatchLater());
+      setCollectionsValue(local.getCollections());
       setHistoryValue(local.getHistory());
       setFavoritesLiveValue(local.getFavoritesLive());
       setSyncing(false);
@@ -193,6 +216,7 @@ function useLibraryState() {
     }
     const guestLibrary = {
       watchLater: local.getWatchLater(),
+      collections: local.getCollections(),
       history: local.getHistory(),
       favoritesLive: local.getFavoritesLive(),
       pending: hasPendingGuestLibrary(),
@@ -208,7 +232,22 @@ function useLibraryState() {
         let flag = null;
         try { flag = localStorage.getItem(`${MERGED_FLAG}:${userId}`); } catch { /* ignore */ }
         if (!flag && guestLibrary.pending) {
-          const mergedWL = mergeWatchLater(guestLibrary.watchLater, cloud.watchLater);
+          const collectionIdMap = new Map();
+          const mergedCollections = [...cloud.collections];
+          for (const guestCollection of guestLibrary.collections) {
+            const existing = mergedCollections.find((collection) => collection.name === guestCollection.name);
+            const cloudCollection = existing || await createCloudCollection(userId, guestCollection.name);
+            if (cloudCollection) {
+              collectionIdMap.set(guestCollection.id, cloudCollection.id);
+              if (!existing) mergedCollections.push(cloudCollection);
+            }
+          }
+          const mergedWL = mergeWatchLater(guestLibrary.watchLater, cloud.watchLater).map((entry) => {
+            if (!entry.collectionId) return entry;
+            const cloudCollectionId = collectionIdMap.get(entry.collectionId)
+              || (cloud.collections.some((collection) => collection.id === entry.collectionId) ? entry.collectionId : null);
+            return { ...entry, collectionId: cloudCollectionId };
+          });
           const mergedHist = mergeHistory(guestLibrary.history, cloud.history);
           const mergedFav = mergeFavoritesLive(guestLibrary.favoritesLive, cloud.favoritesLive);
           await Promise.all([
@@ -217,7 +256,7 @@ function useLibraryState() {
             mergedFav.length ? upsertCloudFavLive(userId, mergedFav) : Promise.resolve(),
           ]);
           if (cancelled) return;
-          applyCloudLibrary({ watchLater: mergedWL, history: mergedHist, favoritesLive: mergedFav });
+          applyCloudLibrary({ watchLater: mergedWL, collections: mergedCollections, history: mergedHist, favoritesLive: mergedFav });
           clearPendingGuestLibrary();
           try { localStorage.setItem(`${MERGED_FLAG}:${userId}`, String(Date.now())); } catch { /* ignore */ }
         } else if (!flag) {
@@ -232,7 +271,7 @@ function useLibraryState() {
       }
     })();
     return () => { cancelled = true; };
-  }, [userId, applyCloudLibrary, showLibraryError]);
+  }, [userId, applyCloudLibrary, showLibraryError, setWatchLaterValue, setCollectionsValue, setHistoryValue, setFavoritesLiveValue]);
 
   // Real-time: reflect writes from other devices on the same account.
   // One shared channel per user (see attachRealtime) — every hook instance
@@ -339,6 +378,146 @@ function useLibraryState() {
     },
     [userId, setWatchLaterValue, showLibraryError],
   );
+
+  const saveToCollection = useCallback(async (movie, collectionId = null) => {
+    if (!movie?.id) return false;
+    if (collectionId && !collectionsRef.current.some((collection) => collection.id === collectionId)) return false;
+    const previous = watchLaterRef.current.find((entry) => entry?.movie?.id === movie.id);
+    const entry = {
+      movie,
+      savedAt: previous?.savedAt || Date.now(),
+      collectionId: collectionId || null,
+    };
+    setWatchLaterValue([
+      entry,
+      ...watchLaterRef.current.filter((item) => item?.movie?.id !== movie.id),
+    ]);
+    if (!userId) {
+      local.saveToWatchLater(movie, entry.collectionId);
+      setWatchLaterValue(local.getWatchLater());
+      return true;
+    }
+    try {
+      await upsertCloudWatchLater(userId, [entry]);
+      if (activeUserId.current !== userId) return true;
+      upsertWatchLaterCache(entry);
+      setWatchLaterValue([
+        entry,
+        ...watchLaterRef.current.filter((item) => item?.movie?.id !== movie.id),
+      ]);
+      return true;
+    } catch (err) {
+      if (activeUserId.current !== userId) return false;
+      console.error('[library] watchlist collection save failed', err);
+      setWatchLaterValue([
+        ...watchLaterRef.current.filter((item) => item?.movie?.id !== movie.id),
+        ...(previous ? [previous] : []),
+      ]);
+      showLibraryError('Your watchlist change could not be saved.');
+      return false;
+    }
+  }, [userId, setWatchLaterValue, showLibraryError]);
+
+  const createCollection = useCallback(async (name) => {
+    const cleanName = name.trim();
+    if (!cleanName) return null;
+    try {
+      const collection = userId
+        ? await createCloudCollection(userId, cleanName)
+        : createLocalCollection(cleanName);
+      if (!collection) return null;
+      const next = userId ? [collection, ...collectionsRef.current] : local.getCollections();
+      setCollectionsValue(next);
+      if (userId) replaceCollectionsCache(next);
+      return collection;
+    } catch (err) {
+      console.error('[library] collection create failed', err);
+      showLibraryError('Your collection could not be created.');
+      return null;
+    }
+  }, [userId, setCollectionsValue, showLibraryError]);
+
+  const renameCollection = useCallback(async (id, name) => {
+    const cleanName = name.trim();
+    if (!cleanName) return false;
+    const previous = collectionsRef.current;
+    if (!previous.some((collection) => collection.id === id)) return false;
+    const next = previous.map((collection) => collection.id === id ? { ...collection, name: cleanName } : collection);
+    setCollectionsValue(next);
+    if (!userId) {
+      updateLocalCollection(id, cleanName);
+      return true;
+    }
+    try {
+      await renameCloudCollection(userId, id, cleanName);
+      if (activeUserId.current !== userId) return true;
+      replaceCollectionsCache(next);
+      return true;
+    } catch (err) {
+      if (activeUserId.current !== userId) return false;
+      console.error('[library] collection rename failed', err);
+      setCollectionsValue(previous);
+      showLibraryError('Your collection could not be renamed.');
+      return false;
+    }
+  }, [userId, setCollectionsValue, showLibraryError]);
+
+  const deleteCollection = useCallback(async (id) => {
+    const previousCollections = collectionsRef.current;
+    const previousItems = watchLaterRef.current;
+    if (!previousCollections.some((collection) => collection.id === id)) return false;
+    setCollectionsValue(previousCollections.filter((collection) => collection.id !== id));
+    const uncategorized = previousItems.map((entry) => (
+      entry.collectionId === id ? { ...entry, collectionId: null } : entry
+    ));
+    setWatchLaterValue(uncategorized);
+    if (!userId) {
+      local.deleteLocalCollection(id);
+      setWatchLaterValue(local.getWatchLater());
+      return true;
+    }
+    try {
+      await deleteCloudCollection(userId, id);
+      if (activeUserId.current !== userId) return true;
+      replaceCollectionsCache(collectionsRef.current);
+      replaceWatchLaterCache(uncategorized);
+      return true;
+    } catch (err) {
+      if (activeUserId.current !== userId) return false;
+      console.error('[library] collection delete failed', err);
+      setCollectionsValue(previousCollections);
+      setWatchLaterValue(previousItems);
+      showLibraryError('Your collection could not be deleted.');
+      return false;
+    }
+  }, [userId, setCollectionsValue, setWatchLaterValue, showLibraryError]);
+
+  const moveMovieToCollection = useCallback(async (watchlistItemId, collectionId = null) => {
+    if (collectionId && !collectionsRef.current.some((collection) => collection.id === collectionId)) return false;
+    const previousItems = watchLaterRef.current;
+    const previous = previousItems.find((entry) => entry?.movie?.id === watchlistItemId);
+    if (!previous) return false;
+    const next = previousItems.map((entry) => (
+      entry?.movie?.id === watchlistItemId ? { ...entry, collectionId: collectionId || null } : entry
+    ));
+    setWatchLaterValue(next);
+    if (!userId) {
+      local.moveLocalWatchLater(watchlistItemId, collectionId || null);
+      return true;
+    }
+    try {
+      await moveCloudWatchLater(userId, watchlistItemId, collectionId || null);
+      if (activeUserId.current !== userId) return true;
+      replaceWatchLaterCache(next);
+      return true;
+    } catch (err) {
+      if (activeUserId.current !== userId) return false;
+      console.error('[library] watchlist move failed', err);
+      setWatchLaterValue(previousItems);
+      showLibraryError('The movie could not be moved.');
+      return false;
+    }
+  }, [userId, setWatchLaterValue, showLibraryError]);
 
   const removeSaved = useCallback(
     async (id) => {
@@ -521,6 +700,7 @@ function useLibraryState() {
       isGuest,
       syncing,
       watchLater,
+      collections,
       history,
       favoritesLive,
       libraryError,
@@ -528,13 +708,18 @@ function useLibraryState() {
       isSaved: (id) => watchLater.some((e) => e?.movie?.id === id),
       isFavLive: (id) => favoritesLive.some((e) => (e?.channel?.id ?? e?.channel?.name) === id),
       toggleSaved,
+      saveToCollection,
       removeSaved,
+      createCollection,
+      renameCollection,
+      deleteCollection,
+      moveMovieToCollection,
       logPlayed,
       updateProgress,
       removeHistory,
       clearAllHistory,
       toggleFav,
     }),
-    [isGuest, syncing, watchLater, history, favoritesLive, libraryError, toggleSaved, removeSaved, logPlayed, updateProgress, removeHistory, clearAllHistory, toggleFav],
+    [isGuest, syncing, watchLater, collections, history, favoritesLive, libraryError, toggleSaved, saveToCollection, removeSaved, createCollection, renameCollection, deleteCollection, moveMovieToCollection, logPlayed, updateProgress, removeHistory, clearAllHistory, toggleFav],
   );
 }

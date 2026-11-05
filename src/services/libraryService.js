@@ -6,6 +6,7 @@
 // ----------------------------------------------------------------------------
 
 const WATCH_LATER_KEY = 'flixhub.watchLater';
+const COLLECTIONS_KEY = 'flixhub.collections';
 const HISTORY_KEY = 'flixhub.history';
 const FAVORITES_LIVE_KEY = 'flixhub.favoritesLive';
 const GUEST_LIBRARY_PENDING_KEY = 'flixhub.guestLibraryPending';
@@ -145,7 +146,7 @@ export function clearPendingGuestLibrary() {
 }
 
 export function clearLibraryCache() {
-  [WATCH_LATER_KEY, HISTORY_KEY, FAVORITES_LIVE_KEY, GUEST_LIBRARY_PENDING_KEY].forEach((key) => {
+  [WATCH_LATER_KEY, COLLECTIONS_KEY, HISTORY_KEY, FAVORITES_LIVE_KEY, GUEST_LIBRARY_PENDING_KEY].forEach((key) => {
     try { localStorage.removeItem(key); } catch { /* storage may be blocked */ }
   });
   notifyChange();
@@ -190,6 +191,55 @@ export function getWatchLater() {
   return readJSON(WATCH_LATER_KEY, []);
 }
 
+export function getCollections() {
+  return readJSON(COLLECTIONS_KEY, []);
+}
+
+export function replaceCollectionsCache(collections) {
+  writeJSON(COLLECTIONS_KEY, collections, false);
+}
+
+export function saveToWatchLater(movie, collectionId = null) {
+  if (!movie?.id) return;
+  const entry = { movie: snapshot(movie), savedAt: Date.now(), collectionId };
+  writeJSON(WATCH_LATER_KEY, [
+    entry,
+    ...getWatchLater().filter((item) => item?.movie?.id !== movie.id),
+  ]);
+}
+
+export function createLocalCollection(name) {
+  const collection = {
+    id: globalThis.crypto?.randomUUID?.() || `local-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    name,
+    createdAt: Date.now(),
+  };
+  writeJSON(COLLECTIONS_KEY, [collection, ...getCollections()]);
+  return collection;
+}
+
+export function updateLocalCollection(id, name) {
+  const collections = getCollections();
+  const previous = collections.find((collection) => collection.id === id);
+  if (!previous) return null;
+  const updated = { ...previous, name };
+  writeJSON(COLLECTIONS_KEY, collections.map((collection) => collection.id === id ? updated : collection));
+  return updated;
+}
+
+export function deleteLocalCollection(id) {
+  writeJSON(COLLECTIONS_KEY, getCollections().filter((collection) => collection.id !== id));
+  writeJSON(WATCH_LATER_KEY, getWatchLater().map((entry) => (
+    entry.collectionId === id ? { ...entry, collectionId: null } : entry
+  )), false);
+}
+
+export function moveLocalWatchLater(movieId, collectionId) {
+  writeJSON(WATCH_LATER_KEY, getWatchLater().map((entry) => (
+    entry?.movie?.id === movieId ? { ...entry, collectionId } : entry
+  )), false);
+}
+
 export function isSaved(id) {
   return getWatchLater().some((e) => e.movie.id === id);
 }
@@ -203,7 +253,7 @@ export function toggleWatchLater(movie) {
     writeJSON(WATCH_LATER_KEY, items.filter((e) => e.movie.id !== movie.id));
     return false;
   }
-  items.unshift({ movie: snapshot(movie), savedAt: Date.now() });
+  items.unshift({ movie: snapshot(movie), savedAt: Date.now(), collectionId: null });
   writeJSON(WATCH_LATER_KEY, items);
   return true;
 }

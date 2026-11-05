@@ -103,6 +103,7 @@ export default function App() {
         <Route path="/watch/tv/:id/:season/:episode" element={<WatchTVPage />} />
         <Route path="/tv/:id" element={<TVDetailPage />} />
         <Route path="/watch-later" element={<WatchLaterPage />} />
+        <Route path="/watchlist" element={<WatchLaterPage />} />
         <Route path="/history" element={<HistoryPage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/auth/callback" element={<AuthCallback />} />

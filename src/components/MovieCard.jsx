@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { getPosterUrl, formatRating, formatYear } from '../services/tmdbService';
 import { useLibrary } from '../hooks/useLibrary.jsx';
 import { gradients } from '../data/movies';
+import CollectionPicker from './CollectionPicker';
 
 /**
  * A single movie tile fed from TMDb data.
@@ -30,12 +31,17 @@ export default function MovieCard({
   progress,
   to,
   meta,
+  onMoveToCollection,
+  onDragStart,
+  onDragEnd,
 }) {
   const isImdb = movie?.source === 'imdb';
   const [hover, setHover] = useState(false);
   const [imgFailed, setImgFailed] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [pickerMode, setPickerMode] = useState('save');
   const controlled = typeof saved === 'boolean';
-  const { isSaved, toggleSaved } = useLibrary();
+  const { isSaved, toggleSaved, collections, saveToCollection, createCollection, moveMovieToCollection } = useLibrary();
   const [selfSaved, setSelfSaved] = useState(() =>
     controlled ? saved : movie?.id ? isSaved(movie.id) : false,
   );
@@ -88,21 +94,28 @@ export default function MovieCard({
     e.stopPropagation();
     if (controlled) {
       onToggleSaved?.(movie);
-    } else {
+    } else if (selfSaved) {
       toggleSaved(movie).then((next) => setSelfSaved(next));
+    } else {
+      setPickerMode('save');
+      setPickerOpen(true);
     }
   };
 
   return (
+    <>
     <Link
       to={linkTo}
       aria-label={`View ${title}`}
+      draggable={!!onDragStart}
+      onDragStart={onDragStart ? (event) => onDragStart(event, movie) : undefined}
+      onDragEnd={onDragEnd}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
-      className="group relative block aspect-[2/3] w-full overflow-hidden rounded-md
+      className={`group relative block aspect-[2/3] w-full overflow-hidden rounded-md
                  bg-ink-raised text-left shadow transition duration-200
                  hover:scale-[1.04] hover:shadow-2xl focus:outline-none
-                 focus-visible:ring-2 focus-visible:ring-brand"
+                 focus-visible:ring-2 focus-visible:ring-brand ${onDragStart ? 'cursor-grab active:cursor-grabbing' : ''}`}
     >
       {/* Poster / fallback backdrop */}
       {poster ? (
@@ -169,6 +182,30 @@ export default function MovieCard({
           >
             <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <path d="M6 6l12 12M18 6l-12 12" />
+            </svg>
+          </button>
+        )}
+
+        {onMoveToCollection && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              setPickerMode('move');
+              setPickerOpen(true);
+            }}
+            aria-label="Move to collection"
+            title="Move to collection"
+            className="absolute right-1 top-1 z-10 flex h-9 w-9 items-center justify-center rounded-full
+                       border border-white/25 bg-black/75 text-white shadow-lg backdrop-blur-sm
+                       transition duration-150 hover:scale-105 hover:border-white/50 hover:bg-brand
+                       focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white
+                       md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100"
+          >
+            <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M3 7.5A1.5 1.5 0 0 1 4.5 6H10l2 2h7.5A1.5 1.5 0 0 1 21 9.5v8a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 17.5z" />
+              <path d="M12 11v5m-2-2 2 2 2-2" />
             </svg>
           </button>
         )}
@@ -241,5 +278,21 @@ export default function MovieCard({
         </span>
       </div>
     </Link>
+    <CollectionPicker
+      open={pickerOpen}
+      collections={collections}
+      title={pickerMode === 'move' ? 'Move to...' : 'Save to...'}
+      movieTitle={title}
+      allowCreate={pickerMode === 'save'}
+      onClose={() => setPickerOpen(false)}
+      onCreate={createCollection}
+      onChoose={(collectionId) => {
+        if (pickerMode === 'move') {
+          return (onMoveToCollection || moveMovieToCollection)(movie.id, collectionId);
+        }
+        return saveToCollection(movie, collectionId);
+      }}
+    />
+    </>
   );
 }

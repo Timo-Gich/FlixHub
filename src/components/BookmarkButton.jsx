@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useLibrary } from '../hooks/useLibrary.jsx';
+import CollectionPicker from './CollectionPicker';
 
 /**
  * Compact Watchlist (bookmark) toggle for search rows.
@@ -13,8 +14,9 @@ import { useLibrary } from '../hooks/useLibrary.jsx';
  *   - movie : a TMDb / IMDb search result object
  */
 export default function BookmarkButton({ movie, variant = 'compact' }) {
-  const { isSaved, toggleSaved } = useLibrary();
+  const { isSaved, toggleSaved, collections, saveToCollection, createCollection } = useLibrary();
   const [saved, setSaved] = useState(() => (movie?.id ? isSaved(movie.id) : false));
+  const [pickerOpen, setPickerOpen] = useState(false);
 
   useEffect(() => {
     if (!movie?.id) return;
@@ -27,11 +29,16 @@ export default function BookmarkButton({ movie, variant = 'compact' }) {
   const toggle = (e) => {
     e.preventDefault();
     e.stopPropagation();
-    toggleSaved(movie).then((next) => setSaved(next));
+    if (saved) {
+      toggleSaved(movie).then((next) => setSaved(next));
+    } else {
+      setPickerOpen(true);
+    }
   };
   const prominent = variant === 'detail';
 
   return (
+    <>
     <button
       type="button"
       onClick={toggle}
@@ -64,5 +71,18 @@ export default function BookmarkButton({ movie, variant = 'compact' }) {
       </svg>
       {prominent && (saved ? 'In Watchlist' : 'Add to Watchlist')}
     </button>
+    <CollectionPicker
+      open={pickerOpen}
+      collections={collections}
+      movieTitle={movie.title || movie.name}
+      onClose={() => setPickerOpen(false)}
+      onCreate={createCollection}
+      onChoose={async (collectionId) => {
+        const succeeded = await saveToCollection(movie, collectionId);
+        if (succeeded) setSaved(true);
+        return succeeded;
+      }}
+    />
+    </>
   );
 }

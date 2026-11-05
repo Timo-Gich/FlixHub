@@ -14,11 +14,24 @@ function toWatchLaterRow(userId, entry) {
     media_type: entry.movie.media_type || 'movie',
     snapshot: entry.movie,
     saved_at: new Date(entry.savedAt || Date.now()).toISOString(),
+    collection_id: entry.collectionId || null,
   };
 }
 
 function fromWatchLaterRow(row) {
-  return { movie: row.snapshot, savedAt: new Date(row.saved_at).getTime() };
+  return {
+    movie: row.snapshot,
+    savedAt: new Date(row.saved_at).getTime(),
+    collectionId: row.collection_id || null,
+  };
+}
+
+function fromCollectionRow(row) {
+  return {
+    id: row.id,
+    name: row.name,
+    createdAt: new Date(row.created_at).getTime(),
+  };
 }
 
 function toHistoryRow(userId, entry) {
@@ -64,20 +77,58 @@ function fromFavLiveRow(row) {
 
 export async function fetchCloudLibrary(userId) {
   const sb = getSupabase();
-  if (!sb || !userId) return { watchLater: [], history: [], favoritesLive: [] };
-  const [wl, hist, fav] = await Promise.all([
+  if (!sb || !userId) return { watchLater: [], collections: [], history: [], favoritesLive: [] };
+  const [wl, hist, fav, folders] = await Promise.all([
     sb.from('watchlist_items').select('*').eq('user_id', userId).order('saved_at', { ascending: false }),
     sb.from('history_items').select('*').eq('user_id', userId).order('updated_at', { ascending: false }).limit(MAX_HISTORY),
     sb.from('favorites_live').select('*').eq('user_id', userId).order('saved_at', { ascending: false }),
+    sb.from('collections').select('*').eq('user_id', userId).order('created_at', { ascending: true }),
   ]);
   if (wl.error) throw wl.error;
   if (hist.error) throw hist.error;
   if (fav.error) throw fav.error;
+  if (folders.error) throw folders.error;
   return {
     watchLater: (wl.data || []).map(fromWatchLaterRow),
+    collections: (folders.data || []).map(fromCollectionRow),
     history: (hist.data || []).map(fromHistoryRow),
     favoritesLive: (fav.data || []).map(fromFavLiveRow),
   };
+}
+
+export async function createCloudCollection(userId, name) {
+  const sb = getSupabase();
+  if (!sb || !userId) return null;
+  const { data, error } = await sb.from('collections')
+    .insert({ user_id: userId, name })
+    .select('*')
+    .single();
+  if (error) throw error;
+  return fromCollectionRow(data);
+}
+
+export async function renameCloudCollection(userId, id, name) {
+  const sb = getSupabase();
+  if (!sb || !userId) return;
+  const { error } = await sb.from('collections').update({ name }).eq('id', id).eq('user_id', userId);
+  if (error) throw error;
+}
+
+export async function deleteCloudCollection(userId, id) {
+  const sb = getSupabase();
+  if (!sb || !userId) return;
+  const { error } = await sb.from('collections').delete().eq('id', id).eq('user_id', userId);
+  if (error) throw error;
+}
+
+export async function moveCloudWatchLater(userId, mediaId, collectionId) {
+  const sb = getSupabase();
+  if (!sb || !userId) return;
+  const { error } = await sb.from('watchlist_items')
+    .update({ collection_id: collectionId })
+    .eq('user_id', userId)
+    .eq('media_id', String(mediaId));
+  if (error) throw error;
 }
 
 export async function upsertCloudWatchLater(userId, items) {

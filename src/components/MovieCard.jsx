@@ -1,6 +1,14 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { getPosterUrl, formatRating, formatYear } from '../services/tmdbService';
+import {
+  getPosterUrl,
+  getBackdropUrl,
+  getImageUrl,
+  getLogoUrl,
+  fetchMediaImages,
+  formatRating,
+  formatYear,
+} from '../services/tmdbService';
 import { useLibrary } from '../hooks/useLibrary.jsx';
 import { gradients } from '../data/movies';
 import CollectionPicker from './CollectionPicker';
@@ -36,10 +44,16 @@ export default function MovieCard({
   onDragEnd,
 }) {
   const isImdb = movie?.source === 'imdb';
-  const [hover, setHover] = useState(false);
+  const cardRef = useRef(null);
+  const panelPositionRef = useRef(null);
+  const panelCloseTimeoutRef = useRef(null);
+  const logoRequestRef = useRef(false);
   const [imgFailed, setImgFailed] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pickerMode, setPickerMode] = useState('save');
+  const [panelPosition, setPanelPosition] = useState(null);
+  const [panelOpen, setPanelOpen] = useState(false);
+  const [fetchedLogo, setFetchedLogo] = useState(null);
   const controlled = typeof saved === 'boolean';
   const { isSaved, toggleSaved, collections, saveToCollection, createCollection, moveMovieToCollection } = useLibrary();
   const [selfSaved, setSelfSaved] = useState(() =>
@@ -67,6 +81,11 @@ export default function MovieCard({
     : isImdb
       ? movie.poster
       : getPosterUrl(movie.poster_path);
+  const backdrop = getBackdropUrl(movie.backdrop_path, 780);
+  const knownLogo = movie.logo_path
+    ? getImageUrl(movie.logo_path, 342)
+    : getLogoUrl(movie.images?.logos, 780);
+  const logo = fetchedLogo || knownLogo;
   const rating = isImdb ? null : formatRating(movie.vote_average);
   const year = isImdb
     ? movie.year
@@ -74,7 +93,7 @@ export default function MovieCard({
       : null
     : formatYear(movie.release_date ?? movie.first_air_date);
   const overview = movie.overview;
-  const gradient = gradients[index % gradients.length];
+  const gradient = gradients[(index ?? 0) % gradients.length];
   const savedState = controlled ? saved : selfSaved;
   // TV entries (from /tv endpoints / IMDb type) expose `name` instead of `title`.
   const isTV = isImdb
@@ -88,6 +107,77 @@ export default function MovieCard({
         ? `/tv/${movie.id}`
         : `/movie/${movie.id}`
   );
+
+  const loadOfficialLogo = () => {
+    if (logo || logoRequestRef.current || isImdb || !movie.id) return;
+    logoRequestRef.current = true;
+    fetchMediaImages(isTV ? 'tv' : 'movie', movie.id)
+      .then((images) => setFetchedLogo(getLogoUrl(images?.logos, 780)))
+      .catch((error) => {
+        console.error(`Unable to load the official logo for "${title}".`, error);
+      });
+  };
+
+  const updatePanelPosition = useCallback(() => {
+    const card = cardRef.current;
+    if (!card || !window.matchMedia('(hover: hover) and (pointer: fine)').matches) return;
+
+    const rect = card.getBoundingClientRect();
+    const gap = 12;
+    const margin = 8;
+    const width = Math.min(rect.width * 1.85, window.innerWidth - margin * 2);
+    const height = Math.min(rect.height * 1.12, window.innerHeight - margin * 2);
+    const opensRight = rect.right + gap + width <= window.innerWidth - margin;
+    const left = opensRight
+      ? rect.right + gap
+      : Math.max(margin, rect.left - gap - width);
+    const top = Math.min(
+      Math.max(margin, rect.top + (rect.height - height) / 2),
+      window.innerHeight - height - margin,
+    );
+    const position = { left, top, width, height };
+    panelPositionRef.current = position;
+    setPanelPosition(position);
+  }, []);
+
+  useEffect(() => {
+    const repositionActivePanel = () => {
+      if (panelPositionRef.current) updatePanelPosition();
+    };
+    window.addEventListener('resize', repositionActivePanel);
+    window.addEventListener('scroll', repositionActivePanel, true);
+    return () => {
+      window.removeEventListener('resize', repositionActivePanel);
+      window.removeEventListener('scroll', repositionActivePanel, true);
+    };
+  }, [updatePanelPosition]);
+
+  const clearPanelCloseTimeout = () => {
+    if (panelCloseTimeoutRef.current) {
+      clearTimeout(panelCloseTimeoutRef.current);
+      panelCloseTimeoutRef.current = null;
+    }
+  };
+
+  const openPanel = () => {
+    clearPanelCloseTimeout();
+    if (!window.matchMedia('(hover: hover) and (pointer: fine)').matches) return;
+    setPanelOpen(true);
+    updatePanelPosition();
+    loadOfficialLogo();
+  };
+
+  const closePanel = () => {
+    clearPanelCloseTimeout();
+    setPanelOpen(false);
+    panelPositionRef.current = null;
+    setPanelPosition(null);
+  };
+
+  const schedulePanelClose = () => {
+    clearPanelCloseTimeout();
+    panelCloseTimeoutRef.current = setTimeout(closePanel, 250);
+  };
 
   const handleBookmark = (e) => {
     e.preventDefault();
@@ -105,16 +195,21 @@ export default function MovieCard({
   return (
     <>
     <Link
+      ref={cardRef}
       to={linkTo}
       aria-label={`View ${title}`}
       draggable={!!onDragStart}
       onDragStart={onDragStart ? (event) => onDragStart(event, movie) : undefined}
       onDragEnd={onDragEnd}
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
-      className={`group relative block aspect-[2/3] w-full overflow-hidden rounded-md
+      onMouseEnter={openPanel}
+      onMouseLeave={schedulePanelClose}
+      onFocus={openPanel}
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget)) closePanel();
+      }}
+      className={`group relative z-0 block aspect-[2/3] w-full rounded-md
                  bg-ink-raised text-left shadow transition duration-200
-                 hover:scale-[1.04] hover:shadow-2xl focus:outline-none
+                 md:hover:z-30 md:hover:shadow-2xl focus:outline-none
                  focus-visible:ring-2 focus-visible:ring-brand ${onDragStart ? 'cursor-grab active:cursor-grabbing' : ''}`}
     >
       {/* Poster / fallback backdrop */}
@@ -125,16 +220,34 @@ export default function MovieCard({
           loading="lazy"
           decoding="async"
           onError={() => setImgFailed(true)}
-          className={`absolute inset-0 h-full w-full object-cover transition duration-200 ${
-            hover ? 'scale-105 brightness-75' : ''
-          }`}
+          className="absolute inset-0 h-full w-full rounded-md object-cover transition-[filter] duration-200
+                     md:group-hover:blur-[2px] md:group-hover:brightness-50
+                     md:group-focus-visible:blur-[2px] md:group-focus-visible:brightness-50"
         />
       ) : (
-        <div className={`absolute inset-0 bg-gradient-to-br ${gradient} opacity-80`} aria-hidden="true" />
+        <div className={`absolute inset-0 rounded-md bg-gradient-to-br ${gradient} opacity-80 transition-[filter] duration-200
+                        md:group-hover:blur-[2px] md:group-hover:brightness-50
+                        md:group-focus-visible:blur-[2px] md:group-focus-visible:brightness-50`}
+             aria-hidden="true" />
       )}
 
       {/* Card content */}
       <div className="relative flex h-full flex-col justify-end bg-gradient-to-t from-black/80 via-black/20 to-transparent p-3">
+        <span
+          className="pointer-events-none absolute inset-0 z-[5] hidden items-center justify-center
+                     bg-black/20 opacity-0 backdrop-blur-[2px] transition-opacity duration-200 md:flex
+                     md:group-hover:opacity-100 md:group-focus-visible:opacity-100"
+          aria-hidden="true"
+        >
+          <span className="flex h-10 w-10 items-center justify-center rounded-full bg-brand text-white
+                           shadow-xl shadow-black/40 transition-transform duration-200
+                           group-hover:scale-100 group-focus-visible:scale-100 scale-75">
+            <svg viewBox="0 0 24 24" className="ml-0.5 h-5 w-5 fill-current" aria-hidden="true">
+              <path d="M8 5v14l11-7z" />
+            </svg>
+          </span>
+        </span>
+
         {/* IMDb-only results carry a badge and no watchlist toggle */}
         {isImdb && (
           <span
@@ -251,31 +364,94 @@ export default function MovieCard({
           </span>
         )}
 
-        {/* Hover overlay with overview + play */}
+        {/* Desktop-only reveal; touch users navigate directly through the card link. */}
         <span
-          className={`pointer-events-none absolute inset-0 flex flex-col items-stretch justify-end
-                      bg-black/60 p-3 transition-opacity duration-200 ${
-                        hover ? 'opacity-100' : 'opacity-0'
+          style={panelPosition ?? undefined}
+          onMouseEnter={() => {
+            clearPanelCloseTimeout();
+            setPanelOpen(true);
+          }}
+          onMouseLeave={schedulePanelClose}
+          className={`fixed z-50 hidden flex-col justify-end overflow-hidden rounded-lg
+                      border border-white/10 bg-black p-3 shadow-2xl transition-opacity duration-200 md:flex ${
+                        panelOpen ? 'pointer-events-auto opacity-100' : 'pointer-events-none opacity-0'
                       }`}
         >
-          <span className="flex items-center gap-2">
-            <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-brand
-                             shadow-lg shadow-brand/50 transition group-hover:scale-110"
-                  aria-hidden="true">
-              <svg viewBox="0 0 24 24" className="ml-0.5 h-5 w-5 fill-white" aria-hidden="true">
-                <path d="M8 5v14l11-7z" />
-              </svg>
-            </span>
-            {rating && (
-              <span className="text-xs font-bold text-amber-400">★ {rating}</span>
+          <span className="absolute inset-0">
+            {backdrop ? (
+              <img src={backdrop} alt="" loading="lazy" className="h-full w-full object-cover" />
+            ) : poster ? (
+              <img src={poster} alt="" loading="lazy" className="h-full w-full object-cover" />
+            ) : (
+              <span className={`block h-full w-full bg-gradient-to-br ${gradient}`} aria-hidden="true" />
             )}
+            <span className="absolute inset-0 bg-gradient-to-t from-black via-black/75 to-black/10" />
           </span>
-          {overview && (
-            <span className="mt-2 line-clamp-4 text-xs leading-snug text-white/90">
-              {overview}
+          <span className="relative z-10 flex h-full flex-col justify-end">
+            <span className="mb-2 flex min-h-8 items-end">
+              {logo ? (
+                <img src={logo} alt={`${title} logo`} loading="lazy" className="max-h-10 max-w-full object-contain object-left-bottom" />
+              ) : (
+                <span className="line-clamp-2 text-lg font-bold text-white">{title}</span>
+              )}
             </span>
-          )}
-        </span>
+            <span className="flex flex-wrap items-center gap-2 text-xs text-gray-300">
+              <span>{isTV ? 'TV Show' : 'Movie'}</span>
+              {rating && (
+                <span className="inline-flex items-center gap-1">
+                  <svg viewBox="0 0 24 24" className="h-3 w-3 fill-amber-400" aria-hidden="true">
+                    <path d="M12 2l2.9 6.3 6.9.8-5.1 4.7 1.4 6.8L12 17.8 5.9 20.6l1.4-6.8L2.2 9.1l6.9-.8z" />
+                  </svg>
+                  {rating}
+                </span>
+              )}
+              {year && <span>{year}</span>}
+              {(movie.origin_country?.[0] || movie.original_language) && (
+                <span>{(movie.origin_country?.[0] || movie.original_language).toUpperCase()}</span>
+              )}
+            </span>
+            {overview && (
+              <span className="mt-2 line-clamp-2 text-xs leading-snug text-gray-400">
+                {overview}
+              </span>
+            )}
+            <span className="mt-3 flex items-center gap-2">
+              <span className="flex min-h-9 flex-1 items-center justify-center gap-2 rounded-md bg-white px-2
+                               text-xs font-bold text-black transition hover:bg-white/85">
+                <svg viewBox="0 0 24 24" className="h-4 w-4 fill-current" aria-hidden="true">
+                  <path d="M8 5v14l11-7z" />
+                </svg>
+                Watch Now
+              </span>
+              {!isImdb && (
+                <button
+                  type="button"
+                  onClick={handleBookmark}
+                  aria-pressed={savedState}
+                  aria-label={savedState ? 'Remove from Watchlist' : 'Add to Watchlist'}
+                  title={savedState ? 'Remove from Watchlist' : 'Add to Watchlist'}
+                  className={`pointer-events-auto flex h-9 w-9 shrink-0 items-center justify-center rounded-md
+                              border border-white/40 bg-black/40 text-white transition hover:bg-white/20
+                              focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white ${
+                                savedState ? 'text-brand' : ''
+                              }`}
+                >
+                  {savedState ? (
+                    <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor"
+                         strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <path d="m5 12 4 4L19 6" />
+                    </svg>
+                  ) : (
+                    <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor"
+                         strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+                      <path d="M12 5v14M5 12h14" />
+                    </svg>
+                  )}
+                </button>
+              )}
+            </span>
+          </span>
+          </span>
       </div>
     </Link>
     <CollectionPicker

@@ -75,7 +75,7 @@ export default function HomePage() {
               <div
                 ref={rowRef}
                 onScroll={updateScrollArrows}
-                className="scrollbar-hide -mx-4 flex gap-3 overflow-x-auto px-4 pb-2 sm:-mx-8 sm:px-8"
+                className="scrollbar-hide -mx-4 flex gap-3 overflow-x-auto px-4 py-8 sm:-mx-8 sm:px-8"
               >
                 {continueWatching.map((entry) => {
                   const dur = entry.durationSeconds || 0;

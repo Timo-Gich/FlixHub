@@ -22,6 +22,7 @@ import BottomNav from './components/BottomNav';
 import LoginPage from './pages/LoginPage';
 import AuthCallback from './pages/AuthCallback';
 import AccountPage from './pages/AccountPage';
+import DiscoverPage from './pages/DiscoverPage';
 
 // Live TV pages are loaded on demand so the heavy Vidstack player stays out of
 // the initial bundle for the movies/series browsing routes.
@@ -111,6 +112,7 @@ export default function App() {
         <Route path="/movies" element={<MoviesPage />} />
         <Route path="/series" element={<SeriesPage />} />
         <Route path="/new-popular" element={<NewAndPopularPage />} />
+        <Route path="/discover" element={<DiscoverPage />} />
         <Route path="/live" element={<LiveTVPage />} />
         <Route path="/live/:channelId" element={<LivePlayerPage />} />
         <Route path="/about" element={<InfoPage />} />

@@ -15,6 +15,7 @@ const NAV_LINKS = [
   { key: 'series', label: 'Series', to: '/series' },
   { key: 'live', label: 'Live TV', to: '/live' },
   { key: 'popular', label: 'New & Popular', to: '/new-popular' },
+  { key: 'discover', label: 'Discover', to: '/discover' },
   { key: 'mylist', label: 'Watchlist', to: '/watch-later' },
   { key: 'history', label: 'History', to: '/history' },
   { key: 'account', label: 'Account', to: '/account' },
@@ -59,6 +60,13 @@ const MENU_ICONS = {
          strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <polyline points="22 7 13.5 15.5 8.5 10.5 2 17" />
       <polyline points="16 7 22 7 22 13" />
+    </svg>
+  ),
+  discover: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"
+         strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <circle cx="11" cy="11" r="7" />
+      <path d="m16 16 4.5 4.5M11 7v4l2.5 1.5" />
     </svg>
   ),
   mylist: (

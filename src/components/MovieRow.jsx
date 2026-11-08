@@ -1,6 +1,7 @@
 import MovieCard from './MovieCard';
 import SectionHeading from './SectionHeading';
 import { useMovieData } from '../hooks/useMovieData';
+import { Link } from 'react-router-dom';
 
 /**
  * A titled content row that fetches its own data via a TMDb service function.
@@ -11,7 +12,7 @@ import { useMovieData } from '../hooks/useMovieData';
  *   - fetcher: async function returning a TMDb paged response ({ results })
  *   - movies : optional static list of movie objects (bypasses fetching)
  */
-export default function MovieRow({ title, fetcher, movies: staticMovies }) {
+export default function MovieRow({ title, fetcher, movies: staticMovies, titleTo }) {
   const { data, loading, error, reload } = useMovieData(
     staticMovies ? () => Promise.resolve({ results: [] }) : fetcher,
     [title],
@@ -22,7 +23,16 @@ export default function MovieRow({ title, fetcher, movies: staticMovies }) {
 
   return (
     <section aria-label={title} className="mx-auto w-full max-w-[1600px] px-4 py-6 sm:px-8">
-      <SectionHeading className="mb-4 text-xl md:text-2xl">{title}</SectionHeading>
+      {titleTo ? (
+        <Link to={titleTo} className="group/title inline-block">
+          <SectionHeading className="mb-4 text-xl transition-colors group-hover/title:text-brand-light md:text-2xl">
+            {title}
+            <span className="ml-1 text-brand-light" aria-hidden="true">→</span>
+          </SectionHeading>
+        </Link>
+      ) : (
+        <SectionHeading className="mb-4 text-xl md:text-2xl">{title}</SectionHeading>
+      )}
 
       {isLoading && (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">

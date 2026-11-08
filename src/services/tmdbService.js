@@ -106,6 +106,30 @@ export function fetchPopularMovies({ page = 1 } = {}) {
 }
 
 /**
+ * Genres available for movies or TV shows.
+ * @param {'movie'|'tv'} mediaType
+ */
+export function fetchGenres(mediaType) {
+  if (mediaType !== 'movie' && mediaType !== 'tv') {
+    return Promise.reject(new TMDBError('A valid media type (movie or tv) is required.'));
+  }
+  return fetchFromTMDB(`/genre/${mediaType}/list`);
+}
+
+/**
+ * Discover movies or TV shows matching the supplied TMDb filters.
+ * @param {'movie'|'tv'} mediaType
+ * @param {object} filters
+ * @param {number} [page=1]
+ */
+export function discoverTitles(mediaType, filters = {}, { page = 1 } = {}) {
+  if (mediaType !== 'movie' && mediaType !== 'tv') {
+    return Promise.reject(new TMDBError('A valid media type (movie or tv) is required.'));
+  }
+  return fetchFromTMDB(`/discover/${mediaType}`, { ...filters, page });
+}
+
+/**
  * Movies currently in theatres.
  * @param {object} [options]
  * @param {number} [options.page=1]

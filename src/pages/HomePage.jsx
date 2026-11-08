@@ -5,7 +5,7 @@ import MovieRow from '../components/MovieRow';
 import MovieCard from '../components/MovieCard';
 import SectionHeading from '../components/SectionHeading';
 import Footer from '../components/Footer';
-import { fetchTrendingMovies, fetchPopularMovies } from '../services/tmdbService';
+import { fetchTrendingMovies, fetchPopularMovies, discoverTitles } from '../services/tmdbService';
 import { FINISH_THRESHOLD, latestHistoryByTitle } from '../services/libraryService';
 import { useLibrary } from '../hooks/useLibrary.jsx';
 
@@ -141,6 +141,11 @@ export default function HomePage() {
 
         <MovieRow title="Trending Now" fetcher={() => fetchTrendingMovies()} />
         <MovieRow title="Popular on FlixHub" fetcher={() => fetchPopularMovies()} />
+        <MovieRow
+          title="Explore Korean Cinema"
+          titleTo="/discover?language=ko"
+          fetcher={() => discoverTitles('movie', { with_original_language: 'ko' })}
+        />
       </main>
 
       <Footer />

@@ -186,18 +186,29 @@ export default function HistoryPage() {
       <Navbar />
 
       <main className="mx-auto w-full max-w-[1600px] px-4 pt-24 sm:px-8">
-        <div className="flex flex-wrap items-center gap-3">
-          <h1 className="text-2xl font-black text-white">Watch History</h1>
-          <span className="inline-flex w-fit items-center gap-1.5 rounded-full border border-brand/30
-                           bg-brand/10 px-3 py-1 text-sm font-bold tracking-wide text-brand-light
-                           shadow-sm shadow-brand/10">
-            <svg viewBox="0 0 24 24" className="h-3.5 w-3.5 fill-none stroke-current" strokeWidth="2"
-                 strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <circle cx="12" cy="12" r="9" />
-              <path d="M12 7v5l3 2" />
-            </svg>
-            {displayItems.length} title{displayItems.length === 1 ? '' : 's'} watched{syncing ? ' · syncing…' : ''}
-          </span>
+        <div className="mb-6 flex flex-wrap items-end gap-x-6 gap-y-4">
+          <div className="min-w-0 flex-1">
+            <p className="mb-1.5 flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.3em] text-brand-light">
+              <span className="h-px w-6 bg-brand-light" aria-hidden="true" />
+              Your viewing journey
+            </p>
+            <div className="flex flex-wrap items-center gap-3">
+              <h1 className="font-display text-4xl font-semibold uppercase leading-none tracking-[0.08em] text-white text-shadow-hero sm:text-5xl">
+                Watch History
+              </h1>
+              <span className="inline-flex w-fit items-center gap-1.5 rounded-full border border-brand/30
+                               bg-brand/10 px-3 py-1 text-sm font-bold tracking-wide text-brand-light
+                               shadow-sm shadow-brand/10">
+                <svg viewBox="0 0 24 24" className="h-3.5 w-3.5 fill-none stroke-current" strokeWidth="2"
+                     strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <circle cx="12" cy="12" r="9" />
+                  <path d="M12 7v5l3 2" />
+                </svg>
+                {displayItems.length} title{displayItems.length === 1 ? '' : 's'} watched{syncing ? ' · syncing…' : ''}
+              </span>
+            </div>
+            <div className="mt-3 h-px w-24 bg-gradient-to-r from-brand via-brand-light/60 to-transparent" aria-hidden="true" />
+          </div>
           {items.length > 0 && (
             <button
               type="button"

@@ -25,6 +25,7 @@ export default function Hero() {
   const slides = (data?.results ?? []).slice(0, MAX_SLIDES);
   const slideCount = slides.length;
   const [activeIndex, setActiveIndex] = useState(0);
+  const [resettingTrack, setResettingTrack] = useState(false);
   const [paused, setPaused] = useState(false);
   const [brokenBackdrops, setBrokenBackdrops] = useState({});
   // Cache of the official TMDb title logo per slide:  URL or null when absent.
@@ -34,12 +35,31 @@ export default function Hero() {
 
   // Guard against a stale active index after a reload with fewer results.
   const safeActive = slideCount ? activeIndex % slideCount : 0;
+  const trackIndex = activeIndex <= slideCount ? activeIndex : safeActive;
+  const trackSlides = slideCount > 1 ? [...slides, slides[0]] : slides;
+
+  // Give the track time to render its transition-free reset before enabling
+  // transitions again, so the duplicate-to-first jump stays invisible.
+  useEffect(() => {
+    if (!resettingTrack) return undefined;
+    let secondFrame;
+    const firstFrame = requestAnimationFrame(() => {
+      secondFrame = requestAnimationFrame(() => setResettingTrack(false));
+    });
+    return () => {
+      cancelAnimationFrame(firstFrame);
+      if (secondFrame !== undefined) cancelAnimationFrame(secondFrame);
+    };
+  }, [resettingTrack]);
 
   // Autoplay. Manual navigation changes activeIndex, which re-arms the timer
   // so it never flips immediately after a click.
   useEffect(() => {
     if (paused || slideCount < 2) return;
-    const id = setInterval(() => setActiveIndex((i) => (i + 1) % slideCount), ROTATE_MS);
+    const id = setInterval(
+      () => setActiveIndex((i) => (i === slideCount - 1 ? slideCount : (i + 1) % slideCount)),
+      ROTATE_MS,
+    );
     return () => clearInterval(id);
   }, [paused, slideCount, safeActive]);
 
@@ -167,11 +187,25 @@ export default function Hero() {
 
       {/* The active slide is translated into view; inactive slides cannot be interacted with. */}
       <div
+        onTransitionEnd={(event) => {
+          if (
+            event.target === event.currentTarget &&
+            event.propertyName === 'transform' &&
+            trackIndex === slideCount
+          ) {
+            setResettingTrack(true);
+            setActiveIndex(0);
+          }
+        }}
         className="flex h-full w-full transition-transform duration-500 ease-[cubic-bezier(0.16,1,0.3,1)]"
-        style={{ transform: `translate3d(-${safeActive * 100}%, 0, 0)` }}
+        style={{
+          transform: `translate3d(-${trackIndex * 100}%, 0, 0)`,
+          transition: resettingTrack ? 'none' : undefined,
+        }}
       >
-        {slides.map((movie, i) => {
-          const isActive = i === safeActive;
+        {trackSlides.map((movie, i) => {
+          const slideIndex = i === slideCount ? 0 : i;
+          const isActive = i === trackIndex;
           const backdrop = brokenBackdrops[movie.id] ? null : getBackdropUrl(movie.backdrop_path, 1280);
           const rating = formatRating(movie.vote_average);
           const year = formatYear(movie.release_date ?? movie.first_air_date);
@@ -181,7 +215,7 @@ export default function Hero() {
 
           return (
             <article
-              key={`${movie.media_type}-${movie.id}`}
+              key={`${movie.media_type}-${movie.id}${i === slideCount ? '-clone' : ''}`}
               aria-hidden={!isActive}
               onClick={() => {
                 if (isActive) navigate(watchUrl(movie));
@@ -195,7 +229,7 @@ export default function Hero() {
                 aria-hidden="true"
                 style={backdrop ? { backgroundImage: 'var(--hero)' } : undefined}
                 className={`absolute inset-0 bg-cover bg-center ${
-                  backdrop ? '' : `bg-gradient-to-br ${gradients[i % gradients.length]}`
+                  backdrop ? '' : `bg-gradient-to-br ${gradients[slideIndex % gradients.length]}`
                 }`}
               />
 
@@ -212,7 +246,7 @@ export default function Hero() {
                 <span className="inline-flex w-fit items-center gap-2 rounded-full border border-brand/60
                                  bg-brand/10 px-3 py-1 text-xs font-semibold tracking-wide text-brand-light">
                   <span className="h-1.5 w-1.5 rounded-full bg-brand-light" aria-hidden="true" />
-                  TRENDING NOW {i + 1} OF {slideCount}
+                  TRENDING NOW {slideIndex + 1} OF {slideCount}
                 </span>
 
                 <h1 className="max-w-3xl text-shadow-hero text-3xl font-black leading-tight text-white
@@ -231,19 +265,31 @@ export default function Hero() {
                   )}
                 </h1>
 
-                <p className="max-w-2xl text-shadow-hero line-clamp-2 text-sm text-foreground/90 sm:text-base lg:text-lg">
+                <p className="max-w-2xl font-sans text-shadow-hero line-clamp-2 text-sm leading-relaxed text-foreground/90 sm:text-base lg:text-lg">
                   {overview || 'No synopsis available for this title.'}
                 </p>
 
-                <div className="flex flex-wrap items-center gap-3">
+                <div
+                  aria-label="Title details"
+                  className="flex flex-wrap items-center gap-2.5 font-display uppercase tracking-[0.16em]"
+                >
                   {rating && (
-                    <span className="w-fit rounded bg-black/50 px-2 py-0.5 text-xs font-bold text-amber-400">
-                      ★ {rating} / 10
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-400 px-3 py-1 text-sm font-bold text-black shadow-sm shadow-black/25">
+                      <span aria-hidden="true">★</span>
+                      <span>{rating}</span>
                     </span>
                   )}
-                  {year && <span className="text-sm text-foreground/80">{year}</span>}
+                  {year && (
+                    <>
+                      {rating && <span className="text-white/45" aria-hidden="true">·</span>}
+                      <span className="text-sm font-medium text-white/90">{year}</span>
+                    </>
+                  )}
                   {movie.original_language && (
-                    <span className="text-sm text-muted">· {movie.original_language.toUpperCase()}</span>
+                    <>
+                      {(rating || year) && <span className="text-white/45" aria-hidden="true">·</span>}
+                      <span className="text-xs font-medium text-white/65">{movie.original_language.toUpperCase()}</span>
+                    </>
                   )}
                 </div>
 

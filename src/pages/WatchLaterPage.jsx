@@ -160,20 +160,31 @@ export default function WatchLaterPage() {
       <Navbar />
 
       <main className="mx-auto w-full max-w-[1600px] px-4 pt-24 sm:px-8">
-        <div className="flex flex-wrap items-center gap-3">
-          <h1 className="text-2xl font-black text-white">Watchlist</h1>
-          <span className="inline-flex w-fit items-center gap-1.5 rounded-full border border-brand/30
-                           bg-brand/10 px-3 py-1 text-sm font-bold tracking-wide text-brand-light
-                           shadow-sm shadow-brand/10">
-            <svg viewBox="0 0 24 24" className="h-3.5 w-3.5 fill-current" aria-hidden="true">
-              <path d="M6 3h12v18l-6-4-6 4V3z" />
-            </svg>
-            {items.length} saved{syncing ? ' · syncing…' : ''}
-          </span>
+        <div className="mb-6 flex flex-wrap items-end gap-x-6 gap-y-4">
+          <div className="min-w-0 flex-1">
+            <p className="mb-1.5 flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.3em] text-brand-light">
+              <span className="h-px w-6 bg-brand-light" aria-hidden="true" />
+              Saved for later
+            </p>
+            <div className="flex flex-wrap items-center gap-3">
+              <h1 className="font-display text-4xl font-semibold uppercase leading-none tracking-[0.08em] text-white text-shadow-hero sm:text-5xl">
+                Watchlist
+              </h1>
+              <span className="inline-flex w-fit items-center gap-1.5 rounded-full border border-brand/30
+                               bg-brand/10 px-3 py-1 text-sm font-bold tracking-wide text-brand-light
+                               shadow-sm shadow-brand/10">
+                <svg viewBox="0 0 24 24" className="h-3.5 w-3.5 fill-current" aria-hidden="true">
+                  <path d="M6 3h12v18l-6-4-6 4V3z" />
+                </svg>
+                {items.length} saved{syncing ? ' · syncing…' : ''}
+              </span>
+            </div>
+            <div className="mt-3 h-px w-24 bg-gradient-to-r from-brand via-brand-light/60 to-transparent" aria-hidden="true" />
+          </div>
           <button
             type="button"
             onClick={() => setNewCollectionOpen((open) => !open)}
-            className="ml-auto inline-flex items-center gap-2 rounded-md border border-ink-border bg-ink-raised px-3 py-2 text-sm font-bold text-white hover:border-brand/60"
+            className="ml-auto inline-flex items-center gap-2 rounded-md border border-ink-border bg-ink-raised px-3 py-2 text-sm font-bold text-white transition hover:border-brand/60"
           >
             <span className="text-lg leading-none text-brand">+</span>
             New collection

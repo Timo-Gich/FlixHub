@@ -42,8 +42,8 @@ export default function DetailHero({
           className="absolute inset-0 h-full w-full object-cover"
         />
       )}
-      <div className="absolute inset-0 bg-gradient-to-t from-ink via-ink/85 to-ink/50" aria-hidden="true" />
-      <div className="absolute inset-0 bg-gradient-to-r from-ink via-ink/70 to-transparent" aria-hidden="true" />
+      <div className="absolute inset-0 bg-gradient-to-t from-ink via-ink/35 to-transparent" aria-hidden="true" />
+      <div className="absolute inset-0 bg-gradient-to-r from-ink/35 via-ink/15 to-transparent" aria-hidden="true" />
 
       <div className="relative mx-auto flex max-w-[1600px] flex-col gap-6 px-4 pb-10 sm:px-8 md:flex-row md:items-end md:gap-10">
         {posterUrl ? (

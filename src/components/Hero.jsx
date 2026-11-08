@@ -233,11 +233,10 @@ export default function Hero() {
                 }`}
               />
 
-              {/* Depth + legibility overlays (gentle on the artwork, padded at the title) */}
-              <div className="absolute inset-0 z-10 bg-gradient-to-r from-ink/40 via-ink/15 to-transparent" aria-hidden="true" />
-              <div className="hero-vignette absolute inset-0 z-10 bg-gradient-to-t from-black via-black/60 to-transparent" aria-hidden="true" />
-              <div className="absolute inset-x-0 top-0 z-10 h-28 bg-gradient-to-b from-ink/40 to-transparent" aria-hidden="true" />
-              <div className="absolute inset-0 z-10 bg-[radial-gradient(ellipse_at_center,transparent_60%,rgba(0,0,0,0.25)_100%)]" aria-hidden="true" />
+              {/* Keep the artwork bright, with stronger shading only behind the content. */}
+              <div className="absolute inset-0 z-10 bg-gradient-to-r from-ink/25 via-ink/10 to-transparent" aria-hidden="true" />
+              <div className="absolute inset-0 z-10 bg-gradient-to-t from-black/80 via-black/20 to-transparent" aria-hidden="true" />
+              <div className="absolute inset-x-0 top-0 z-10 h-28 bg-gradient-to-b from-ink/15 to-transparent" aria-hidden="true" />
 
               {/* Content — rendered for the active slide only */}
               {isActive && (

@@ -80,6 +80,31 @@ export default function Hero() {
 
   const markBackdropBroken = (id) => setBrokenBackdrops((prev) => ({ ...prev, [id]: true }));
 
+  // Preload the active and next background so CSS background failures can use
+  // the existing per-slide gradient fallback.
+  useEffect(() => {
+    if (!slideCount) return undefined;
+    const indices = [safeActive, (safeActive + 1) % slideCount];
+    const images = indices
+      .map((index) => slides[index])
+      .filter(Boolean)
+      .map((movie) => {
+        const url = getBackdropUrl(movie.backdrop_path, 1280);
+        if (!url || brokenBackdrops[movie.id]) return null;
+        const image = new Image();
+        image.onerror = () => markBackdropBroken(movie.id);
+        image.src = url;
+        return image;
+      })
+      .filter(Boolean);
+
+    return () => {
+      images.forEach((image) => {
+        image.onerror = null;
+      });
+    };
+  }, [safeActive, slideCount, brokenBackdrops]);
+
   // If a cached logo image fails to decode/load, drop it and fall back to text.
   const markLogoBroken = (movie) => {
     setTitleLogos((prev) =>
@@ -101,7 +126,7 @@ export default function Hero() {
       onMouseLeave={() => setPaused(false)}
       onFocusCapture={() => setPaused(true)}
       onBlurCapture={() => setPaused(false)}
-      className="relative w-full min-h-[540px] overflow-hidden bg-ink lg:min-h-[620px]"
+      className="relative h-[80vh] min-h-[540px] w-full overflow-hidden bg-ink lg:min-h-[620px]"
     >
       {/* Loading skeleton */}
       {loading && (
@@ -140,52 +165,48 @@ export default function Hero() {
         </div>
       )}
 
-      {/* Slides: every backdrop is rendered for a smooth crossfade, but only
-          the active slide exposes its interactive content to assistive tech. */}
-      {slides.map((movie, i) => {
-        const isActive = i === safeActive;
-        const backdrop = brokenBackdrops[movie.id] ? null : getBackdropUrl(movie.backdrop_path, 1280);
-        const rating = formatRating(movie.vote_average);
-        const year = formatYear(movie.release_date ?? movie.first_air_date);
-        const title = movie.title || movie.name || 'Untitled';
-        const overview = movie.overview || '';
-        const logoUrl = titleLogos[slideKey(movie)] || null;
+      {/* The active slide is translated into view; inactive slides cannot be interacted with. */}
+      <div
+        className="flex h-full w-full transition-transform duration-500 ease-[cubic-bezier(0.16,1,0.3,1)]"
+        style={{ transform: `translate3d(-${safeActive * 100}%, 0, 0)` }}
+      >
+        {slides.map((movie, i) => {
+          const isActive = i === safeActive;
+          const backdrop = brokenBackdrops[movie.id] ? null : getBackdropUrl(movie.backdrop_path, 1280);
+          const rating = formatRating(movie.vote_average);
+          const year = formatYear(movie.release_date ?? movie.first_air_date);
+          const title = movie.title || movie.name || 'Untitled';
+          const overview = movie.overview || '';
+          const logoUrl = titleLogos[slideKey(movie)] || null;
 
-        return (
-          <div
-            key={`${movie.media_type}-${movie.id}`}
-            aria-hidden={!isActive}
-            onClick={() => {
-              if (isActive) navigate(watchUrl(movie));
-            }}
-            className={`absolute inset-0 transition-opacity duration-700 ${
-              isActive ? 'cursor-pointer opacity-100' : 'pointer-events-none opacity-0'
-            }`}
-          >
-            {/* Backdrop or gradient fallback */}
-            {backdrop ? (
-              <img
-                src={backdrop}
-                alt=""
+          return (
+            <article
+              key={`${movie.media_type}-${movie.id}`}
+              aria-hidden={!isActive}
+              onClick={() => {
+                if (isActive) navigate(watchUrl(movie));
+              }}
+              style={{ '--hero': backdrop ? `url("${backdrop}")` : undefined }}
+              className={`relative h-full w-full shrink-0 overflow-hidden ${
+                isActive ? 'cursor-pointer' : 'pointer-events-none'
+              }`}
+            >
+              <div
                 aria-hidden="true"
-                loading="lazy"
-                onError={() => markBackdropBroken(movie.id)}
-                className={`h-full w-full object-cover will-change-transform ${
-                  isActive ? 'animate-[kenburns_22s_ease-out_forwards]' : ''
+                style={backdrop ? { backgroundImage: 'var(--hero)' } : undefined}
+                className={`absolute inset-0 bg-cover bg-center ${
+                  backdrop ? '' : `bg-gradient-to-br ${gradients[i % gradients.length]}`
                 }`}
               />
-            ) : (
-              <div className={`h-full w-full bg-gradient-to-br ${gradients[i % gradients.length]}`} aria-hidden="true" />
-            )}
 
-            {/* Depth + legibility overlays (gentle on the artwork, padded at the title) */}
-            <div className="absolute inset-0 z-10 bg-gradient-to-r from-ink/40 via-ink/15 to-transparent" aria-hidden="true" />
-            <div className="absolute inset-x-0 bottom-0 z-10 h-[55%] bg-gradient-to-t from-ink/70 via-ink/15 to-transparent" aria-hidden="true" />
-            <div className="absolute inset-x-0 top-0 z-10 h-28 bg-gradient-to-b from-ink/40 to-transparent" aria-hidden="true" />
-            <div className="absolute inset-0 z-10 bg-[radial-gradient(ellipse_at_center,transparent_60%,rgba(0,0,0,0.25)_100%)]" aria-hidden="true" />
+              {/* Depth + legibility overlays (gentle on the artwork, padded at the title) */}
+              <div className="absolute inset-0 z-10 bg-gradient-to-r from-ink/40 via-ink/15 to-transparent" aria-hidden="true" />
+              <div className="hero-vignette absolute inset-0 z-10 bg-gradient-to-t from-black via-black/60 to-transparent" aria-hidden="true" />
+              <div className="absolute inset-x-0 top-0 z-10 h-28 bg-gradient-to-b from-ink/40 to-transparent" aria-hidden="true" />
+              <div className="absolute inset-0 z-10 bg-[radial-gradient(ellipse_at_center,transparent_60%,rgba(0,0,0,0.25)_100%)]" aria-hidden="true" />
 
-            {/* Content — rendered for the active slide only */}
-            {isActive && (
+              {/* Content — rendered for the active slide only */}
+              {isActive && (
               <div className="absolute inset-x-0 bottom-0 z-20 mx-auto flex max-w-[1600px] flex-col gap-4
                                px-4 pb-8 sm:px-8 sm:pb-12">
                 <span className="inline-flex w-fit items-center gap-2 rounded-full border border-brand/60
@@ -246,10 +267,11 @@ export default function Hero() {
                   </button>
                 </div>
               </div>
-            )}
-          </div>
-        );
-      })}
+              )}
+            </article>
+          );
+        })}
+      </div>
     </section>
   );
 }

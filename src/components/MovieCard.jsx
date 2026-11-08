@@ -280,14 +280,15 @@ export default function MovieCard({
             aria-pressed={savedState}
             aria-label={savedState ? 'Remove from Watchlist' : 'Add to Watchlist'}
             title={savedState ? 'Remove from Watchlist' : 'Add to Watchlist'}
-            className={`absolute left-1 top-1 z-10 flex h-8 w-8 items-center justify-center rounded-full
-                         shadow transition hover:scale-105 ${
-                           savedState ? 'bg-ink-raised text-brand ring-1 ring-brand/60' : 'bg-black/60 text-white'
-                         }`}
+            className="absolute left-1 top-1 z-10 flex h-7 w-6 items-center justify-center rounded-sm
+                       border border-white/25 bg-black/35 text-white/90 backdrop-blur-sm
+                       transition-[background-color,border-color,transform] duration-200
+                       hover:border-white/60 hover:bg-black/60 focus-visible:outline-none
+                       focus-visible:ring-2 focus-visible:ring-white/80 active:scale-95"
           >
             <svg viewBox="0 0 24 24" className={`h-4 w-4 ${
-              savedState ? 'fill-brand' : 'fill-none stroke-current'
-            }`} strokeWidth="2" strokeLinejoin="round" aria-hidden="true">
+              savedState ? 'fill-brand stroke-brand' : 'fill-none stroke-current'
+            }`} strokeWidth="1.8" strokeLinejoin="round" aria-hidden="true">
               <path d="M6 3h12v18l-6-4-6 4V3z" />
             </svg>
           </button>

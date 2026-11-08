@@ -410,7 +410,7 @@ export default function MovieCard({
               </span>
             </span>
           </span>
-          <span className="relative z-10 flex shrink-0 flex-col p-3">
+          <span className="relative z-10 flex shrink-0 flex-col px-3 pb-3 pt-0">
             <span className="mb-1 line-clamp-1 text-base font-bold text-white">{title}</span>
             {overview && (
               <span className="line-clamp-2 text-xs leading-snug text-gray-300">

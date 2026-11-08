@@ -1,4 +1,5 @@
 import MovieCard from './MovieCard';
+import SectionHeading from './SectionHeading';
 import { useMovieData } from '../hooks/useMovieData';
 
 /**
@@ -21,7 +22,7 @@ export default function MovieRow({ title, fetcher, movies: staticMovies }) {
 
   return (
     <section aria-label={title} className="mx-auto w-full max-w-[1600px] px-4 py-6 sm:px-8">
-      <h2 className="mb-4 text-lg font-bold text-white md:text-xl">{title}</h2>
+      <SectionHeading className="mb-4 text-xl md:text-2xl">{title}</SectionHeading>
 
       {isLoading && (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">

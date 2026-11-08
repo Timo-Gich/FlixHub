@@ -1,4 +1,5 @@
 import MovieCard from './MovieCard';
+import SectionHeading from './SectionHeading';
 
 /**
  * Horizontally-scrollable "carousel" of suggested titles (TMDb recommendations).
@@ -15,7 +16,7 @@ export default function RecommendationsRow({ title = 'More Like This', items = [
 
   return (
     <section aria-label={title} className="mx-auto w-full max-w-[1600px] px-4 py-6 sm:px-8">
-      <h2 className="mb-4 text-lg font-bold text-white md:text-xl">{title}</h2>
+      <SectionHeading className="mb-4 text-xl md:text-2xl">{title}</SectionHeading>
 
       <div className="scrollbar-hide -mx-4 flex gap-3 overflow-x-auto px-4 py-8 sm:-mx-8 sm:px-8">
         {list.map((item) => (

@@ -3,6 +3,7 @@ import Navbar from '../components/Navbar';
 import Hero from '../components/Hero';
 import MovieRow from '../components/MovieRow';
 import MovieCard from '../components/MovieCard';
+import SectionHeading from '../components/SectionHeading';
 import Footer from '../components/Footer';
 import { fetchTrendingMovies, fetchPopularMovies } from '../services/tmdbService';
 import { FINISH_THRESHOLD, latestHistoryByTitle } from '../services/libraryService';
@@ -69,8 +70,8 @@ export default function HomePage() {
         <Hero />
 
         {continueWatching.length > 0 && (
-          <section aria-label="Continue Watching" className="group mx-auto w-full max-w-[1600px] px-4 py-6 sm:px-8">
-            <h2 className="mb-4 text-lg font-bold text-white md:text-xl">Continue Watching</h2>
+          <section aria-label="Continue Watching" className="group/continue-watching mx-auto w-full max-w-[1600px] px-4 py-6 sm:px-8">
+            <SectionHeading className="mb-4 text-xl md:text-2xl">Continue Watching</SectionHeading>
             <div className="relative">
               <div
                 ref={rowRef}
@@ -109,7 +110,7 @@ export default function HomePage() {
                   title="Scroll left"
                   className="pointer-events-none absolute left-0 top-1/2 z-20 hidden h-10 w-10 -translate-y-1/2 items-center justify-center
                              rounded-full border border-ink-border bg-ink-raised/90 text-white opacity-0 shadow transition
-                             group-hover:pointer-events-auto group-hover:opacity-100 hover:bg-brand md:flex"
+                             group-hover/continue-watching:pointer-events-auto group-hover/continue-watching:opacity-100 hover:bg-brand md:flex"
                 >
                   <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor"
                        strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -126,7 +127,7 @@ export default function HomePage() {
                   title="Scroll right"
                   className="pointer-events-none absolute right-0 top-1/2 z-20 hidden h-10 w-10 -translate-y-1/2 items-center justify-center
                              rounded-full border border-ink-border bg-ink-raised/90 text-white opacity-0 shadow transition
-                             group-hover:pointer-events-auto group-hover:opacity-100 hover:bg-brand md:flex"
+                             group-hover/continue-watching:pointer-events-auto group-hover/continue-watching:opacity-100 hover:bg-brand md:flex"
                 >
                   <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor"
                        strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">

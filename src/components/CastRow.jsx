@@ -1,4 +1,5 @@
 import { getProfileUrl } from '../services/tmdbService';
+import SectionHeading from './SectionHeading';
 
 /**
  * Horizontal, horizontally-scrollable cast row used on movie / TV detail pages.
@@ -14,7 +15,7 @@ export default function CastRow({ people = [] }) {
 
   return (
     <section aria-label="Cast" className="mx-auto w-full max-w-[1600px] px-4 py-6 sm:px-8">
-      <h2 className="mb-4 text-lg font-bold text-white md:text-xl">Cast</h2>
+      <SectionHeading className="mb-4 text-xl md:text-2xl">Cast</SectionHeading>
 
       <div className="scrollbar-hide -mx-4 flex gap-5 overflow-x-auto px-4 pb-2 sm:-mx-8 sm:px-8">
         {cast.map((person) => (

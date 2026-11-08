@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import MovieCard from '../components/MovieCard';
+import SectionHeading from '../components/SectionHeading';
 import SyncNudge from '../components/SyncNudge';
 import ConfirmDialog from '../components/ConfirmDialog';
 import { useLibrary } from '../hooks/useLibrary.jsx';
@@ -193,7 +194,7 @@ export default function WatchLaterPage() {
         <SyncNudge hasItems={items.length > 0} />
 
         <section className="mt-6" aria-label="Watchlist collections">
-          <h2 className="mb-3 text-sm font-bold uppercase tracking-wider text-muted">Your collections</h2>
+          <SectionHeading className="mb-3 text-lg">Your collections</SectionHeading>
           <div className="-mx-4 flex snap-x gap-3 overflow-x-auto px-4 pb-3 sm:-mx-8 sm:px-8">
             {collectionCards.map((collection) => {
               const isSelected = selectedCollection === collection.id;
@@ -303,10 +304,10 @@ export default function WatchLaterPage() {
         </section>
 
         <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-          <h2 className="text-lg font-bold text-white">
+          <SectionHeading className="text-xl">
             {collectionCards.find((collection) => collection.id === selectedCollection)?.name || 'All Saved'}
             <span className="ml-2 text-sm font-medium text-muted">({visibleItems.length})</span>
-          </h2>
+          </SectionHeading>
           {visibleItems.length > 0 && (
             <label className="inline-flex items-center gap-2 text-sm text-muted">
               Sort by

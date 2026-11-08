@@ -13,6 +13,8 @@ import { useLibrary } from '../hooks/useLibrary.jsx';
 import { gradients } from '../data/movies';
 import CollectionPicker from './CollectionPicker';
 
+let lastPageScrollAt = 0;
+
 /**
  * A single movie tile fed from TMDb data.
  * Renders the real poster when available, otherwise a gradient placeholder.
@@ -126,7 +128,8 @@ export default function MovieCard({
     const gap = 12;
     const margin = 8;
     const width = Math.min(rect.width * 1.85, window.innerWidth - margin * 2);
-    const height = Math.min(rect.height * 1.12, window.innerHeight - margin * 2);
+    const detailsHeight = 96 + (overview ? 32 : 0);
+    const height = Math.min(width * (9 / 16) + detailsHeight, window.innerHeight - margin * 2);
     const opensRight = rect.right + gap + width <= window.innerWidth - margin;
     const left = opensRight
       ? rect.right + gap
@@ -135,7 +138,7 @@ export default function MovieCard({
       Math.max(margin, rect.top + (rect.height - height) / 2),
       window.innerHeight - height - margin,
     );
-    const position = { left, top, width, height };
+    const position = { left, top, width };
     panelPositionRef.current = position;
     setPanelPosition(position);
   }, []);
@@ -144,11 +147,18 @@ export default function MovieCard({
     const repositionActivePanel = () => {
       if (panelPositionRef.current) updatePanelPosition();
     };
+    const closePanelOnScroll = () => {
+      lastPageScrollAt = Date.now();
+      if (!panelPositionRef.current) return;
+      panelPositionRef.current = null;
+      setPanelOpen(false);
+      setPanelPosition(null);
+    };
     window.addEventListener('resize', repositionActivePanel);
-    window.addEventListener('scroll', repositionActivePanel, true);
+    window.addEventListener('scroll', closePanelOnScroll, true);
     return () => {
       window.removeEventListener('resize', repositionActivePanel);
-      window.removeEventListener('scroll', repositionActivePanel, true);
+      window.removeEventListener('scroll', closePanelOnScroll, true);
     };
   }, [updatePanelPosition]);
 
@@ -161,7 +171,10 @@ export default function MovieCard({
 
   const openPanel = () => {
     clearPanelCloseTimeout();
-    if (!window.matchMedia('(hover: hover) and (pointer: fine)').matches) return;
+    if (
+      !window.matchMedia('(hover: hover) and (pointer: fine)').matches
+      || Date.now() - lastPageScrollAt < 250
+    ) return;
     setPanelOpen(true);
     updatePanelPosition();
     loadOfficialLogo();
@@ -299,30 +312,6 @@ export default function MovieCard({
           </button>
         )}
 
-        {onMoveToCollection && (
-          <button
-            type="button"
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              setPickerMode('move');
-              setPickerOpen(true);
-            }}
-            aria-label="Move to collection"
-            title="Move to collection"
-            className="absolute right-1 top-1 z-10 flex h-9 w-9 items-center justify-center rounded-full
-                       border border-white/25 bg-black/75 text-white shadow-lg backdrop-blur-sm
-                       transition duration-150 hover:scale-105 hover:border-white/50 hover:bg-brand
-                       focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white
-                       md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100"
-          >
-            <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <path d="M3 7.5A1.5 1.5 0 0 1 4.5 6H10l2 2h7.5A1.5 1.5 0 0 1 21 9.5v8a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 17.5z" />
-              <path d="M12 11v5m-2-2 2 2 2-2" />
-            </svg>
-          </button>
-        )}
-
         {!onRemove && typeof index === 'number' && (
           <span className="absolute right-2 top-2 text-4xl font-black text-white/30 drop-shadow">
             {index < 10 ? `0${index}` : index}
@@ -372,12 +361,12 @@ export default function MovieCard({
             setPanelOpen(true);
           }}
           onMouseLeave={schedulePanelClose}
-          className={`fixed z-50 hidden flex-col justify-end overflow-hidden rounded-lg
-                      border border-white/10 bg-black p-3 shadow-2xl transition-opacity duration-200 md:flex ${
+          className={`fixed z-50 hidden flex-col overflow-hidden rounded-lg
+                      border border-white/10 bg-black shadow-2xl transition-opacity duration-200 md:flex ${
                         panelOpen ? 'pointer-events-auto opacity-100' : 'pointer-events-none opacity-0'
                       }`}
         >
-          <span className="absolute inset-0">
+          <span className="relative aspect-video shrink-0">
             {backdrop ? (
               <img src={backdrop} alt="" loading="lazy" className="h-full w-full object-cover" />
             ) : poster ? (
@@ -385,39 +374,51 @@ export default function MovieCard({
             ) : (
               <span className={`block h-full w-full bg-gradient-to-br ${gradient}`} aria-hidden="true" />
             )}
-            <span className="absolute inset-0 bg-gradient-to-t from-black via-black/75 to-black/10" />
+            <span className="absolute inset-0 bg-gradient-to-t from-black via-black/60 to-black/10" />
+            {rating && (
+              <span className="absolute right-3 top-3 inline-flex items-center gap-1 rounded bg-black/70 px-2 py-1
+                               text-xs font-bold text-white shadow">
+                <svg viewBox="0 0 24 24" className="h-3.5 w-3.5 fill-amber-400" aria-hidden="true">
+                  <path d="M12 2l2.9 6.3 6.9.8-5.1 4.7 1.4 6.8L12 17.8 5.9 20.6l1.4-6.8L2.2 9.1l6.9-.8z" />
+                </svg>
+                {rating}
+              </span>
+            )}
+            <span className="absolute inset-x-3 bottom-3 z-10">
+              <span className="mb-2 flex min-h-8 items-end">
+                {logo ? (
+                  <img src={logo} alt={`${title} logo`} loading="lazy" className="max-h-10 max-w-full object-contain object-left-bottom" />
+                ) : (
+                  <span className="line-clamp-2 text-lg font-bold text-white">{title}</span>
+                )}
+              </span>
+              <span className="flex flex-wrap items-center gap-2 text-xs font-medium text-white">
+                <span>{isTV ? 'TV Show' : 'Movie'}</span>
+                {rating && (
+                  <span className="inline-flex items-center gap-1">
+                    <svg viewBox="0 0 24 24" className="h-3 w-3 fill-amber-400" aria-hidden="true">
+                      <path d="M12 2l2.9 6.3 6.9.8-5.1 4.7 1.4 6.8L12 17.8 5.9 20.6l1.4-6.8L2.2 9.1l6.9-.8z" />
+                    </svg>
+                    {rating}
+                  </span>
+                )}
+                {year && <span>{year}</span>}
+                {(movie.origin_country?.[0] || movie.original_language) && (
+                  <span>{(movie.origin_country?.[0] || movie.original_language).toUpperCase()}</span>
+                )}
+              </span>
+            </span>
           </span>
-          <span className="relative z-10 flex h-full flex-col justify-end">
-            <span className="mb-2 flex min-h-8 items-end">
-              {logo ? (
-                <img src={logo} alt={`${title} logo`} loading="lazy" className="max-h-10 max-w-full object-contain object-left-bottom" />
-              ) : (
-                <span className="line-clamp-2 text-lg font-bold text-white">{title}</span>
-              )}
-            </span>
-            <span className="flex flex-wrap items-center gap-2 text-xs text-gray-300">
-              <span>{isTV ? 'TV Show' : 'Movie'}</span>
-              {rating && (
-                <span className="inline-flex items-center gap-1">
-                  <svg viewBox="0 0 24 24" className="h-3 w-3 fill-amber-400" aria-hidden="true">
-                    <path d="M12 2l2.9 6.3 6.9.8-5.1 4.7 1.4 6.8L12 17.8 5.9 20.6l1.4-6.8L2.2 9.1l6.9-.8z" />
-                  </svg>
-                  {rating}
-                </span>
-              )}
-              {year && <span>{year}</span>}
-              {(movie.origin_country?.[0] || movie.original_language) && (
-                <span>{(movie.origin_country?.[0] || movie.original_language).toUpperCase()}</span>
-              )}
-            </span>
+          <span className="relative z-10 flex shrink-0 flex-col p-3">
+            <span className="mb-1 line-clamp-1 text-base font-bold text-white">{title}</span>
             {overview && (
-              <span className="mt-2 line-clamp-2 text-xs leading-snug text-gray-400">
+              <span className="line-clamp-2 text-xs leading-snug text-gray-300">
                 {overview}
               </span>
             )}
-            <span className="mt-3 flex items-center gap-2">
-              <span className="flex min-h-9 flex-1 items-center justify-center gap-2 rounded-md bg-white px-2
-                               text-xs font-bold text-black transition hover:bg-white/85">
+            <span className="mt-3 flex shrink-0 items-center gap-2">
+              <span className="flex min-h-9 flex-1 items-center justify-center gap-2 rounded-md bg-brand px-2
+                               text-xs font-bold text-white transition hover:bg-brand-dark">
                 <svg viewBox="0 0 24 24" className="h-4 w-4 fill-current" aria-hidden="true">
                   <path d="M8 5v14l11-7z" />
                 </svg>
@@ -431,8 +432,9 @@ export default function MovieCard({
                   aria-label={savedState ? 'Remove from Watchlist' : 'Add to Watchlist'}
                   title={savedState ? 'Remove from Watchlist' : 'Add to Watchlist'}
                   className={`pointer-events-auto flex h-9 w-9 shrink-0 items-center justify-center rounded-md
-                              border border-white/40 bg-black/40 text-white transition hover:bg-white/20
-                              focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white ${
+                              border border-ink-border bg-ink-raised text-foreground transition
+                              hover:border-brand hover:bg-brand hover:text-white
+                              focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand ${
                                 savedState ? 'text-brand' : ''
                               }`}
                 >
@@ -447,6 +449,27 @@ export default function MovieCard({
                       <path d="M12 5v14M5 12h14" />
                     </svg>
                   )}
+                </button>
+              )}
+              {onMoveToCollection && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setPickerMode('move');
+                    setPickerOpen(true);
+                  }}
+                  aria-label="Move to collection"
+                  title="Move to collection"
+                  className="pointer-events-auto flex h-9 w-9 shrink-0 items-center justify-center rounded-md
+                             border border-white/40 bg-black/40 text-white transition hover:bg-white/20
+                             focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+                >
+                  <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M3 7.5A1.5 1.5 0 0 1 4.5 6H10l2 2h7.5A1.5 1.5 0 0 1 21 9.5v8a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 17.5z" />
+                    <path d="M12 11v5m-2-2 2 2 2-2" />
+                  </svg>
                 </button>
               )}
             </span>

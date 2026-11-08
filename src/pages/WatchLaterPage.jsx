@@ -162,7 +162,12 @@ export default function WatchLaterPage() {
       <main className="mx-auto w-full max-w-[1600px] px-4 pt-24 sm:px-8">
         <div className="flex flex-wrap items-center gap-3">
           <h1 className="text-2xl font-black text-white">Watchlist</h1>
-          <span className="w-fit rounded bg-ink-raised px-2 py-0.5 text-xs font-semibold text-muted">
+          <span className="inline-flex w-fit items-center gap-1.5 rounded-full border border-brand/30
+                           bg-brand/10 px-3 py-1 text-sm font-bold tracking-wide text-brand-light
+                           shadow-sm shadow-brand/10">
+            <svg viewBox="0 0 24 24" className="h-3.5 w-3.5 fill-current" aria-hidden="true">
+              <path d="M6 3h12v18l-6-4-6 4V3z" />
+            </svg>
             {items.length} saved{syncing ? ' · syncing…' : ''}
           </span>
           <button

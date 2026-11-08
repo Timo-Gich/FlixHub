@@ -188,7 +188,14 @@ export default function HistoryPage() {
       <main className="mx-auto w-full max-w-[1600px] px-4 pt-24 sm:px-8">
         <div className="flex flex-wrap items-center gap-3">
           <h1 className="text-2xl font-black text-white">Watch History</h1>
-          <span className="w-fit rounded bg-ink-raised px-2 py-0.5 text-xs font-semibold text-muted">
+          <span className="inline-flex w-fit items-center gap-1.5 rounded-full border border-brand/30
+                           bg-brand/10 px-3 py-1 text-sm font-bold tracking-wide text-brand-light
+                           shadow-sm shadow-brand/10">
+            <svg viewBox="0 0 24 24" className="h-3.5 w-3.5 fill-none stroke-current" strokeWidth="2"
+                 strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <circle cx="12" cy="12" r="9" />
+              <path d="M12 7v5l3 2" />
+            </svg>
             {displayItems.length} title{displayItems.length === 1 ? '' : 's'} watched{syncing ? ' · syncing…' : ''}
           </span>
           {items.length > 0 && (

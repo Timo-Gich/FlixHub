@@ -16,7 +16,9 @@ export default function CategoryPage({ title, rows }) {
 
       <main className="pt-24">
         <div className="mx-auto w-full max-w-[1600px] px-4 py-2 sm:px-8">
-          <h1 className="text-3xl font-black text-white">{title}</h1>
+          <h1 className="font-display text-4xl font-semibold uppercase tracking-wide text-white text-shadow-hero">
+            {title}
+          </h1>
         </div>
         {rows.map((row) => (
           <MovieRow key={row.id} title={row.title} fetcher={row.fetcher} />

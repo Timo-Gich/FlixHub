@@ -275,6 +275,24 @@ export function fetchTVDetails(id) {
 }
 
 /**
+ * Selects the best available YouTube trailer or teaser from TMDb video data.
+ * @param {Array<object>|{results?: Array<object>}|null|undefined} videos
+ * @returns {string|null}
+ */
+export function getTrailerKey(videos) {
+  const results = Array.isArray(videos) ? videos : videos?.results;
+  if (!Array.isArray(results)) return null;
+
+  const youtubeVideos = results.filter((video) => video?.site === 'YouTube' && video.key);
+  return (
+    youtubeVideos.find((video) => video.type === 'Trailer' && video.official === true)?.key ??
+    youtubeVideos.find((video) => video.type === 'Teaser')?.key ??
+    youtubeVideos[0]?.key ??
+    null
+  );
+}
+
+/**
  * The list of episodes for a given season of a TV series.
  * @param {number|string} id          TV series id
  * @param {number|string} seasonNumber

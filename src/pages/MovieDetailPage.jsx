@@ -12,12 +12,13 @@ import {
   formatRating,
   formatYear,
   formatRuntime,
+  getTrailerKey,
 } from '../services/tmdbService';
 
 /**
  * /movie/:id — VidBox-style movie detail page.
  * All detail data (header, cast, recommendations) is fetched in a single TMDb
- * call via fetchMovieDetails, which uses append_to_response=credits,recommendations.
+ * call via fetchMovieDetails, which includes videos, credits and recommendations.
  * The red Play button links to the player at /watch/:id.
  */
 export default function MovieDetailPage() {
@@ -33,6 +34,7 @@ export default function MovieDetailPage() {
   const poster = movie?.poster_path ? getPosterUrl(movie.poster_path, 500) : null;
   const genres = movie?.genres ?? [];
   const overview = movie?.overview;
+  const trailerKey = getTrailerKey(movie?.videos?.results);
   const hasValidId = id !== undefined && !Number.isNaN(Number(id));
   const playHref = hasValidId ? `/watch/${id}` : null;
 
@@ -73,6 +75,7 @@ export default function MovieDetailPage() {
               rating={rating}
               overview={overview}
               playHref={playHref}
+              trailerKey={trailerKey}
               watchlistMovie={movie}
             />
 

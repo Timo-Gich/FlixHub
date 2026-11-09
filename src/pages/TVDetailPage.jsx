@@ -15,6 +15,7 @@ import {
   getImageUrl,
   formatRating,
   formatYear,
+  getTrailerKey,
 } from '../services/tmdbService';
 import { saveLastSeason, getLastSeason, getWatchedEpisodes } from '../services/seasonMem';
 
@@ -65,7 +66,7 @@ function EpisodeThumb({ stillPath, season, episodeNumber, highlighted }) {
 /**
  * /tv/:id — VidBox-style series detail page. Uses the shared DetailHero (same
  * structure as movies) plus a cast row and a "Similar Shows" carousel, all from
- * a single call to fetchTVDetails (append_to_response=credits,recommendations).
+ * a single call to fetchTVDetails (append_to_response=videos,credits,recommendations).
  * A season selector + episode list let you open the TV player
  * (/watch/tv/:id/:season/:episode).
  */
@@ -161,6 +162,7 @@ export default function TVDetailPage() {
   const poster = series?.poster_path ? getPosterUrl(series.poster_path, 500) : null;
   const genres = series?.genres ?? [];
   const overview = series?.overview;
+  const trailerKey = getTrailerKey(series?.videos?.results);
   const hasValidId = id !== undefined && !Number.isNaN(Number(id));
   // Hero "Play" starts the first episode of the currently selected season (or
   // Season 1 before the season selector has initialised), so the hero stays in
@@ -203,6 +205,7 @@ export default function TVDetailPage() {
               rating={rating}
               overview={overview}
               playHref={playHref}
+              trailerKey={trailerKey}
               watchlistMovie={{ ...series, media_type: 'tv' }}
             />
           </>

@@ -4,6 +4,7 @@ import Navbar from '../components/Navbar';
 import MovieCard from '../components/MovieCard';
 import DiscoveryRow from '../components/DiscoveryRow';
 import SectionHeading from '../components/SectionHeading';
+import TrailerModal from '../components/TrailerModal';
 import { useLibrary } from '../hooks/useLibrary.jsx';
 import { useMovieData } from '../hooks/useMovieData';
 import {
@@ -21,6 +22,7 @@ import {
   formatRating,
   formatYear,
   getBackdropUrl,
+  getTrailerKey,
 } from '../services/tmdbService';
 
 const LANGUAGES = [
@@ -359,14 +361,12 @@ function FeaturePanel({ movie, loading, error, reload, genres }) {
       const details = movie.media_type === 'tv'
         ? await fetchTVDetails(movie.id)
         : await fetchMovieDetails(movie.id);
-      const trailer = (details.videos?.results ?? []).find(
-        (video) => video.site === 'YouTube' && video.type === 'Trailer' && video.key,
-      );
-      if (!trailer) {
+      const key = getTrailerKey(details.videos?.results);
+      if (!key) {
         setTrailerError('No trailer is available for this title.');
         return;
       }
-      setTrailerId(trailer.key);
+      setTrailerId(key);
       setTrailerOpen(true);
     } catch (requestError) {
       setTrailerError(requestError.message);
@@ -460,38 +460,7 @@ function FeaturePanel({ movie, loading, error, reload, genres }) {
       </section>
 
       {trailerOpen && trailerId && (
-        <div
-          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 p-4"
-          role="dialog"
-          aria-modal="true"
-          aria-label={`${title} trailer`}
-          onMouseDown={(event) => {
-            if (event.target === event.currentTarget) setTrailerOpen(false);
-          }}
-        >
-          <div className="w-full max-w-5xl">
-            <div className="mb-3 flex items-center justify-between gap-4">
-              <p className="font-semibold text-white">{title} — Trailer</p>
-              <button
-                type="button"
-                onClick={() => setTrailerOpen(false)}
-                aria-label="Close trailer"
-                className="rounded-full border border-white/30 px-3 py-1 text-white transition hover:bg-white/10"
-              >
-                Close
-              </button>
-            </div>
-            <div className="aspect-video overflow-hidden rounded-lg bg-black">
-              <iframe
-                src={`https://www.youtube-nocookie.com/embed/${encodeURIComponent(trailerId)}?autoplay=1`}
-                title={`${title} trailer`}
-                className="h-full w-full"
-                allow="autoplay; encrypted-media; picture-in-picture"
-                allowFullScreen
-              />
-            </div>
-          </div>
-        </div>
+        <TrailerModal videoKey={trailerId} onClose={() => setTrailerOpen(false)} />
       )}
     </>
   );

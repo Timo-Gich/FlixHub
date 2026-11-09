@@ -1,5 +1,7 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import BookmarkButton from './BookmarkButton';
+import TrailerModal from './TrailerModal';
 
 /**
  * Shared VidBox-style hero header for movie and TV detail pages.
@@ -17,6 +19,7 @@ import BookmarkButton from './BookmarkButton';
  *   - rating      : formatted rating string (e.g. "8.5") or null
  *   - overview    : synopsis text
  *   - playHref    : route the red Play button links to (e.g. /watch/:id)
+ *   - trailerKey  : YouTube video key for the Watch Trailer button
  *   - watchlistMovie : optional TMDb movie to show a Watchlist button for
  */
 export default function DetailHero({
@@ -29,9 +32,13 @@ export default function DetailHero({
   rating,
   overview,
   playHref,
+  trailerKey,
   watchlistMovie,
 }) {
+  const [trailerOpen, setTrailerOpen] = useState(false);
+
   return (
+    <>
     <section className="relative overflow-hidden bg-ink pt-20 sm:pt-24">
       {/* Full-width backdrop with dark gradient overlay */}
       {backdropUrl && (
@@ -104,7 +111,7 @@ export default function DetailHero({
             </p>
           )}
 
-          {(playHref || watchlistMovie) && (
+          {(playHref || trailerKey || watchlistMovie) && (
             <div className="mt-6 flex flex-wrap items-center justify-center gap-3 md:justify-start">
               {playHref && (
                 <Link
@@ -119,11 +126,26 @@ export default function DetailHero({
                   Play
                 </Link>
               )}
+              {trailerKey && (
+                <button
+                  type="button"
+                  onClick={() => setTrailerOpen(true)}
+                  className="inline-flex items-center gap-2 rounded-md border border-white/30 bg-black/40 px-6 py-3 text-base font-bold text-white
+                             transition hover:bg-white/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
+                >
+                  <svg viewBox="0 0 24 24" className="h-5 w-5 fill-current" aria-hidden="true">
+                    <path d="M8 5v14l11-7z" />
+                  </svg>
+                  Watch Trailer
+                </button>
+              )}
               {watchlistMovie && <BookmarkButton movie={watchlistMovie} variant="detail" />}
             </div>
           )}
         </div>
       </div>
     </section>
+    {trailerOpen && <TrailerModal videoKey={trailerKey} onClose={() => setTrailerOpen(false)} />}
+    </>
   );
 }

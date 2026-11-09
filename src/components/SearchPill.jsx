@@ -93,7 +93,7 @@ export default function SearchPill({
         {filterOpen && (
           <ul
             role="listbox"
-            className="absolute left-2 top-full z-30 mt-1.5 w-32 rounded-md border border-ink-border
+            className="absolute left-2 top-full z-[60] mt-1.5 w-32 rounded-md border border-ink-border
                        bg-ink/95 py-1 shadow-lg backdrop-blur"
           >
             {FILTER_OPTIONS.map((option) => (

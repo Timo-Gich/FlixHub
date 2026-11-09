@@ -157,7 +157,8 @@ export default function Navbar() {
   };
 
   const navigate = useNavigate();
-  const { pathname } = useLocation();
+  const location = useLocation();
+  const { pathname } = location;
 
   // Routes that are self-contained players with their own contextual "Back"
   // button (in the player bar). The global arrow is hidden there so each
@@ -192,7 +193,14 @@ export default function Navbar() {
   // Show a back arrow on every page except Home and the full-screen players.
   const showBack = pathname !== '/' && !isPlayerPath(pathname);
   const goBack = () => {
-    const target = backStack.pop();
+    const stateTarget = location.state?.from;
+    const targetFromState = typeof stateTarget === 'string'
+      && stateTarget.startsWith('/')
+      && !stateTarget.startsWith('//')
+      && stateTarget !== pathname
+      ? stateTarget
+      : null;
+    const target = targetFromState ?? backStack.pop();
     backingRef.current = true;
     if (target && target !== pathname) navigate(target);
     else navigate('/', { replace: true }); // deep link / fresh session -> Home

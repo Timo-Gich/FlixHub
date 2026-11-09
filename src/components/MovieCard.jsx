@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import {
   getPosterUrl,
   getBackdropUrl,
@@ -45,6 +45,7 @@ export default function MovieCard({
   onDragStart,
   onDragEnd,
 }) {
+  const location = useLocation();
   const isImdb = movie?.source === 'imdb';
   const cardRef = useRef(null);
   const panelPositionRef = useRef(null);
@@ -210,6 +211,7 @@ export default function MovieCard({
     <Link
       ref={cardRef}
       to={linkTo}
+      state={{ from: `${location.pathname}${location.search}${location.hash}` }}
       aria-label={`View ${title}`}
       draggable={!!onDragStart}
       onDragStart={onDragStart ? (event) => onDragStart(event, movie) : undefined}

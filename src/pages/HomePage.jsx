@@ -108,7 +108,7 @@ export default function HomePage() {
                   onClick={() => scrollRow(-1)}
                   aria-label="Scroll Continue Watching row left"
                   title="Scroll left"
-                  className="pointer-events-none absolute left-0 top-1/2 z-20 hidden h-10 w-10 -translate-y-1/2 items-center justify-center
+                  className="pointer-events-none absolute left-0 top-1/2 z-[60] hidden h-10 w-10 -translate-y-1/2 items-center justify-center
                              rounded-full border border-ink-border bg-ink-raised/90 text-white opacity-0 shadow transition
                              group-hover/continue-watching:pointer-events-auto group-hover/continue-watching:opacity-100 hover:bg-brand md:flex"
                 >
@@ -125,7 +125,7 @@ export default function HomePage() {
                   onClick={() => scrollRow(1)}
                   aria-label="Scroll Continue Watching row right"
                   title="Scroll right"
-                  className="pointer-events-none absolute right-0 top-1/2 z-20 hidden h-10 w-10 -translate-y-1/2 items-center justify-center
+                  className="pointer-events-none absolute right-0 top-1/2 z-[60] hidden h-10 w-10 -translate-y-1/2 items-center justify-center
                              rounded-full border border-ink-border bg-ink-raised/90 text-white opacity-0 shadow transition
                              group-hover/continue-watching:pointer-events-auto group-hover/continue-watching:opacity-100 hover:bg-brand md:flex"
                 >

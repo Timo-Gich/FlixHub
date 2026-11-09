@@ -242,10 +242,22 @@ export default function Hero() {
               {isActive && (
               <div className="absolute inset-x-0 bottom-0 z-20 mx-auto flex max-w-[1600px] flex-col gap-4
                                px-4 pb-8 sm:px-8 sm:pb-12">
-                <span className="inline-flex w-fit items-center gap-2 rounded-full border border-brand/60
-                                 bg-brand/10 px-3 py-1 text-xs font-semibold tracking-wide text-brand-light">
-                  <span className="h-1.5 w-1.5 rounded-full bg-brand-light" aria-hidden="true" />
-                  TRENDING NOW {slideIndex + 1} OF {slideCount}
+                <span
+                  aria-label={`Top 10, number ${slideIndex + 1} trending today`}
+                  className="inline-flex w-fit items-center gap-2 rounded-sm px-1.5 py-1
+                             text-white shadow-sm"
+                >
+                  <span
+                    aria-hidden="true"
+                    className="flex h-7 w-6 flex-col items-center justify-center rounded-[2px]
+                               bg-brand text-[9px] font-black leading-[0.9] tracking-tight text-white"
+                  >
+                    <span>TOP</span>
+                    <span>10</span>
+                  </span>
+                  <span className="text-shadow-hero text-base font-extrabold tracking-tight text-white">
+                    #{slideIndex + 1} Trending Today
+                  </span>
                 </span>
 
                 <h1 className="max-w-3xl text-shadow-hero text-3xl font-black leading-tight text-white

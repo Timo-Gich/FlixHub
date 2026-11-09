@@ -145,7 +145,9 @@ export default function DetailHero({
         </div>
       </div>
     </section>
-    {trailerOpen && <TrailerModal videoKey={trailerKey} onClose={() => setTrailerOpen(false)} />}
+    {trailerOpen && (
+      <TrailerModal videoKey={trailerKey} title={title} onClose={() => setTrailerOpen(false)} />
+    )}
     </>
   );
 }

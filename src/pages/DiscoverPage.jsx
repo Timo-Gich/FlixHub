@@ -460,7 +460,7 @@ function FeaturePanel({ movie, loading, error, reload, genres }) {
       </section>
 
       {trailerOpen && trailerId && (
-        <TrailerModal videoKey={trailerId} onClose={() => setTrailerOpen(false)} />
+        <TrailerModal videoKey={trailerId} title={title} onClose={() => setTrailerOpen(false)} />
       )}
     </>
   );

@@ -1,6 +1,8 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 
-export default function TrailerModal({ videoKey, onClose }) {
+export default function TrailerModal({ videoKey, title, onClose }) {
+  const [playerLoading, setPlayerLoading] = useState(true);
+
   useEffect(() => {
     const handleKeyDown = (event) => {
       if (event.key === 'Escape') onClose();
@@ -23,7 +25,7 @@ export default function TrailerModal({ videoKey, onClose }) {
       <div className="relative w-full max-w-5xl rounded-lg border border-ink-border bg-ink-soft p-3 shadow-2xl sm:p-5">
         <div className="mb-3 flex items-center justify-between gap-4">
           <h2 id="trailer-modal-title" className="text-lg font-bold text-white">
-            Watch Trailer
+            {title}
           </h2>
           <button
             type="button"
@@ -36,13 +38,26 @@ export default function TrailerModal({ videoKey, onClose }) {
             </svg>
           </button>
         </div>
-        <div className="aspect-video overflow-hidden rounded-md bg-black">
+        <div className="relative aspect-video overflow-hidden rounded-md bg-black">
+          {playerLoading && (
+            <div
+              role="status"
+              className="absolute inset-0 z-10 flex items-center justify-center bg-ink/80"
+            >
+              <span
+                className="h-10 w-10 animate-spin rounded-full border-4 border-brand border-t-transparent"
+                aria-hidden="true"
+              />
+              <span className="sr-only">Loading trailer…</span>
+            </div>
+          )}
           <iframe
             src={`https://www.youtube.com/embed/${videoKey}?autoplay=1&rel=0`}
-            title="YouTube trailer"
+            title={`${title} trailer`}
             allow="autoplay; encrypted-media; picture-in-picture"
             allowFullScreen
             className="h-full w-full"
+            onLoad={() => setPlayerLoading(false)}
           />
         </div>
       </div>

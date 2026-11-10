@@ -14,9 +14,9 @@ export const SERVERS = [
     provider: 'VidSrc',
     // VidSrc accepts both IMDb and TMDb ids; we use the TMDb id directly.
     usesImdb: false,
-    movie: (id) => `https://vidsrc.tw/embed/movie/${id}`,
+    movie: (id) => `https://vidsrc.sh/embed/movie/${id}`,
     tv: (id, _imdbId, season, episode) =>
-      `https://vidsrc.tw/embed/tv/${id}/${season}/${episode}`,
+      `https://vidsrc.sh/embed/tv/${id}/${season}/${episode}`,
   },
   {
     id: 'server2',

@@ -5,7 +5,7 @@
 // manifests and segments. The browser only requests channel/guide subsets.
 // ----------------------------------------------------------------------------
 
-const LIVE_TV_API_BASE = (import.meta.env.VITE_LIVE_TV_API_URL || '/live-tv-api')
+const LIVE_TV_API_BASE = (import.meta.env.LIVE_TV_API_URL || '/live-tv-api')
   .trim()
   .replace(/\/+$/, '');
 let playlistCache = null;

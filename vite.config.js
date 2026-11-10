@@ -82,6 +82,11 @@ export default defineConfig(({ mode }) => {
   );
   return {
     plugins: [react(), tailwindcss(), vercelApiPlugin(apiEnv)],
+    define: {
+      'import.meta.env.LIVE_TV_API_URL': JSON.stringify(
+        process.env.LIVE_TV_API_URL || env.LIVE_TV_API_URL || '',
+      ),
+    },
     envPrefix: ['VITE_', 'TMDB_', 'SUPABASE_URL', 'SUPABASE_ANON_KEY'],
     server: {
       allowedHosts: ['undocked-casually-cloud.ngrok-free.dev'],

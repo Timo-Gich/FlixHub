@@ -247,7 +247,7 @@ Create the Render service from this repository's blueprint, then set
 multiple origins). Render generates `STREAM_SIGNING_SECRET` for signed HLS
 resource URLs.
 
-Set `VITE_LIVE_TV_API_URL` in the Vercel project to the Render service URL
+Set `LIVE_TV_API_URL` in the Vercel project to the Render service URL
 (for example `https://flixhub-live-tv.onrender.com`) and redeploy the frontend.
 For local development, start `npm --prefix live-tv-backend start` on port 3001
 and run `npm run dev`; Vite proxies Live TV API requests to the local backend.

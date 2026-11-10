@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: flixhub-live-tv
+    runtime: node
+    rootDir: live-tv-backend
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: 22
+      - key: STREAM_SIGNING_SECRET
+        generateValue: true

@@ -22,30 +22,31 @@ import {
   formatRange as formatProgRange,
   getRegionByCode,
   getRegionForCountry,
+  buildStreamUrl,
 } from '../services/liveTvService';
-import { useLibrary } from '../hooks/useLibrary.jsx';
 
 const REGION_KEY = 'flixhub.liveRegion';
-// Public IPTV streams go offline a lot — if the player hasn't produced any media
-// within this window we surface a friendly "unavailable" state. Generous window
-// to also absorb serverless-proxy cold starts and slow first segments.
+// The backend proxies and retries upstream stream requests. Keep a generous
+// player timeout for cold starts and slow first segments.
 const HEALTH_TIMEOUT_MS = 12000;
 const PROG_REFRESH_MS = 60000;
 
 // Aggressive hls.js tuning for low-latency live streams (see usage below).
 const HLS_CONFIG = {
+  liveSyncDurationCount: 3,
+  liveMaxLatencyDurationCount: 5,
   maxBufferLength: 15,
   maxMaxBufferLength: 30,
   backBufferLength: 10,
   initialLiveManifestSize: 1,
   lowLatencyMode: true,
-  maxLiveSyncPlaybackRate: 1.1,
+  maxLiveSyncPlaybackRate: 1.5,
   enableWorker: true,
+  fragLoadingMaxRetry: 6,
+  manifestLoadingMaxRetry: 4,
 };
 
 // Timing tunables for the live-stream networking strategy (see handlers below).
-const FALLBACK_WINDOW_MS = 5000;
-const SOURCE_FAIL_FAST_MS = 5000;
 const STALL_RELOAD_DELAY_MS = 3000;
 
 function readRegion() {
@@ -76,7 +77,6 @@ function formatClock(ms) {
  */
 export default function LivePlayerPage() {
   const { channelId } = useParams();
-  const { favoritesLive } = useLibrary();
   const decoded = safeDecode(channelId);
 
   const [channel, setChannel] = useState(null);
@@ -87,24 +87,12 @@ export default function LivePlayerPage() {
   // channel. Bumped to force a fresh player mount on "Try again".
   const startedRef = useRef(false);
   const [retryKey, setRetryKey] = useState(0);
-  // --- Live networking strategy state (see handlers below) ---
-  const [sourceMode, setSourceMode] = useState('direct'); // 'direct' | 'proxy'
-  const sourceModeRef = useRef('direct');
-  const directFailedRef = useRef(false);
-  const attemptStartedAtRef = useRef(0);
   const stallTimerRef = useRef(null);
   const stallArmedRef = useRef(false);
   const autoReloadedRef = useRef(false);
   const [stallReloadKey, setStallReloadKey] = useState(0);
 
-  // src strategy: hit the raw stream first, fall back to the serverless proxy.
-  const playerSrc = (() => {
-    if (!channel?.streamUrl) return '';
-    if (sourceMode !== 'proxy') return channel.streamUrl;
-    const q = new URLSearchParams({ url: channel.streamUrl });
-    if (channel.userAgent) q.set('ua', channel.userAgent);
-    return `/api/proxy?${q.toString()}`;
-  })();
+  const playerSrc = buildStreamUrl(channel);
   // The user's explicitly selected region (persisted by the /live browser),
   // plus the region auto-derived from the channel's own country code.
   const [userRegion] = useState(readRegion);
@@ -112,36 +100,27 @@ export default function LivePlayerPage() {
   // Bumped every minute so "now / next" stays current while the strip is open.
   const [clock, setClock] = useState(Date.now());
 
-  // Resolve the channel from the playlist, falling back to favorites.
+  // Resolve the channel and its backend stream endpoint from the server cache.
   useEffect(() => {
     let cancelled = false;
     setMissing(false);
     setChannel(null);
     fetchPlaylist().then((list) => {
       if (cancelled) return;
-      const found =
-        list.find((c) => c.id === decoded || c.tvgId === decoded) ?? null;
-      if (found) {
-        setChannel(found);
-        return;
-      }
-      const fav = favoritesLive
-        .map((e) => e.channel)
-        .find((c) => c.id === decoded || c.tvgId === decoded);
-      setChannel(fav ?? null);
-      if (!fav) setMissing(true);
+      const found = list.find((c) => c.id === decoded || c.tvgId === decoded) ?? null;
+      setChannel(found);
+      if (!found) setMissing(true);
     });
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [decoded, favoritesLive]);
+  }, [decoded]);
 
   // Channel health probe: fail fast within the timeout if nothing starts playing.
   // A ref tracks whether playback actually began, so the timeout only fires while
   // we're still waiting — it must never flip a healthy stream to "unavailable".
   useEffect(() => {
-    if (!channel?.streamUrl) return;
+    if (!playerSrc) return;
     startedRef.current = false;
     setStatus('loading');
     const timer = setTimeout(() => {
@@ -149,32 +128,7 @@ export default function LivePlayerPage() {
     }, HEALTH_TIMEOUT_MS);
     return () => clearTimeout(timer);
     // retryKey restarts the window each time the user hits "Try again".
-  }, [channel?.id, channel?.streamUrl, retryKey, sourceMode, stallReloadKey]);
-
-  // Keep the ref used by the fallback logic in sync with the state.
-  useEffect(() => {
-    sourceModeRef.current = sourceMode;
-  }, [sourceMode]);
-
-  // Reset the networking strategy on each fresh load (new channel or a manual
-  // Try again) so we always try the direct URL first again.
-  useEffect(() => {
-    if (!channel?.streamUrl) return;
-    setSourceMode('direct');
-    directFailedRef.current = false;
-    autoReloadedRef.current = false;
-    stallArmedRef.current = false;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [channel?.streamUrl, retryKey]);
-
-  // Restart the early-failure window each time the src changes (direct -> proxy)
-  // so the proxy attempt gets its own fresh window before it is judged.
-  useEffect(() => {
-    if (!playerSrc) return;
-    attemptStartedAtRef.current = performance.now();
-    if (!playerSrc.startsWith('/api/proxy')) directFailedRef.current = false;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [playerSrc]);
+  }, [channel?.id, playerSrc, retryKey, stallReloadKey]);
 
   // Periodic clock tick to advance the Now Playing strip.
   useEffect(() => {
@@ -192,19 +146,25 @@ export default function LivePlayerPage() {
       )
     : [userRegion];
 
-  // Fetch XMLTV (cached) for every candidate region.
+  // Request this channel's bounded guide window from the backend.
   useEffect(() => {
     setEpgMaps({});
     let cancelled = false;
-    fetchEPGForRegions(regionCodes).then((maps) => {
-      if (cancelled) return;
-      setEpgMaps(maps);
+    if (!channel) return undefined;
+    fetchEPGForRegions(regionCodes, {
+      channels: [channel],
+      from: Date.now() - 60 * 60 * 1000,
+      to: Date.now() + 12 * 60 * 60 * 1000,
+    }).then((maps) => {
+      if (!cancelled) setEpgMaps(maps);
+    }).catch((error) => {
+      console.error('[live-tv] could not load player guide:', error);
     });
     return () => {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [regionCodes.join(',')]);
+  }, [regionCodes.join(','), channel?.id]);
 
   // Resolve current + next programme, preferring the region that actually has
   // data for this channel so auto-derived regions lift the hit rate for
@@ -219,14 +179,9 @@ export default function LivePlayerPage() {
   const backToLive = '/live';
 
   // -------------------------------------------------------------------------
-  // Live-stream networking + resilience strategy.
-  //  1. Attack the raw stream first (lowest latency).
-  //  2. If hls.js reports a NETWORK_ERROR / CORS-ish failure within 5s of the
-  //     attempt starting and nothing has begun playing, transparently switch to
-  //     the /api/proxy endpoint (fetches server-side, bypassing CORS + mixed-content).
-  //  3. If the stream stalls, silently reload it once after 3s; if it still
-  //     never produces A/V after that reload, surface the unavailable panel.
-  //  4. Once playback is active we never tear the player down on a transient hiccup.
+  // Live-stream playback and recovery.
+  // HLS manifests and segments are proxied by the Live TV backend. The browser
+  // only decodes media and asks hls.js to recover transient playback errors.
   // -------------------------------------------------------------------------
 
   const markActive = () => {
@@ -271,35 +226,22 @@ export default function LivePlayerPage() {
     }, STALL_RELOAD_DELAY_MS);
   };
 
-  // Switch the current attempt from direct to /api/proxy. Returns true when it
-  // actually switched, so callers keep waiting instead of surfacing an error.
-  const tryProxyFallback = () => {
-    if (startedRef.current) return false; // already playing - leave it
-    if (sourceModeRef.current !== 'direct' || directFailedRef.current) return false;
-    if (performance.now() - attemptStartedAtRef.current > FALLBACK_WINDOW_MS) return false;
-    directFailedRef.current = true;
-    setSourceMode('proxy');
-    return true;
-  };
-
-  // Only fail fast once the current attempt (direct OR proxy) has had a real
-  // chance; a just-switched proxy gets its own window before we give up.
-  const shouldFailFast = () =>
-    startedRef.current
-      ? false
-      : performance.now() - attemptStartedAtRef.current >= SOURCE_FAIL_FAST_MS;
-
-  // hls.js surfaced an error (data is HLS.ErrorData).
-  const onHlsError = (data) => {
-    if (!data) return;
-    if (tryProxyFallback()) return; // direct failed -> retry via proxy
-    if (shouldFailFast()) setStatus('unavailable');
+  const onHlsInstance = (event) => {
+    const hls = event.detail;
+    if (!hls) return;
+    hls.on(Hls.Events.ERROR, (_event, data) => {
+      if (!data?.fatal) return;
+      if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
+        hls.startLoad();
+      } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
+        hls.recoverMediaError();
+      }
+    });
   };
 
   // Native media error (also the path Vidstack uses when a source fails).
   const onError = () => {
-    if (tryProxyFallback()) return; // direct failed -> retry via proxy
-    if (shouldFailFast()) setStatus('unavailable');
+    if (!startedRef.current) setStatus('unavailable');
   };
 
   // Try again: remount the player to re-attempt the same stream (some channels
@@ -408,7 +350,7 @@ return (
               onPlaying={onPlaying}
               onTimeUpdate={onTimeUpdate}
               onError={onError}
-              onHlsError={onHlsError}
+              onHlsInstance={onHlsInstance}
               onWaiting={onWaiting}
             >
               <MediaProvider library={Hls} config={HLS_CONFIG} />
@@ -513,4 +455,3 @@ return (
     </div>
   );
 }
-

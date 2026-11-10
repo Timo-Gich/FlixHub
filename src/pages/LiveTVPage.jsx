@@ -5,13 +5,15 @@ import LiveChannelCard from '../components/LiveChannelCard';
 import LiveHero from '../components/LiveHero';
 import LiveGuide from '../components/LiveGuide';
 import {
-  fetchPlaylist, EPG_REGIONS, fetchEPGForRegions, getRegionForCountry,
+  fetchPlaylist, resetPlaylistCache, EPG_REGIONS, fetchEPGForRegions, getRegionForCountry,
   matchProgrammes, pickFeaturedOnNow, sliceWindow,
 } from '../services/liveTvService';
 import { useLibrary } from '../hooks/useLibrary.jsx';
 
 const REGION_KEY = 'flixhub.liveRegion';
 const VIEW_KEY = 'flixhub.liveView';
+const COUNTRY_KEY = 'flixhub.liveCountry';
+const COUNTRY_ALL = '__all__';
 
 function readRegion() {
   try {
@@ -21,6 +23,25 @@ function readRegion() {
     /* ignore storage errors */
   }
   return 'US';
+}
+
+function readCountry() {
+  try {
+    return localStorage.getItem(COUNTRY_KEY) || COUNTRY_ALL;
+  } catch {
+    return COUNTRY_ALL;
+  }
+}
+
+function countryLabel(code) {
+  const normalized = code.toUpperCase();
+  const region = EPG_REGIONS.find((item) => item.code === normalized);
+  if (region) return region.label;
+  try {
+    return new Intl.DisplayNames(['en'], { type: 'region' }).of(normalized) || normalized;
+  } catch {
+    return normalized;
+  }
 }
 
 const TAB_ALL = '__all__';
@@ -58,6 +79,7 @@ export default function LiveTVPage() {
   const [channels, setChannels] = useState(null); // null = loading
   const [error, setError] = useState(false);
   const [region, setRegion] = useState(readRegion);
+  const [country, setCountry] = useState(readCountry);
   const [view, setView] = useState(() => {
     try {
       const v = localStorage.getItem(VIEW_KEY);
@@ -135,6 +157,14 @@ export default function LiveTVPage() {
 
   useEffect(() => {
     try {
+      localStorage.setItem(COUNTRY_KEY, country);
+    } catch {
+      /* ignore storage errors */
+    }
+  }, [country]);
+
+  useEffect(() => {
+    try {
       localStorage.setItem(VIEW_KEY, view);
     } catch { /* ignore */ }
   }, [view]);
@@ -175,6 +205,11 @@ export default function LiveTVPage() {
     return [...priority, ...rest];
   }, [channels]);
 
+  const countries = useMemo(() => {
+    const codes = new Set((channels || []).map((channel) => channel.country).filter((code) => /^[a-z]{2}$/i.test(code || '')));
+    return [...codes].sort((a, b) => countryLabel(a).localeCompare(countryLabel(b)));
+  }, [channels]);
+
   // If the restored tab no longer matches a real category (stale playlist or
   // session), fall back to "All" once the category list is known.
   useEffect(() => {
@@ -190,10 +225,11 @@ export default function LiveTVPage() {
     let list = channels || [];
     if (tab === TAB_FAVORITES) list = favorites;
     else if (tab !== TAB_ALL) list = list.filter((c) => c.category === tab);
+    if (country !== COUNTRY_ALL) list = list.filter((c) => c.country?.toUpperCase() === country);
     const q = query.trim().toLowerCase();
     if (q) list = list.filter((c) => (c.name || '').toLowerCase().includes(q));
     return list;
-  }, [channels, tab, favorites, query]);
+  }, [channels, tab, favorites, country, query]);
 
   const tabs = [
     { key: TAB_ALL, label: 'All' },
@@ -210,17 +246,23 @@ export default function LiveTVPage() {
   useEffect(() => {
     setPage(1);
     setGuidePage(1);
-  }, [tab, query, favState, channels, region]);
+  }, [tab, query, favState, channels, region, country]);
 
-  const viewKey = `${tab}|${query}|${(channels || []).length}|${region}`;
+  const viewKey = `${tab}|${query}|${(channels || []).length}|${region}|${country}`;
   // EPG is strictly progressive enhancement: it loads lazily AFTER the
   // channel list renders, never blocks it, and times out fast (8s per
   // region) so a slow XMLTV host can't hang the page.
   useEffect(() => {
-    if (!visible.length) { setEpgStatus('idle'); return; }
+    if (!visible.length) {
+      setEpgMaps({});
+      setEpgStatus('idle');
+      return;
+    }
     const myReq = epgReqRef.current + 1;
     epgReqRef.current = myReq;
     let cancelled = false;
+    setEpgMaps({});
+    setEpgStatus('idle');
     // Defer so first paint (channels) always wins over guide data.
     const timer = setTimeout(() => {
       if (cancelled) return;
@@ -232,12 +274,18 @@ export default function LiveTVPage() {
         if (r) counts.set(r.code, (counts.get(r.code) || 0) + 1);
       });
       const top = [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 1).map(([code]) => code);
-      const codes = [...new Set([region, ...top])].filter(Boolean);
+      const codes = country === COUNTRY_ALL
+        ? [...new Set([region, ...top])].filter(Boolean)
+        : [country];
       const withTimeout = (p, ms) => Promise.race([
         p,
         new Promise((resolve) => setTimeout(() => resolve({ __timeout: true }), ms)),
       ]);
-      withTimeout(fetchEPGForRegions(codes), 15000).then((maps) => {
+      withTimeout(fetchEPGForRegions(codes, {
+        channels: visible.slice(0, 400),
+        from: bounds.winStart,
+        to: bounds.winEnd,
+      }), 15000).then((maps) => {
         if (cancelled || epgReqRef.current !== myReq) return;
         if (maps && maps.__timeout) { setEpgStatus('empty'); return; }
         setEpgMaps(maps || {});
@@ -298,6 +346,7 @@ export default function LiveTVPage() {
   const retry = () => {
     setError(false);
     setChannels(null);
+    resetPlaylistCache();
     fetchPlaylist().then((list) => {
       if (!list.length) setError(true);
       setChannels(list);
@@ -341,6 +390,22 @@ return (
                 </button>
               ))}
             </div>
+            <label className="flex items-center gap-2 text-sm text-muted">
+              <span className="hidden sm:inline">Country</span>
+              <select
+                value={country}
+                onChange={(e) => setCountry(e.target.value)}
+                aria-label="Filter channels by country"
+                className="rounded-md border border-ink-border bg-ink-raised px-3 py-2 text-sm text-foreground outline-none focus:ring-2 focus:ring-brand/40"
+              >
+                <option value={COUNTRY_ALL}>All countries</option>
+                {countries.map((code) => (
+                  <option key={code} value={code.toUpperCase()}>
+                    {countryLabel(code)}
+                  </option>
+                ))}
+              </select>
+            </label>
             {/* Region selector (drives EPG country) */}
             <label className="flex items-center gap-2 text-sm text-muted">
               <span className="hidden sm:inline">EPG region</span>

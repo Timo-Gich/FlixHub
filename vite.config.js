@@ -85,6 +85,13 @@ export default defineConfig(({ mode }) => {
     envPrefix: ['VITE_', 'TMDB_', 'SUPABASE_URL', 'SUPABASE_ANON_KEY'],
     server: {
       allowedHosts: ['undocked-casually-cloud.ngrok-free.dev'],
+      proxy: {
+        '/live-tv-api': {
+          target: 'http://localhost:3001',
+          changeOrigin: true,
+          rewrite: (requestPath) => requestPath.replace(/^\/live-tv-api/, ''),
+        },
+      },
     },
   };
 });

@@ -1,19 +1,20 @@
 // ----------------------------------------------------------------------------
-// Live TV data layer: M3U playlist + XMLTV (EPG) fetching and parsing.
+// Live TV data layer: lightweight client for the dedicated Live TV backend.
 //
-// - fetchPlaylist()  : pulls the public iptv-org category playlist
-//                      (https://iptv-org.github.io/iptv/index.category.m3u),
-//                      parses the #EXTM3U format and returns LiveChannel[].
-// - fetchEPG(region) : pulls XMLTV for the selected region from the globetvapp
-//                      EPG repo and returns a map of programmes keyed by tvg-id
-//                      so the player can resolve "now" / "next" for any channel.
+// The backend fetches and parses M3U/XMLTV data, caches it, and proxies HLS
+// manifests and segments. The browser only requests channel/guide subsets.
 // ----------------------------------------------------------------------------
 
-export const PLAYLIST_URL = 'https://iptv-org.github.io/iptv/index.category.m3u';
-
-// In-memory cache so the browser page and the player page don't re-download the
-// (large) playlist on every navigation. Cleared automatically if it fails.
+const LIVE_TV_API_BASE = (import.meta.env.VITE_LIVE_TV_API_URL || '/live-tv-api')
+  .trim()
+  .replace(/\/+$/, '');
 let playlistCache = null;
+let playlistFetchedAt = 0;
+const PLAYLIST_CACHE_TTL_MS = 5 * 60 * 1000;
+
+export function liveTvApiUrl(path) {
+  return `${LIVE_TV_API_BASE}${path.startsWith('/') ? path : `/${path}`}`;
+}
 
 /**
  * A single live channel parsed from the playlist.
@@ -23,162 +24,54 @@ let playlistCache = null;
  * @property {string} logo      - tvg-logo (may be empty)
  * @property {string} category  - group-title
  * @property {string} country   - ISO-2 country code derived from tvg-id (may be '')
- * @property {string} streamUrl - the .m3u8 stream URL
+ * @property {string} streamUrl - backend HLS manifest URL
  * @property {string} tvgId     - the tvg-id attribute
- * @property {string} userAgent - optional http-user-agent required by the source
  */
 
 /**
- * The tvg-id values follow `<name>.<cc>@<provider>` (e.g. "3ABNKids.us@SD"),
- * so we can derive the country code from between the last "." and the "@".
- * Falls back to '' when the format doesn't match.
- */
-function countryFromTvgId(tvgId = '') {
-  const at = tvgId.lastIndexOf('@');
-  const dot = tvgId.lastIndexOf('.', at === -1 ? tvgId.length : at);
-  if (dot === -1 || dot >= tvgId.length - 1) return '';
-  const end = at === -1 ? tvgId.length : at;
-  return tvgId.slice(dot + 1, end).toLowerCase();
-}
-
-/** Index of the first comma that is NOT inside a double-quoted value. */
-function findUnquotedComma(str) {
-  let inQuote = false;
-  for (let i = 0; i < str.length; i += 1) {
-    const ch = str[i];
-    if (ch === '"') inQuote = !inQuote;
-    else if (ch === ',' && !inQuote) return i;
-  }
-  return -1;
-}
-
-/** Parse a single `#EXTINF` line into its attributes + channel name. */
-function parseExtinf(line) {
-  const attrPart = line.slice(line.indexOf(':') + 1); // drop "#EXTINF:"
-  const commaIdx = findUnquotedComma(attrPart);
-  const attrs = commaIdx === -1 ? attrPart : attrPart.slice(0, commaIdx);
-  const name = commaIdx === -1 ? '' : attrPart.slice(commaIdx + 1).trim();
-
-  const read = (key) => {
-    const re = new RegExp(`${key}="([^"]*)"`);
-    const m = attrs.match(re);
-    return m ? m[1] : '';
-  };
-
-  return {
-    tvgId: read('tvg-id'),
-    logo: read('tvg-logo'),
-    groupTitle: read('group-title'),
-    userAgent: read('http-user-agent'),
-    name,
-  };
-}
-
-/**
- * Fetch and parse the category playlist.
- * Never throws — returns [] on any upstream / parse failure so the UI can
- * render a friendly error state instead of crashing.
+ * Fetch channel metadata from the Live TV backend. The upstream M3U file is
+ * downloaded, parsed, and cached server-side.
  * @param {{ signal?: AbortSignal }} [opts]
  * @returns {Promise<LiveChannel[]>}
  */
 export async function fetchPlaylist(opts = {}) {
-  if (playlistCache) return playlistCache;
+  if (playlistCache && Date.now() - playlistFetchedAt < PLAYLIST_CACHE_TTL_MS) return playlistCache;
   try {
-    const res = await fetch(PLAYLIST_URL, { signal: opts.signal });
-    if (!res.ok) return [];
-    const text = await res.text();
-
-    const channels = [];
-    const seen = new Set();
-    const extinfRe = /^#EXTINF:/;
-    const skipRe = /^#/;
-    const lines = text.split(/\r?\n/);
-
-    for (let i = 0; i < lines.length; i += 1) {
-      const line = lines[i].trim();
-      if (!line || !extinfRe.test(line)) continue;
-
-      const { tvgId, logo, groupTitle, userAgent, name } = parseExtinf(line);
-      if (!name) continue;
-
-      // The stream URL is the next non-# line (skips #EXTVLCOPT / #EXT...).
-      let streamUrl = '';
-      for (let j = i + 1; j < lines.length; j += 1) {
-        const cand = lines[j].trim();
-        if (!cand) continue;
-        if (skipRe.test(cand)) continue;
-        streamUrl = cand;
-        break;
-      }
-      if (!streamUrl) continue;
-
-      const country = countryFromTvgId(tvgId);
-      // Prefer a stable id from tvg-id; fall back to a slug of the name + index.
-      const baseId = tvgId && tvgId.trim() ? tvgId.trim() : `${name}-${i}`;
-      let id = baseId;
-      let n = 2;
-      while (seen.has(id)) id = `${baseId}-${n++}`;
-      seen.add(id);
-
-      const category = groupTitle || 'General';
-      // iptv-org can list the same stream twice with different tvg-ids; those
-      // are distinct channels so only skip exact duplicates.
-      const existing = channels.find(
-        (c) =>
-          c.name === name &&
-          c.category === category &&
-          c.tvgId === tvgId &&
-          c.streamUrl === streamUrl,
-      );
-      if (existing) continue;
-
-      channels.push({
-        id,
-        name,
-        logo: logo || '',
-        category,
-        country,
-        streamUrl,
-        tvgId,
-        userAgent: userAgent || '',
-      });
-    }
-
-    playlistCache = channels;
-    return channels;
-  } catch {
+    const response = await fetch(liveTvApiUrl('/api/channels'), { signal: opts.signal });
+    if (!response.ok) throw new Error(`Live TV backend returned ${response.status}`);
+    const payload = await response.json();
+    if (!Array.isArray(payload.channels)) throw new Error('Invalid channel response from Live TV backend');
+    playlistCache = payload.channels.map((channel) => ({
+      ...channel,
+      streamUrl: liveTvApiUrl(channel.streamUrl),
+    }));
+    playlistFetchedAt = Date.now();
+    return playlistCache;
+  } catch (error) {
+    console.error('[live-tv] could not load channels from backend:', error);
     return [];
   }
 }
 
-/** Drop the in-memory playlist cache (e.g. for a manual "try again"). */
+/** Drop the small metadata cache (e.g. for a manual "try again"). */
 export function resetPlaylistCache() {
   playlistCache = null;
+  playlistFetchedAt = 0;
 }
-
-// Public IPTV sources are proxied through a serverless function (api/stream.mjs)
-// to get past CORS and mixed-content restrictions and to forward any required
-// User-Agent. This builds the player src for a channel.
-const STREAM_PROXY = '/api/stream';
 
 /**
  * @param {LiveChannel} channel
  * @returns {string} proxied URL the player should load.
  */
 export function buildStreamUrl(channel) {
-  const url = channel?.streamUrl || '';
-  if (!url) return url;
-  let out = `${STREAM_PROXY}?url=${encodeURIComponent(url)}`;
-  if (channel?.userAgent) out += `&ua=${encodeURIComponent(channel.userAgent)}`;
-  return out;
+  return channel?.streamUrl || '';
 }
 
 // --- EPG (XMLTV) -------------------------------------------------------------
 
 /**
- * globetvapp/epg country folders (capitalized) keyed by ISO-2 country code.
- * EPG URL pattern: raw.githubusercontent.com/globetvapp/epg/main/{Folder}/{folder}1.xml
- * (e.g. United States -> Usa/usa1.xml).
+ * Countries with friendly labels for selectors. The backend can fetch EPG data
+ * by ISO-2 country code even when a code is not listed here.
  */
 export const EPG_REGIONS = [
   { code: 'US', label: 'United States', folder: 'Usa' },
@@ -216,21 +109,23 @@ export const EPG_REGIONS = [
   { code: 'NZ', label: 'New Zealand', folder: 'Newzealand' },
 ];
 
-/** Map ISO codes -> globetvapp folder name for quick lookups. */
+/** Map ISO codes -> display regions for quick lookups. */
 const REGION_BY_CODE = EPG_REGIONS.reduce((acc, r) => {
   acc[r.code.toLowerCase()] = r;
   acc[r.code] = r;
   return acc;
 }, {});
 
-/** Fallback region used when a channel's country isn't in EPG_REGIONS. */
+/** Fallback region used when the country code is absent or invalid. */
 export const DEFAULT_EPG_REGION = 'US';
 
 export function getRegionByCode(code) {
-  return (
-    REGION_BY_CODE[String(code || '').toUpperCase()] ??
-    REGION_BY_CODE[DEFAULT_EPG_REGION]
-  );
+  const normalized = String(code || '').toUpperCase();
+  const alias = normalized === 'UK' ? 'GB' : normalized;
+  return REGION_BY_CODE[alias] ??
+    (/^[A-Z]{2}$/.test(alias)
+      ? { code: alias, label: alias }
+      : REGION_BY_CODE[DEFAULT_EPG_REGION]);
 }
 
 /**
@@ -238,40 +133,21 @@ export function getRegionByCode(code) {
  * from its tvg-id). This lets deep-linked channels auto-derive a matching EPG
  * stint instead of relying only on the user's selected region. UK channels use
  * the ".uk" suffix, which we alias to the "GB" region. Returns null when the
- * country isn't covered by EPG_REGIONS (e.g. "ww" worldwide feeds).
+ * country code is not an ISO-2 code.
  * @param {string} country
- * @returns {{ code:string, label:string, folder:string }|null}
+ * @returns {{ code:string, label:string, folder?:string }|null}
  */
 export function getRegionForCountry(country) {
   const cc = String(country || '').toLowerCase();
   const alias = cc === 'uk' ? 'gb' : cc;
-  return (
-    EPG_REGIONS.find((r) => r.code.toLowerCase() === alias) ??
-    null
-  );
+  if (!/^[a-z]{2}$/.test(alias)) return null;
+  return getRegionByCode(alias);
 }
 
-/** Build the globetvapp EPG XML URL for a region/folder. */
+/** Build the XMLTV URL for the selected country code. */
 export function epgUrlFor(region) {
-  const folder = region?.folder || getRegionByCode(DEFAULT_EPG_REGION).folder;
-  return `https://raw.githubusercontent.com/globetvapp/epg/main/${folder}/${folder.toLowerCase()}1.xml`;
-}
-/**
- * Parse XMLTV time into a UTC ms timestamp. XMLTV timestamps look like
- * "20240921143000 +0000" (yyyymmddhhmmss + timezone offset).
- */
-function parseXmltvTime(str, fallback = 0) {
-  const m = String(str || '').match(
-    /^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})\s*([+-])(\d{2})(\d{2})?/,
-  );
-  if (!m) return fallback;
-  const [, y, mo, d, h, mi, s, sign, oh, om] = m;
-  const date = new Date(
-    Date.UTC(Number(y), Number(mo) - 1, Number(d), Number(h), Number(mi), Number(s)),
-  );
-  const offset = (Number(oh) * 60 + Number(om || 0)) * 60000;
-  const utc = date.getTime() - (sign === '-' ? offset : -offset);
-  return Number.isFinite(utc) ? utc : fallback;
+  const code = getRegionByCode(region?.code || DEFAULT_EPG_REGION).code;
+  return `https://epg.pw/xmltv/epg_${code}.xml`;
 }
 
 function normalizeKey(name = '') {
@@ -279,44 +155,31 @@ function normalizeKey(name = '') {
 }
 
 /**
- * Fetch + parse XMLTV for a region and return a map:
- *   tvgId -> programme[]
- * where each programme is { startMs, stopMs, title } sorted by startMs.
- * Never throws — returns {} on any failure.
+ * Request a bounded, channel-filtered guide from the backend.
  * @param {string} regionCode
- * @param {{ signal?: AbortSignal }} [opts]
+ * @param {{ signal?: AbortSignal, channels?: LiveChannel[], from?: number, to?: number }} [opts]
  */
 export async function fetchEPG(regionCode = DEFAULT_EPG_REGION, opts = {}) {
-  const region = getRegionByCode(regionCode);
-  try {
-    const res = await fetch(epgUrlFor(region), { signal: opts.signal });
-    if (!res.ok) return {};
-    const xml = await res.text();
-    const doc = new DOMParser().parseFromString(xml, 'text/xml');
-    if (doc.getElementsByTagName('parsererror').length > 0) return {};
-
-    const byChannel = new Map();
-    const programmes = doc.getElementsByTagName('programme');
-    for (const prog of programmes) {
-      const channel = prog.getAttribute('channel') || '';
-      if (!channel) continue;
-      const start = parseXmltvTime(prog.getAttribute('start'));
-      const stop = parseXmltvTime(prog.getAttribute('stop'), start + 3600000);
-      const titleEl = prog.getElementsByTagName('title')[0];
-      const title = titleEl?.textContent?.trim() || 'No program info';
-      const list = byChannel.get(channel) || [];
-      list.push({ startMs: start, stopMs: stop, title });
-      byChannel.set(channel, list);
-    }
-
-    const map = {};
-    byChannel.forEach((list, key) => {
-      map[key] = list.sort((a, b) => a.startMs - b.startMs);
-    });
-    return map;
-  } catch {
-    return {};
+  const channels = (opts.channels || []).map(({ tvgId, name }) => ({ tvgId, name }));
+  if (!channels.length) return {};
+  const now = Date.now();
+  const response = await fetch(liveTvApiUrl('/api/epg'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    signal: opts.signal,
+    body: JSON.stringify({
+      country: getRegionByCode(regionCode).code,
+      channels,
+      from: opts.from ?? now - 60 * 60 * 1000,
+      to: opts.to ?? now + 12 * 60 * 60 * 1000,
+    }),
+  });
+  if (!response.ok) throw new Error(`Live TV EPG backend returned ${response.status}`);
+  const payload = await response.json();
+  if (!payload.programmes || typeof payload.programmes !== 'object') {
+    throw new Error('Invalid EPG response from Live TV backend');
   }
+  return payload.programmes;
 }
 
 /**
@@ -389,91 +252,22 @@ export function matchProgrammes(epgMap, tvgId, channelName, refTime = Date.now()
   return { now, next, timeMs: refTime, found };
 }
 
-// --- EPG cache + guide helpers (Live TV redesign) ---------------------------
-// In-memory + localStorage cache so the /live guide doesn't re-download large
-// XMLTV files on every navigation. 6h TTL keeps "now/next" fresh without
-// hammering the upstream repo.
-
-const EPG_TTL_MS = 6 * 60 * 60 * 1000;
-const EPG_LS_PREFIX = 'flixhub.epg.';
-const EPG_CACHE_VERSION = 'v2';
-const epgMemCache = new Map(); // regionCode -> { map, fetchedAt }
-
-function readEpgLS(code) {
-  try {
-    const raw = localStorage.getItem(EPG_LS_PREFIX + String(code).toUpperCase());
-    if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    if (!parsed || !parsed.map || !parsed.fetchedAt) return null;
-    // Drop caches written by older code (pre-versioning could hold multi-MB
-    // blobs that jank or exceed quota on re-write).
-    if (parsed.v !== EPG_CACHE_VERSION) {
-      try { localStorage.removeItem(EPG_LS_PREFIX + String(code).toUpperCase()); } catch { /* ignore */ }
-      return null;
-    }
-    if (Date.now() - parsed.fetchedAt > EPG_TTL_MS) return null;
-    return parsed;
-  } catch {
-    return null;
-  }
-}
-
-function writeEpgLS(code, map) {
-  // localStorage quota is ~5MB and some XMLTV files are 3MB+ *as parsed
-  // JSON* — writing them risks QuotaExceededError AND long JSON.stringify
-  // jank. Only persist small guides (<400KB serialized); everything else
-  // stays in the in-memory cache for the session.
-  try {
-    const serialized = JSON.stringify({ v: EPG_CACHE_VERSION, map, fetchedAt: Date.now() });
-    if (serialized.length > 400 * 1024) return;
-    localStorage.setItem(EPG_LS_PREFIX + String(code).toUpperCase(), serialized);
-  } catch {
-    /* ignore storage errors */
-  }
-}
-
 /**
- * Fetch EPG for one region with memory + localStorage caching.
- * @returns {Promise<Record<string, Array>>}
- */
-export async function fetchEPGCached(regionCode = DEFAULT_EPG_REGION, opts = {}) {
-  const code = String(regionCode || DEFAULT_EPG_REGION).toUpperCase();
-  const mem = epgMemCache.get(code);
-  if (mem && Date.now() - mem.fetchedAt < EPG_TTL_MS) return mem.map;
-  const ls = readEpgLS(code);
-  if (ls) {
-    epgMemCache.set(code, ls);
-    return ls.map;
-  }
-  const map = await fetchEPG(code, opts);
-  if (map && Object.keys(map).length) {
-    const entry = { map, fetchedAt: Date.now() };
-    epgMemCache.set(code, entry);
-    writeEpgLS(code, map);
-  }
-  return map || {};
-}
-
-/**
- * Fetch several regions with limited concurrency (max 2 at a time).
+ * Request the channel-filtered schedules for a small set of countries.
  * @param {string[]} codes
  * @returns {Promise<Record<string, Record<string, Array>>>>} code -> epgMap
  */
 export async function fetchEPGForRegions(codes = [], opts = {}) {
   const uniq = [...new Set((codes || []).map((c) => String(c || '').toUpperCase()).filter(Boolean))];
   const out = {};
-  const queue = [...uniq];
-  const workers = Array.from({ length: Math.min(2, queue.length || 1) }, async () => {
-    while (queue.length) {
-      const code = queue.shift();
-      try {
-        out[code] = await fetchEPGCached(code, opts);
-      } catch {
-        out[code] = {};
-      }
+  await Promise.all(uniq.map(async (code) => {
+    try {
+      out[code] = await fetchEPG(code, opts);
+    } catch (error) {
+      console.error(`[live-tv] could not load ${code} EPG from backend:`, error);
+      out[code] = {};
     }
-  });
-  await Promise.all(workers);
+  }));
   return out;
 }
 

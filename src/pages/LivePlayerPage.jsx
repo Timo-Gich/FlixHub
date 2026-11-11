@@ -28,9 +28,8 @@ import {
 
 const COUNTRY_KEY = 'flixhub.liveCountry';
 const COUNTRY_ALL = '__all__';
-// The backend proxies and retries upstream stream requests. Keep a generous
-// player timeout for cold starts and slow first segments.
-const HEALTH_TIMEOUT_MS = 12000;
+const STARTUP_TIMEOUT_MS = 90000;
+const STARTUP_RETRY_DELAYS_MS = [5000, 10000, 15000, 20000];
 const PROG_REFRESH_MS = 60000;
 
 // Aggressive hls.js tuning for low-latency live streams (see usage below).
@@ -47,9 +46,6 @@ const HLS_CONFIG = {
   fragLoadingMaxRetry: 6,
   manifestLoadingMaxRetry: 4,
 };
-
-// Timing tunables for the live-stream networking strategy (see handlers below).
-const STALL_RELOAD_DELAY_MS = 3000;
 
 function readCountry() {
   try {
@@ -89,10 +85,9 @@ export default function LivePlayerPage() {
   // channel. Bumped to force a fresh player mount on "Try again".
   const startedRef = useRef(false);
   const [retryKey, setRetryKey] = useState(0);
-  const stallTimerRef = useRef(null);
-  const stallArmedRef = useRef(false);
-  const autoReloadedRef = useRef(false);
-  const [stallReloadKey, setStallReloadKey] = useState(0);
+  const [startupAttempt, setStartupAttempt] = useState(0);
+  const startupRetryCountRef = useRef(0);
+  const startupRetryTimerRef = useRef(null);
 
   const playerSrc = buildStreamUrl(channel);
   // Use the same country selected in the Live TV browser; with "All countries",
@@ -118,19 +113,23 @@ export default function LivePlayerPage() {
     };
   }, [decoded]);
 
-  // Channel health probe: fail fast within the timeout if nothing starts playing.
-  // A ref tracks whether playback actually began, so the timeout only fires while
-  // we're still waiting — it must never flip a healthy stream to "unavailable".
+  // Give slow upstreams time to start. A transient waiting/error event does not
+  // make the channel unavailable; only the full startup window does.
   useEffect(() => {
     if (!playerSrc) return;
     startedRef.current = false;
+    startupRetryCountRef.current = 0;
     setStatus('loading');
     const timer = setTimeout(() => {
       if (!startedRef.current) setStatus('unavailable');
-    }, HEALTH_TIMEOUT_MS);
-    return () => clearTimeout(timer);
-    // retryKey restarts the window each time the user hits "Try again".
-  }, [channel?.id, playerSrc, retryKey, stallReloadKey]);
+    }, STARTUP_TIMEOUT_MS);
+    return () => {
+      clearTimeout(timer);
+      clearTimeout(startupRetryTimerRef.current);
+      startupRetryTimerRef.current = null;
+    };
+    // retryKey restarts the window when the user manually retries.
+  }, [channel?.id, playerSrc, retryKey]);
 
   // Periodic clock tick to advance the Now Playing strip.
   useEffect(() => {
@@ -181,44 +180,29 @@ export default function LivePlayerPage() {
 
   const markActive = () => {
     startedRef.current = true;
+    startupRetryCountRef.current = 0;
+    clearTimeout(startupRetryTimerRef.current);
+    startupRetryTimerRef.current = null;
     setStatus('healthy');
   };
 
-  const clearStallTimer = () => {
-    if (stallTimerRef.current) {
-      clearTimeout(stallTimerRef.current);
-      stallTimerRef.current = null;
-    }
-    stallArmedRef.current = false;
+  const scheduleStartupRetry = () => {
+    if (startedRef.current || startupRetryTimerRef.current) return;
+    const retryDelay = STARTUP_RETRY_DELAYS_MS[startupRetryCountRef.current];
+    if (retryDelay === undefined) return;
+    startupRetryCountRef.current += 1;
+    startupRetryTimerRef.current = setTimeout(() => {
+      startupRetryTimerRef.current = null;
+      if (startedRef.current) return;
+      setStartupAttempt((attempt) => attempt + 1);
+    }, retryDelay);
   };
 
   const onPlaying = () => {
-    clearStallTimer();
-    autoReloadedRef.current = false; // a new stall episode may reload again
     markActive();
   };
-  // Time advancing means we are definitely not stalled.
   const onTimeUpdate = () => {
-    clearStallTimer();
     markActive();
-  };
-
-  // Stall handling: after ~3s of buffering with no progress, reload the current
-  // src once. A second stall (after the one auto-reload) with no playback yet
-  // means the stream is genuinely stuck.
-  const onWaiting = () => {
-    if (stallTimerRef.current || stallArmedRef.current) return;
-    stallArmedRef.current = true;
-    stallTimerRef.current = setTimeout(() => {
-      stallTimerRef.current = null;
-      stallArmedRef.current = false;
-      if (!autoReloadedRef.current) {
-        autoReloadedRef.current = true;
-        setStallReloadKey((k) => k + 1); // silent reload of the current src
-      } else if (!startedRef.current) {
-        setStatus('unavailable');
-      }
-    }, STALL_RELOAD_DELAY_MS);
   };
 
   const onHlsInstance = (event) => {
@@ -234,18 +218,19 @@ export default function LivePlayerPage() {
     });
   };
 
-  // Native media error (also the path Vidstack uses when a source fails).
+  // Native media errors get spaced startup retries instead of an immediate
+  // unavailable state; HLS.js continues handling recoverable network errors.
   const onError = () => {
-    if (!startedRef.current) setStatus('unavailable');
+    scheduleStartupRetry();
   };
 
-  // Try again: remount the player to re-attempt the same stream (some channels
-  // only work on a second attempt, same as a manual refresh).
+  // A manual retry starts a fresh startup window and retry sequence.
   const retryStream = () => {
-    clearStallTimer();
+    clearTimeout(startupRetryTimerRef.current);
+    startupRetryTimerRef.current = null;
+    startupRetryCountRef.current = 0;
     startedRef.current = false;
     setStatus('loading');
-    setStallReloadKey((k) => k + 1);
     setRetryKey((k) => k + 1);
   };
 return (
@@ -338,15 +323,15 @@ return (
 
           {channel && status !== 'unavailable' && !missing && (
             <MediaPlayer
-              key={`${playerSrc}#retry-${retryKey}#stall-${stallReloadKey}`}
+              key={`${playerSrc}#retry-${retryKey}#attempt-${startupAttempt}`}
               src={playerSrc}
               playsInline
               autoPlay
+              onCanPlay={markActive}
               onPlaying={onPlaying}
               onTimeUpdate={onTimeUpdate}
               onError={onError}
               onHlsInstance={onHlsInstance}
-              onWaiting={onWaiting}
             >
               <MediaProvider library={Hls} config={HLS_CONFIG} />
               <DefaultVideoLayout icons={defaultLayoutIcons} noScrubber={false} />

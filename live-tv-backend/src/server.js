@@ -10,9 +10,9 @@ import {
   EPG_BASE_URL,
   EPG_FALLBACK_URL,
   PLAYLIST_URL,
-  indexXmltv,
+  indexXmltvStream,
   matchXmltv,
-  parsePlaylist,
+  parsePlaylistStream,
 } from './parsers.js';
 
 const PORT = Number(process.env.PORT) || 3001;
@@ -30,7 +30,8 @@ const FRONTEND_ORIGINS = (process.env.FRONTEND_ORIGINS || '*')
 
 let playlistCache = null;
 let playlistPending = null;
-const epgCache = new Map();
+let epgCache = null;
+let epgPending = null;
 
 const app = express();
 app.set('trust proxy', 1);
@@ -60,8 +61,7 @@ async function getPlaylist() {
     try {
       const response = await fetch(PLAYLIST_URL, { signal: AbortSignal.timeout(30000) });
       if (!response.ok) throw new Error(`Playlist upstream returned ${response.status}`);
-      const text = await readTextLimited(response, MAX_PLAYLIST_BYTES);
-      const channels = parsePlaylist(text);
+      const channels = await parsePlaylistStream(response.body, MAX_PLAYLIST_BYTES);
       if (!channels.length) throw new Error('Playlist response contained no channels');
       playlistCache = { channels, fetchedAt: Date.now() };
       return channels;
@@ -101,15 +101,18 @@ app.get('/api/channels', async (_req, res) => {
 
 async function getRemoteEpg(code) {
   const now = Date.now();
-  const cached = epgCache.get(code);
+  const cached = epgCache?.code === code ? epgCache : null;
   if (cached && cached.expiresAt > now && cached.fromMs <= now - EPG_WINDOW_BEHIND_MS &&
       cached.toMs >= now + EPG_WINDOW_AHEAD_MS) return cached;
-  if (cached?.pending) return cached.pending;
+  if (epgPending) {
+    if (epgPending.code === code) return epgPending.promise;
+    await epgPending.promise.catch(() => {});
+    return getRemoteEpg(code);
+  }
 
   const fromMs = now - EPG_WINDOW_BEHIND_MS;
   const toMs = now + EPG_WINDOW_AHEAD_MS;
-  const entry = cached || {};
-  entry.pending = (async () => {
+  const promise = (async () => {
     try {
       const url = `${EPG_BASE_URL}/epg_${code}.xml`;
       let response = await fetch(url, { signal: AbortSignal.timeout(60000) });
@@ -118,22 +121,24 @@ async function getRemoteEpg(code) {
         response = await fetch(EPG_FALLBACK_URL, { signal: AbortSignal.timeout(60000) });
       }
       if (!response.ok) throw new Error(`XMLTV upstream returned ${response.status}`);
-      const xml = await readTextLimited(response, 100 * 1024 * 1024);
-      const index = indexXmltv(xml, fromMs, toMs);
-      Object.assign(entry, { index, fromMs, toMs, expiresAt: Date.now() + EPG_TTL_MS });
-      return entry;
+      const index = await indexXmltvStream(response.body, fromMs, toMs);
+      if (index.truncated) {
+        console.warn(`[live-tv] ${code} EPG exceeded the index limit; some entries were omitted`);
+      }
+      epgCache = { code, index, fromMs, toMs, expiresAt: Date.now() + EPG_TTL_MS };
+      return epgCache;
     } catch (error) {
-      if (entry.index) {
+      if (cached?.index) {
         console.warn(`[live-tv] serving stale ${code} EPG after refresh failure:`, error.message);
-        return entry;
+        return cached;
       }
       throw error;
     } finally {
-      delete entry.pending;
+      if (epgPending?.promise === promise) epgPending = null;
     }
   })();
-  epgCache.set(code, entry);
-  return entry.pending;
+  epgPending = { code, promise };
+  return promise;
 }
 
 app.post('/api/epg', async (req, res) => {

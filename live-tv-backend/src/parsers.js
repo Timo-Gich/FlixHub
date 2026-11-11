@@ -1,16 +1,13 @@
-import { XMLParser, XMLValidator } from 'fast-xml-parser';
+import { createHash } from 'node:crypto';
+import sax from 'sax';
 
 export const PLAYLIST_URL = 'https://iptv-org.github.io/iptv/index.category.m3u';
 export const EPG_BASE_URL = 'https://epg.pw/xmltv';
 export const EPG_FALLBACK_URL = `${EPG_BASE_URL}/epg_lite.xml`;
 
-const xmlParser = new XMLParser({
-  ignoreAttributes: false,
-  attributeNamePrefix: '@_',
-  isArray: (name) => name === 'programme' || name === 'channel',
-  parseTagValue: false,
-  trimValues: true,
-});
+const MAX_XMLTV_CHANNELS = 100_000;
+const MAX_XMLTV_PROGRAMMES = 200_000;
+const MAX_XMLTV_TEXT_LENGTH = 1024;
 
 function countryFromTvgId(tvgId = '') {
   const at = tvgId.lastIndexOf('@');
@@ -36,20 +33,6 @@ export function parsePlaylist(text) {
     const extinf = lines[i].trim();
     if (!extinf.startsWith('#EXTINF:')) continue;
     const content = extinf.slice(8);
-    let quoted = false;
-    let comma = -1;
-    for (let j = 0; j < content.length; j += 1) {
-      if (content[j] === '"') quoted = !quoted;
-      else if (content[j] === ',' && !quoted) {
-        comma = j;
-        break;
-      }
-    }
-    if (comma === -1) continue;
-
-    const attributes = parseAttributes(content.slice(0, comma));
-    const name = content.slice(comma + 1).trim();
-    if (!name) continue;
 
     let streamUrl = '';
     for (let j = i + 1; j < lines.length; j += 1) {
@@ -58,41 +41,115 @@ export function parsePlaylist(text) {
       streamUrl = candidate;
       break;
     }
-    if (!streamUrl) continue;
-
-    const tvgId = attributes['tvg-id'] || '';
-    const baseId = tvgId.trim() || `${name}-${i}`;
-    let id = baseId;
-    let suffix = 2;
-    while (seenIds.has(id)) id = `${baseId}-${suffix++}`;
-    const category = attributes['group-title'] || 'General';
-    const duplicateKey = `${tvgId}\n${name}\n${category}\n${streamUrl}`;
-    if (seenChannels.has(duplicateKey)) continue;
-    seenIds.add(id);
-    seenChannels.add(duplicateKey);
-
-    channels.push({
-      id,
-      name,
-      logo: attributes['tvg-logo'] || '',
-      category,
-      country: countryFromTvgId(tvgId),
-      tvgId,
-      streamUrl,
-      userAgent: attributes['http-user-agent'] || '',
-    });
+    if (streamUrl) addPlaylistChannel(content, streamUrl, i, channels, seenIds, seenChannels);
   }
   return channels;
 }
 
-function normalize(value = '') {
-  return String(value).toLowerCase().replace(/[^a-z0-9]+/g, '');
+function findPlaylistComma(content) {
+  let quoted = false;
+  for (let i = 0; i < content.length; i += 1) {
+    if (content[i] === '"') quoted = !quoted;
+    else if (content[i] === ',' && !quoted) return i;
+  }
+  return -1;
 }
 
-function xmlText(value) {
-  if (typeof value === 'string' || typeof value === 'number') return String(value).trim();
-  if (value && typeof value === 'object') return xmlText(value['#text'] || '');
-  return '';
+function addPlaylistChannel(content, streamUrl, lineNumber, channels, seenIds, seenChannels) {
+  const comma = findPlaylistComma(content);
+  if (comma === -1) return;
+  const attributes = parseAttributes(content.slice(0, comma));
+  const name = content.slice(comma + 1).trim();
+  if (!name) return;
+
+  const tvgId = attributes['tvg-id'] || '';
+  const baseId = tvgId.trim() || `${name}-${lineNumber}`;
+  let id = baseId;
+  let suffix = 2;
+  while (seenIds.has(id)) id = `${baseId}-${suffix++}`;
+  const category = attributes['group-title'] || 'General';
+  const duplicateKey = createHash('sha256')
+    .update(tvgId).update('\0')
+    .update(name).update('\0')
+    .update(category).update('\0')
+    .update(streamUrl)
+    .digest('hex');
+  if (seenChannels.has(duplicateKey)) return;
+  seenIds.add(id);
+  seenChannels.add(duplicateKey);
+  channels.push({
+    id,
+    name,
+    logo: attributes['tvg-logo'] || '',
+    category,
+    country: countryFromTvgId(tvgId),
+    tvgId,
+    streamUrl,
+    userAgent: attributes['http-user-agent'] || '',
+  });
+}
+
+export async function parsePlaylistStream(body, maxBytes = 80 * 1024 * 1024) {
+  if (!body) throw new Error('Playlist response has no body');
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  const channels = [];
+  const seenIds = new Set();
+  const seenChannels = new Set();
+  let lineBuffer = '';
+  let pendingExtinf = null;
+  let lineNumber = 0;
+  let totalBytes = 0;
+
+  const consumeLine = (line) => {
+    const trimmed = line.trim();
+    if (pendingExtinf) {
+      if (trimmed.startsWith('#EXTINF:')) {
+        pendingExtinf = { content: trimmed.slice(8), lineNumber };
+      } else if (trimmed && !trimmed.startsWith('#')) {
+        addPlaylistChannel(
+          pendingExtinf.content,
+            trimmed,
+            pendingExtinf.lineNumber,
+            channels,
+            seenIds,
+            seenChannels,
+        );
+        pendingExtinf = null;
+      }
+    } else if (trimmed.startsWith('#EXTINF:')) {
+      pendingExtinf = { content: trimmed.slice(8), lineNumber };
+    }
+    lineNumber += 1;
+  };
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      totalBytes += value.byteLength;
+      if (totalBytes > maxBytes) throw new Error('Playlist response exceeded size limit');
+      lineBuffer += decoder.decode(value, { stream: true });
+      let newline;
+      while ((newline = lineBuffer.indexOf('\n')) !== -1) {
+        consumeLine(lineBuffer.slice(0, newline).replace(/\r$/, ''));
+        lineBuffer = lineBuffer.slice(newline + 1);
+      }
+      if (lineBuffer.length > 1024 * 1024) throw new Error('Playlist line exceeded size limit');
+    }
+    lineBuffer += decoder.decode();
+    if (lineBuffer) consumeLine(lineBuffer.replace(/\r$/, ''));
+    return channels;
+  } catch (error) {
+    await reader.cancel(error).catch(() => {});
+    throw error;
+  } finally {
+    reader.releaseLock();
+  }
+}
+
+function normalize(value = '') {
+  return String(value).toLowerCase().replace(/[^a-z0-9]+/g, '');
 }
 
 export function parseXmltvTime(value) {
@@ -113,32 +170,122 @@ export function parseXmltvTime(value) {
   return date - (sign === '-' ? -offset : offset);
 }
 
-export function indexXmltv(xml, fromMs, toMs) {
-  if (!XMLValidator.validate(xml)) throw new Error('Invalid XMLTV response');
-  const root = xmlParser.parse(xml)?.tv;
-  if (!root) throw new Error('XMLTV response has no tv root');
-
+function createXmltvIndexer(fromMs, toMs) {
   const displayNames = new Map();
-  for (const xmlChannel of root.channel || []) {
-    const xmlId = xmlChannel['@_id'] || '';
-    const names = Array.isArray(xmlChannel['display-name'])
-      ? xmlChannel['display-name']
-      : [xmlChannel['display-name']];
-    if (xmlId) displayNames.set(xmlId, names.map(xmlText).filter(Boolean));
-  }
-
   const programmes = new Map();
-  for (const item of root.programme || []) {
-    const sourceId = item['@_channel'] || '';
-    const startMs = parseXmltvTime(item['@_start']);
-    const stopMs = parseXmltvTime(item['@_stop']);
-    if (!Number.isFinite(startMs) || !Number.isFinite(stopMs) || stopMs <= fromMs || startMs >= toMs) continue;
-    const title = xmlText(item.title) || 'No program info';
-    if (!programmes.has(sourceId)) programmes.set(sourceId, []);
-    programmes.get(sourceId).push({ startMs, stopMs, title });
+  let rootSeen = false;
+  let currentChannel = null;
+  let currentProgramme = null;
+  let textTarget = '';
+  let textValue = '';
+  let programmeCount = 0;
+  let truncated = false;
+  let parseError = null;
+  const parser = sax.parser(true, { trim: false, normalize: false });
+
+  parser.onerror = (error) => {
+    parseError = error;
+  };
+  parser.onopentag = (tag) => {
+    if (tag.name === 'tv') rootSeen = true;
+    if (tag.name === 'channel') {
+      currentChannel = { id: tag.attributes.id || '', names: [] };
+    } else if (tag.name === 'programme') {
+      currentProgramme = {
+        sourceId: tag.attributes.channel || '',
+        startMs: parseXmltvTime(tag.attributes.start),
+        stopMs: parseXmltvTime(tag.attributes.stop),
+        title: '',
+      };
+    } else if (tag.name === 'display-name' && currentChannel) {
+      textTarget = 'display-name';
+      textValue = '';
+    } else if (tag.name === 'title' && currentProgramme && !currentProgramme.title) {
+      textTarget = 'title';
+      textValue = '';
+    }
+  };
+  const appendText = (value) => {
+    if (textTarget && textValue.length < MAX_XMLTV_TEXT_LENGTH) {
+      textValue += value.slice(0, MAX_XMLTV_TEXT_LENGTH - textValue.length);
+    }
+  };
+  parser.ontext = appendText;
+  parser.oncdata = appendText;
+  parser.onclosetag = (name) => {
+    if (name === 'display-name' && textTarget === 'display-name' && currentChannel) {
+      const nameText = textValue.trim();
+      if (nameText) currentChannel.names.push(nameText);
+      textTarget = '';
+      textValue = '';
+    } else if (name === 'title' && textTarget === 'title' && currentProgramme) {
+      currentProgramme.title = textValue.trim();
+      textTarget = '';
+      textValue = '';
+    } else if (name === 'channel' && currentChannel) {
+      if (currentChannel.id) {
+        if (displayNames.size < MAX_XMLTV_CHANNELS || displayNames.has(currentChannel.id)) {
+          displayNames.set(currentChannel.id, currentChannel.names);
+        } else {
+          truncated = true;
+        }
+      }
+      currentChannel = null;
+    } else if (name === 'programme' && currentProgramme) {
+      const { sourceId, startMs, stopMs, title } = currentProgramme;
+      if (Number.isFinite(startMs) && Number.isFinite(stopMs) &&
+          stopMs > fromMs && startMs < toMs) {
+        if (programmeCount < MAX_XMLTV_PROGRAMMES) {
+          if (!programmes.has(sourceId)) programmes.set(sourceId, []);
+          programmes.get(sourceId).push({
+            startMs,
+            stopMs,
+            title: title || 'No program info',
+          });
+          programmeCount += 1;
+        } else {
+          truncated = true;
+        }
+      }
+      currentProgramme = null;
+    }
+  };
+
+  return {
+    write(chunk) {
+      if (parseError) throw parseError;
+      parser.write(chunk);
+      if (parseError) throw parseError;
+    },
+    finish() {
+      if (parseError) throw parseError;
+      parser.close();
+      if (parseError) throw parseError;
+      if (!rootSeen) throw new Error('XMLTV response has no tv root');
+      for (const entries of programmes.values()) entries.sort((a, b) => a.startMs - b.startMs);
+      return { displayNames, programmes, fromMs, toMs, truncated };
+    },
+  };
+}
+
+export function indexXmltv(xml, fromMs, toMs) {
+  const indexer = createXmltvIndexer(fromMs, toMs);
+  indexer.write(String(xml));
+  return indexer.finish();
+}
+
+export async function indexXmltvStream(body, fromMs, toMs, maxBytes = 100 * 1024 * 1024) {
+  if (!body) throw new Error('XMLTV response has no body');
+  const indexer = createXmltvIndexer(fromMs, toMs);
+  const decoder = new TextDecoder();
+  let totalBytes = 0;
+  for await (const chunk of body) {
+    totalBytes += chunk.byteLength;
+    if (totalBytes > maxBytes) throw new Error('XMLTV response exceeded size limit');
+    indexer.write(decoder.decode(chunk, { stream: true }));
   }
-  for (const entries of programmes.values()) entries.sort((a, b) => a.startMs - b.startMs);
-  return { displayNames, programmes, fromMs, toMs };
+  indexer.write(decoder.decode());
+  return indexer.finish();
 }
 
 export function matchXmltv(index, requestedChannels, fromMs, toMs) {

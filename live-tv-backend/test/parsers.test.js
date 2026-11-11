@@ -1,6 +1,12 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { parsePlaylist, parseXmltv, parseXmltvTime } from '../src/parsers.js';
+import {
+  indexXmltvStream,
+  parsePlaylist,
+  parsePlaylistStream,
+  parseXmltv,
+  parseXmltvTime,
+} from '../src/parsers.js';
 
 test('parses playlist metadata without losing quoted commas', () => {
   const channels = parsePlaylist([
@@ -12,6 +18,31 @@ test('parses playlist metadata without losing quoted commas', () => {
 
   assert.equal(channels.length, 1);
   assert.equal(channels[0].name, 'Kenya News');
+  assert.equal(channels[0].category, 'News, Local');
+  assert.equal(channels[0].country, 'ke');
+  assert.equal(channels[0].streamUrl, 'https://stream.test/live.m3u8');
+});
+
+test('streams playlist lines without losing metadata across chunk boundaries', async () => {
+  const playlist = [
+    '#EXTM3U',
+    '#EXTINF:-1 tvg-id="Example.ke@Provider" group-title="News, Local",Kenya 🌤 News',
+    '#EXTVLCOPT:http-user-agent=Test',
+    'https://stream.test/live.m3u8',
+  ].join('\r\n');
+  const bytes = new TextEncoder().encode(playlist);
+  const body = new ReadableStream({
+    start(controller) {
+    for (let offset = 0; offset < bytes.length; offset += 5) {
+        controller.enqueue(bytes.slice(offset, offset + 5));
+    }
+      controller.close();
+    },
+  });
+  const channels = await parsePlaylistStream(body);
+
+  assert.equal(channels.length, 1);
+  assert.equal(channels[0].name, 'Kenya 🌤 News');
   assert.equal(channels[0].category, 'News, Local');
   assert.equal(channels[0].country, 'ke');
   assert.equal(channels[0].streamUrl, 'https://stream.test/live.m3u8');
@@ -45,4 +76,25 @@ test('matches requested channels and returns only programmes in the requested wi
 test('parses XMLTV timestamps with and without timezone offsets', () => {
   assert.equal(parseXmltvTime('20261110190000 +0300'), Date.UTC(2026, 10, 10, 16));
   assert.equal(parseXmltvTime('20261110190000'), Date.UTC(2026, 10, 10, 19));
+});
+
+test('streams XMLTV across split UTF-8 chunks and rejects malformed documents', async () => {
+  const xml = '<tv><channel id="one"><display-name>News &amp; Weather</display-name></channel>' +
+    '<programme channel="one" start="20261110190000 +0000" stop="20261110200000 +0000">' +
+    '<title>Evening News 🌤</title></programme></tv>';
+  const bytes = new TextEncoder().encode(xml);
+  const body = (async function* () {
+    for (let offset = 0; offset < bytes.length; offset += 7) {
+      yield bytes.slice(offset, offset + 7);
+    }
+  })();
+  const index = await indexXmltvStream(body, Date.UTC(2026, 10, 10), Date.UTC(2026, 10, 11));
+
+  assert.deepEqual(index.displayNames.get('one'), ['News & Weather']);
+  assert.equal(index.programmes.get('one')[0].title, 'Evening News 🌤');
+  await assert.rejects(indexXmltvStream(
+    (async function* () { yield new TextEncoder().encode('<tv><programme></tv>'); })(),
+    0,
+    1,
+  ));
 });

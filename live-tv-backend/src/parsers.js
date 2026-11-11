@@ -290,20 +290,32 @@ export async function indexXmltvStream(body, fromMs, toMs, maxBytes = 100 * 1024
 
 export function matchXmltv(index, requestedChannels, fromMs, toMs) {
   const aliases = new Map();
+  const displayAliases = [];
   for (const channel of requestedChannels) {
     const baseId = String(channel.tvgId || '').split('@')[0];
     for (const alias of [channel.tvgId, baseId, channel.name]) {
       const key = normalize(alias);
       if (key && !aliases.has(key)) aliases.set(key, channel.tvgId || channel.name);
     }
+    const name = normalize(channel.name);
+    if (name.length >= 5) displayAliases.push([name, channel.tvgId || channel.name]);
   }
+
+  const matchDisplayName = (value) => {
+    const key = normalize(value);
+    const exact = aliases.get(key);
+    if (exact) return exact;
+    if (key.length < 5) return undefined;
+    return displayAliases.find(([name]) =>
+      key.startsWith(name) || name.startsWith(key),
+    )?.[1];
+  };
 
   const map = {};
   for (const [sourceId, programmes] of index.programmes) {
     const targetId = aliases.get(normalize(sourceId)) ||
       (index.displayNames.get(sourceId) || [])
-        .map(normalize)
-        .map((name) => aliases.get(name))
+        .map(matchDisplayName)
         .find(Boolean);
     if (!targetId) continue;
     const entries = programmes.filter((item) => item.stopMs > fromMs && item.startMs < toMs);

@@ -99,6 +99,45 @@ test('fetches a country guide and falls back to the Lite guide', async () => {
   assert.equal(payload.programmes['KenyaNews.ke@Provider'][0].title, 'Current programme');
 });
 
+test('falls back to the Lite guide when a country feed has no matching channels', async () => {
+  const now = new Date();
+  const xmlTime = (date) => `${date.getUTCFullYear()}${String(date.getUTCMonth() + 1).padStart(2, '0')}` +
+    `${String(date.getUTCDate()).padStart(2, '0')}${String(date.getUTCHours()).padStart(2, '0')}` +
+    `${String(date.getUTCMinutes()).padStart(2, '0')}00 +0000`;
+  const start = new Date(now.getTime() - 30 * 60 * 1000);
+  const stop = new Date(now.getTime() + 30 * 60 * 1000);
+  const countryGuide = '<tv><channel id="unrelated"><display-name>Other channel</display-name></channel></tv>';
+  const liteGuide = `<tv><channel id="lite-provider"><display-name>Kenya News HD</display-name></channel>` +
+    `<programme channel="lite-provider" start="${xmlTime(start)}" stop="${xmlTime(stop)}">` +
+    '<title>Lite current programme</title></programme></tv>';
+  let liteRequested = false;
+  globalThis.fetch = async (input, options) => {
+    const url = String(input);
+    if (url.startsWith(origin)) return nativeFetch(input, options);
+    if (url === 'https://epg.pw/xmltv/epg_YY.xml') return new Response(countryGuide);
+    if (url === EPG_FALLBACK_URL) {
+      liteRequested = true;
+      return new Response(liteGuide);
+    }
+    throw new Error(`Unexpected upstream request: ${url}`);
+  };
+
+  const response = await nativeFetch(`${origin}/api/epg`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      country: 'YY',
+      channels: [{ tvgId: 'KenyaNews.ke@Provider', name: 'Kenya News' }],
+      from: now.getTime() - 60 * 60 * 1000,
+      to: now.getTime() + 60 * 60 * 1000,
+    }),
+  });
+  assert.equal(response.status, 200);
+  const payload = await response.json();
+  assert.equal(liteRequested, true);
+  assert.equal(payload.programmes['KenyaNews.ke@Provider'][0].title, 'Lite current programme');
+});
+
 test('validates guide requests before making upstream calls', async () => {
   globalThis.fetch = async () => {
     throw new Error('Invalid requests must not fetch upstream data');

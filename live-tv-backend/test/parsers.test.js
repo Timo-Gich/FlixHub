@@ -73,6 +73,21 @@ test('matches requested channels and returns only programmes in the requested wi
   });
 });
 
+test('matches channel display names with provider suffixes', () => {
+  const xml = `<tv><channel id="provider-guide"><display-name>Kenya News HD</display-name></channel>` +
+    '<programme channel="provider-guide" start="20261110190000 +0000" stop="20261110200000 +0000">' +
+    '<title>Evening News</title></programme></tv>';
+  const start = Date.UTC(2026, 10, 10, 18);
+  const result = parseXmltv(
+    xml,
+    [{ tvgId: 'KenyaNews.ke@Provider', name: 'Kenya News' }],
+    start,
+    start + 2 * 3600000,
+  );
+
+  assert.equal(result['KenyaNews.ke@Provider'][0].title, 'Evening News');
+});
+
 test('parses XMLTV timestamps with and without timezone offsets', () => {
   assert.equal(parseXmltvTime('20261110190000 +0300'), Date.UTC(2026, 10, 10, 16));
   assert.equal(parseXmltvTime('20261110190000'), Date.UTC(2026, 10, 10, 19));

@@ -255,18 +255,14 @@ export function matchProgrammes(epgMap, tvgId, channelName, refTime = Date.now()
 /**
  * Request the channel-filtered schedules for a small set of countries.
  * @param {string[]} codes
+ * @param {{ signal?: AbortSignal, channels?: LiveChannel[], from?: number, to?: number }} [opts]
  * @returns {Promise<Record<string, Record<string, Array>>>>} code -> epgMap
  */
 export async function fetchEPGForRegions(codes = [], opts = {}) {
   const uniq = [...new Set((codes || []).map((c) => String(c || '').toUpperCase()).filter(Boolean))];
   const out = {};
   await Promise.all(uniq.map(async (code) => {
-    try {
-      out[code] = await fetchEPG(code, opts);
-    } catch (error) {
-      console.error(`[live-tv] could not load ${code} EPG from backend:`, error);
-      out[code] = {};
-    }
+    out[code] = await fetchEPG(code, opts);
   }));
   return out;
 }

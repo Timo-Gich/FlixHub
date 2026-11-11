@@ -22,10 +22,12 @@ import {
   formatRange as formatProgRange,
   getRegionByCode,
   getRegionForCountry,
+  DEFAULT_EPG_REGION,
   buildStreamUrl,
 } from '../services/liveTvService';
 
-const REGION_KEY = 'flixhub.liveRegion';
+const COUNTRY_KEY = 'flixhub.liveCountry';
+const COUNTRY_ALL = '__all__';
 // The backend proxies and retries upstream stream requests. Keep a generous
 // player timeout for cold starts and slow first segments.
 const HEALTH_TIMEOUT_MS = 12000;
@@ -49,9 +51,9 @@ const HLS_CONFIG = {
 // Timing tunables for the live-stream networking strategy (see handlers below).
 const STALL_RELOAD_DELAY_MS = 3000;
 
-function readRegion() {
+function readCountry() {
   try {
-    const saved = localStorage.getItem(REGION_KEY);
+    const saved = localStorage.getItem(COUNTRY_KEY);
     if (saved) return saved;
   } catch {
     /* ignore storage errors */
@@ -93,9 +95,9 @@ export default function LivePlayerPage() {
   const [stallReloadKey, setStallReloadKey] = useState(0);
 
   const playerSrc = buildStreamUrl(channel);
-  // The user's explicitly selected region (persisted by the /live browser),
-  // plus the region auto-derived from the channel's own country code.
-  const [userRegion] = useState(readRegion);
+  // Use the same country selected in the Live TV browser; with "All countries",
+  // use the channel's own country.
+  const [selectedCountry] = useState(readCountry);
   const [epgMaps, setEpgMaps] = useState({}); // regionCode -> XMLTV map
   // Bumped every minute so "now / next" stays current while the strip is open.
   const [clock, setClock] = useState(Date.now());
@@ -136,22 +138,17 @@ export default function LivePlayerPage() {
     return () => clearInterval(id);
   }, []);
 
-  // Auto-derive a region from the channel's country (deep-linked channels then
-  // don't depend on the user having picked the matching region). User choice is
-  // still kept as a fallback so an explicit selection is never ignored.
-  const channelRegion = channel ? getRegionForCountry(channel.country) : null;
-  const regionCodes = channelRegion
-    ? [channelRegion.code, userRegion].filter(
-        (c) => c && c !== channelRegion.code,
-      )
-    : [userRegion];
+  const guideRegion = selectedCountry !== COUNTRY_ALL
+    ? getRegionForCountry(selectedCountry)
+    : channel && getRegionForCountry(channel.country);
+  const regionCode = guideRegion?.code || DEFAULT_EPG_REGION;
 
   // Request this channel's bounded guide window from the backend.
   useEffect(() => {
     setEpgMaps({});
     let cancelled = false;
     if (!channel) return undefined;
-    fetchEPGForRegions(regionCodes, {
+    fetchEPGForRegions([regionCode], {
       channels: [channel],
       from: Date.now() - 60 * 60 * 1000,
       to: Date.now() + 12 * 60 * 60 * 1000,
@@ -164,11 +161,9 @@ export default function LivePlayerPage() {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [regionCodes.join(','), channel?.id]);
+  }, [regionCode, channel?.id]);
 
-  // Resolve current + next programme, preferring the region that actually has
-  // data for this channel so auto-derived regions lift the hit rate for
-  // deep-linked channels.
+  // Resolve current + next programme from the selected/channel country guide.
   const programs = (() => {
     if (!channel) return { now: null, next: null, found: false, region: null, entries: [] };
     return getNowNextAcrossRegions(epgMaps, channel, clock);

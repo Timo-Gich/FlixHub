@@ -26,7 +26,10 @@ export default function LiveGuide({ rows = [], winStart = 0, winEnd = 0, clock =
           TV Guide <span className="ml-2 rounded bg-brand/15 px-1.5 py-0.5 text-[10px] text-brand-light">LIVE</span>
         </p>
         <p className="text-xs text-muted">
-          {epgStatus === 'loading' ? 'Loading guide…' : epgStatus === 'empty' ? 'No guide data — showing channels' : `${fmtSlot(winStart)} – ${fmtSlot(winEnd)}`}
+          {epgStatus === 'loading' ? 'Loading guide…'
+            : epgStatus === 'error' ? 'Guide could not be loaded'
+              : epgStatus === 'empty' ? 'No guide data — showing channels'
+                : `${fmtSlot(winStart)} – ${fmtSlot(winEnd)}`}
         </p>
       </div>
       <div className="overflow-x-auto">

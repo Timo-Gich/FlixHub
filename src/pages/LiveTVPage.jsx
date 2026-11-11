@@ -5,25 +5,14 @@ import LiveChannelCard from '../components/LiveChannelCard';
 import LiveHero from '../components/LiveHero';
 import LiveGuide from '../components/LiveGuide';
 import {
-  fetchPlaylist, resetPlaylistCache, EPG_REGIONS, fetchEPGForRegions, getRegionForCountry,
+  fetchPlaylist, resetPlaylistCache, EPG_REGIONS, DEFAULT_EPG_REGION, fetchEPGForRegions, getRegionForCountry,
   matchProgrammes, pickFeaturedOnNow, sliceWindow,
 } from '../services/liveTvService';
 import { useLibrary } from '../hooks/useLibrary.jsx';
 
-const REGION_KEY = 'flixhub.liveRegion';
 const VIEW_KEY = 'flixhub.liveView';
 const COUNTRY_KEY = 'flixhub.liveCountry';
 const COUNTRY_ALL = '__all__';
-
-function readRegion() {
-  try {
-    const saved = localStorage.getItem(REGION_KEY);
-    if (saved && EPG_REGIONS.some((r) => r.code === saved)) return saved;
-  } catch {
-    /* ignore storage errors */
-  }
-  return 'US';
-}
 
 function readCountry() {
   try {
@@ -73,12 +62,11 @@ function readStoredQuery() {
 
 /**
  * /live — professional Live TV browser: On-Now hero, EPG guide + grid views,
- * favorites, search, and region-driven programme data.
+ * favorites, search, and country-driven programme data.
  */
 export default function LiveTVPage() {
   const [channels, setChannels] = useState(null); // null = loading
   const [error, setError] = useState(false);
-  const [region, setRegion] = useState(readRegion);
   const [country, setCountry] = useState(readCountry);
   const [view, setView] = useState(() => {
     try {
@@ -145,15 +133,6 @@ export default function LiveTVPage() {
   }, []);
 
   // Favorites come from the cloud-aware hook — no local subscription needed.
-
-  // Persist the chosen region so the player page can use it for EPG.
-  useEffect(() => {
-    try {
-      localStorage.setItem(REGION_KEY, region);
-    } catch {
-      /* ignore storage errors */
-    }
-  }, [region]);
 
   useEffect(() => {
     try {
@@ -246,12 +225,12 @@ export default function LiveTVPage() {
   useEffect(() => {
     setPage(1);
     setGuidePage(1);
-  }, [tab, query, favState, channels, region, country]);
+  }, [tab, query, favState, channels, country]);
 
-  const viewKey = `${tab}|${query}|${(channels || []).length}|${region}|${country}`;
+  const viewKey = `${tab}|${query}|${(channels || []).length}|${country}`;
   // EPG is strictly progressive enhancement: it loads lazily AFTER the
-  // channel list renders, never blocks it, and times out fast (8s per
-  // region) so a slow XMLTV host can't hang the page.
+  // channel list renders and never blocks it. A guide feed can take longer
+  // than the initial page render, so keep its loading state until it finishes.
   useEffect(() => {
     if (!visible.length) {
       setEpgMaps({});
@@ -261,6 +240,8 @@ export default function LiveTVPage() {
     const myReq = epgReqRef.current + 1;
     epgReqRef.current = myReq;
     let cancelled = false;
+    let controller = null;
+    let requestTimeout = null;
     setEpgMaps({});
     setEpgStatus('idle');
     // Defer so first paint (channels) always wins over guide data.
@@ -273,27 +254,35 @@ export default function LiveTVPage() {
         const r = getRegionForCountry(c.country);
         if (r) counts.set(r.code, (counts.get(r.code) || 0) + 1);
       });
-      const top = [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 1).map(([code]) => code);
-      const codes = country === COUNTRY_ALL
-        ? [...new Set([region, ...top])].filter(Boolean)
-        : [country];
-      const withTimeout = (p, ms) => Promise.race([
-        p,
-        new Promise((resolve) => setTimeout(() => resolve({ __timeout: true }), ms)),
-      ]);
-      withTimeout(fetchEPGForRegions(codes, {
+      const guideCountry = country === COUNTRY_ALL
+        ? [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || DEFAULT_EPG_REGION
+        : getRegionForCountry(country)?.code || country;
+      controller = new AbortController();
+      requestTimeout = setTimeout(() => controller.abort(), 130000);
+      fetchEPGForRegions([guideCountry], {
         channels: visible.slice(0, 400),
         from: bounds.winStart,
         to: bounds.winEnd,
-      }), 15000).then((maps) => {
+        signal: controller.signal,
+      }).then((maps) => {
         if (cancelled || epgReqRef.current !== myReq) return;
-        if (maps && maps.__timeout) { setEpgStatus('empty'); return; }
         setEpgMaps(maps || {});
         const anyData = Object.values(maps || {}).some((m) => m && Object.keys(m).length);
         setEpgStatus(anyData ? 'ready' : 'empty');
+      }).catch((error) => {
+        if (cancelled) return;
+        console.error('[live-tv] could not load guide:', error);
+        setEpgStatus('error');
+      }).finally(() => {
+        clearTimeout(requestTimeout);
       });
     }, 800);
-    return () => { cancelled = true; clearTimeout(timer); };
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+      clearTimeout(requestTimeout);
+      controller?.abort();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [viewKey]);
 
@@ -405,21 +394,6 @@ return (
                   </option>
                 ))}
               </select>
-            </label>
-            {/* Region selector (drives EPG country) */}
-            <label className="flex items-center gap-2 text-sm text-muted">
-              <span className="hidden sm:inline">EPG region</span>
-            <select
-              value={region}
-              onChange={(e) => setRegion(e.target.value)}
-              className="rounded-md border border-ink-border bg-ink-raised px-3 py-2 text-sm text-foreground outline-none focus:ring-2 focus:ring-brand/40"
-            >
-              {EPG_REGIONS.map((r) => (
-                <option key={r.code} value={r.code}>
-                  {r.label}
-                </option>
-              ))}
-            </select>
             </label>
           </div>
         </div>

@@ -4,6 +4,7 @@ import Footer from '../components/Footer';
 import LiveChannelCard from '../components/LiveChannelCard';
 import LiveHero from '../components/LiveHero';
 import LiveGuide from '../components/LiveGuide';
+import altLiveChannels from '../data/altLiveChannels';
 import {
   fetchPlaylist, resetPlaylistCache, EPG_REGIONS, DEFAULT_EPG_REGION, fetchEPGForRegions, getRegionForCountry,
   matchProgrammes, pickFeaturedOnNow, sliceWindow,
@@ -13,6 +14,17 @@ import { useLibrary } from '../hooks/useLibrary.jsx';
 const VIEW_KEY = 'flixhub.liveView';
 const COUNTRY_KEY = 'flixhub.liveCountry';
 const COUNTRY_ALL = '__all__';
+const SOURCE_KEY = 'flixhub.liveSource';
+const DEFAULT_SOURCE = 'default';
+const ALT_SOURCE = 'alt';
+
+function readSource() {
+  try {
+    return localStorage.getItem(SOURCE_KEY) === ALT_SOURCE ? ALT_SOURCE : DEFAULT_SOURCE;
+  } catch {
+    return DEFAULT_SOURCE;
+  }
+}
 
 function readCountry() {
   try {
@@ -67,6 +79,7 @@ function readStoredQuery() {
 export default function LiveTVPage() {
   const [channels, setChannels] = useState(null); // null = loading
   const [error, setError] = useState(false);
+  const [source, setSource] = useState(readSource);
   const [country, setCountry] = useState(readCountry);
   const [view, setView] = useState(() => {
     try {
@@ -121,7 +134,9 @@ export default function LiveTVPage() {
   }, [tab]);
 
   useEffect(() => {
+    if (source !== DEFAULT_SOURCE) return undefined;
     let cancelled = false;
+    setError(false);
     fetchPlaylist().then((list) => {
       if (cancelled) return;
       if (!list.length) setError(true);
@@ -130,7 +145,7 @@ export default function LiveTVPage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [source]);
 
   // Favorites come from the cloud-aware hook — no local subscription needed.
 
@@ -141,6 +156,14 @@ export default function LiveTVPage() {
       /* ignore storage errors */
     }
   }, [country]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(SOURCE_KEY, source);
+    } catch {
+      /* ignore storage errors */
+    }
+  }, [source]);
 
   useEffect(() => {
     try {
@@ -192,11 +215,11 @@ export default function LiveTVPage() {
   // If the restored tab no longer matches a real category (stale playlist or
   // session), fall back to "All" once the category list is known.
   useEffect(() => {
-    if (loading) return;
+    if (source !== DEFAULT_SOURCE || loading) return;
     const valid =
       tab === TAB_ALL || tab === TAB_FAVORITES || categories.includes(tab);
     if (!valid) setTab(TAB_ALL);
-  }, [loading, tab, categories]);
+  }, [source, loading, tab, categories]);
 
   const favorites = useMemo(() => favState.map((e) => e.channel), [favState]);
 // Apply tab + search filtering client-side.
@@ -209,6 +232,13 @@ export default function LiveTVPage() {
     if (q) list = list.filter((c) => (c.name || '').toLowerCase().includes(q));
     return list;
   }, [channels, tab, favorites, country, query]);
+
+  const altVisible = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return q
+      ? altLiveChannels.filter((channel) => channel.name.toLowerCase().includes(q))
+      : altLiveChannels;
+  }, [query]);
 
   const tabs = [
     { key: TAB_ALL, label: 'All' },
@@ -225,14 +255,14 @@ export default function LiveTVPage() {
   useEffect(() => {
     setPage(1);
     setGuidePage(1);
-  }, [tab, query, favState, channels, country]);
+  }, [source, tab, query, favState, channels, country]);
 
   const viewKey = `${tab}|${query}|${(channels || []).length}|${country}`;
   // EPG is strictly progressive enhancement: it loads lazily AFTER the
   // channel list renders and never blocks it. A guide feed can take longer
   // than the initial page render, so keep its loading state until it finishes.
   useEffect(() => {
-    if (!visible.length) {
+    if (source !== DEFAULT_SOURCE || !visible.length) {
       setEpgMaps({});
       setEpgStatus('idle');
       return;
@@ -284,7 +314,7 @@ export default function LiveTVPage() {
       controller?.abort();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [viewKey]);
+  }, [source, viewKey]);
 
   const epgByChannel = useMemo(() => {
     const map = new Map();
@@ -341,6 +371,7 @@ export default function LiveTVPage() {
       setChannels(list);
     });
   };
+  const channelCount = source === ALT_SOURCE ? altVisible.length : visible.length;
 return (
     <div className="min-h-screen bg-ink text-foreground">
       <Navbar />
@@ -361,7 +392,7 @@ return (
               <h1 className="text-2xl font-black text-white sm:text-3xl">Live TV</h1>
               <span className="ml-1 inline-flex items-center gap-1.5 rounded-full bg-brand/15 px-2.5 py-1 text-[11px] font-black uppercase tracking-wider text-brand-light">
                 <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-brand" />
-                {visible.length ? `${visible.length.toLocaleString()} channels` : 'Guide'}
+                {channelCount.toLocaleString()} channels
               </span>
             </div>
             <p className="mt-1 text-sm text-muted">
@@ -370,35 +401,57 @@ return (
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
-            <div className="flex rounded-md border border-ink-border bg-ink-raised p-0.5" role="tablist" aria-label="Layout">
-              {['guide', 'grid'].map((v) => (
-                <button key={v} type="button" role="tab" aria-selected={view === v}
-                  onClick={() => setView(v)}
-                  className={`rounded px-3 py-1.5 text-sm font-semibold capitalize transition ${view === v ? 'bg-brand text-white' : 'text-muted hover:text-white'}`}>
-                  {v}
-                </button>
-              ))}
-            </div>
-            <label className="flex items-center gap-2 text-sm text-muted">
-              <span className="hidden sm:inline">Country</span>
-              <select
-                value={country}
-                onChange={(e) => setCountry(e.target.value)}
-                aria-label="Filter channels by country"
-                className="rounded-md border border-ink-border bg-ink-raised px-3 py-2 text-sm text-foreground outline-none focus:ring-2 focus:ring-brand/40"
+            <div className="flex rounded-md border border-ink-border bg-ink-raised p-0.5" role="group" aria-label="Live TV source">
+              <button
+                type="button"
+                aria-pressed={source === DEFAULT_SOURCE}
+                onClick={() => setSource(DEFAULT_SOURCE)}
+                className={`rounded px-3 py-1.5 text-sm font-semibold transition ${source === DEFAULT_SOURCE ? 'bg-brand text-white' : 'text-muted hover:text-white'}`}
               >
-                <option value={COUNTRY_ALL}>All countries</option>
-                {countries.map((code) => (
-                  <option key={code} value={code.toUpperCase()}>
-                    {countryLabel(code)}
-                  </option>
-                ))}
-              </select>
-            </label>
+                Default (IPTV)
+              </button>
+              <button
+                type="button"
+                aria-pressed={source === ALT_SOURCE}
+                onClick={() => setSource(ALT_SOURCE)}
+                className={`rounded px-3 py-1.5 text-sm font-semibold transition ${source === ALT_SOURCE ? 'bg-brand text-white' : 'text-muted hover:text-white'}`}
+              >
+                Alt Source
+              </button>
+            </div>
+            {source === DEFAULT_SOURCE && (
+              <>
+                <div className="flex rounded-md border border-ink-border bg-ink-raised p-0.5" role="tablist" aria-label="Layout">
+                  {['guide', 'grid'].map((v) => (
+                    <button key={v} type="button" role="tab" aria-selected={view === v}
+                      onClick={() => setView(v)}
+                      className={`rounded px-3 py-1.5 text-sm font-semibold capitalize transition ${view === v ? 'bg-brand text-white' : 'text-muted hover:text-white'}`}>
+                      {v}
+                    </button>
+                  ))}
+                </div>
+                <label className="flex items-center gap-2 text-sm text-muted">
+                  <span className="hidden sm:inline">Country</span>
+                  <select
+                    value={country}
+                    onChange={(e) => setCountry(e.target.value)}
+                    aria-label="Filter channels by country"
+                    className="rounded-md border border-ink-border bg-ink-raised px-3 py-2 text-sm text-foreground outline-none focus:ring-2 focus:ring-brand/40"
+                  >
+                    <option value={COUNTRY_ALL}>All countries</option>
+                    {countries.map((code) => (
+                      <option key={code} value={code.toUpperCase()}>
+                        {countryLabel(code)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </>
+            )}
           </div>
         </div>
 
-        {!loading && !error && featured.length > 0 && (
+        {source === DEFAULT_SOURCE && !loading && !error && featured.length > 0 && (
           <div className="mt-5">
             <LiveHero items={featured} clock={clock} />
           </div>
@@ -422,7 +475,7 @@ return (
         </div>
 
         {/* Category tabs — scrollable rail with edge arrows */}
-        <div className="relative mt-6">
+        {source === DEFAULT_SOURCE && <div className="relative mt-6">
           {canScrollLeft && (
             <button
               type="button"
@@ -472,18 +525,18 @@ return (
             );
           })}
           </div>
-        </div>
+        </div>}
 
         {/* Content */}
         <div className="mt-6 pb-4">
-          {loading && (
+          {source === DEFAULT_SOURCE && loading && (
             <div className="flex flex-col items-center justify-center py-24 text-muted">
               <span className="h-10 w-10 animate-spin rounded-full border-4 border-brand border-t-transparent" aria-hidden="true" />
               <p className="mt-4 text-sm">Loading channels…</p>
             </div>
           )}
 
-          {error && (
+          {source === DEFAULT_SOURCE && error && (
             <div className="rounded-md border border-ink-border bg-ink-soft px-6 py-16 text-center">
               <p className="text-3xl font-black text-white">Couldn’t load channels</p>
               <p className="mx-auto mt-2 max-w-md text-sm text-muted">
@@ -499,7 +552,7 @@ return (
             </div>
           )}
 
-          {tab === TAB_FAVORITES && !error && favorites.length === 0 && !loading && (
+          {source === DEFAULT_SOURCE && tab === TAB_FAVORITES && !error && favorites.length === 0 && !loading && (
             <div className="rounded-md border border-ink-border bg-ink-soft px-6 py-16 text-center">
               <p className="text-3xl font-black text-white">No favorite channels yet</p>
               <p className="mx-auto mt-2 max-w-md text-sm text-muted">
@@ -508,14 +561,14 @@ return (
             </div>
           )}
 
-          {tab !== TAB_FAVORITES && !error && emptyVisible && (
+          {source === DEFAULT_SOURCE && tab !== TAB_FAVORITES && !error && emptyVisible && (
             <div className="rounded-md border border-ink-border bg-ink-soft px-6 py-16 text-center">
               <p className="text-3xl font-black text-white">No channels found</p>
               <p className="mx-auto mt-2 max-w-md text-sm text-muted">Try a different category or search term.</p>
             </div>
           )}
 
-          {!loading && !error && !emptyVisible && view === 'guide' && (
+          {source === DEFAULT_SOURCE && !loading && !error && !emptyVisible && view === 'guide' && (
             <>
               <LiveGuide rows={guideRows} winStart={bounds.winStart} winEnd={bounds.winEnd} clock={clock} epgStatus={epgStatus} />
               {guideHasMore && (
@@ -529,7 +582,7 @@ return (
             </>
           )}
 
-          {!loading && !error && !emptyVisible && view === 'grid' && (
+          {source === DEFAULT_SOURCE && !loading && !error && !emptyVisible && view === 'grid' && (
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
               {paged.map((ch) => (
                 <LiveChannelCard key={ch.id} channel={ch} epg={epgByChannel.get(ch.id) || null} clock={clock} />
@@ -537,7 +590,7 @@ return (
             </div>
           )}
 
-          {view === 'grid' && !loading && !error && hasMore && (
+          {source === DEFAULT_SOURCE && view === 'grid' && !loading && !error && hasMore && (
             <div className="mt-8 flex justify-center">
               <button
                 type="button"
@@ -546,6 +599,25 @@ return (
               >
                 Load more {Math.min(PAGE_SIZE, visible.length - shownCount)}
               </button>
+            </div>
+          )}
+
+          {source === ALT_SOURCE && altVisible.length === 0 && (
+            <div className="rounded-md border border-ink-border bg-ink-soft px-6 py-16 text-center">
+              <p className="text-3xl font-black text-white">No channels found</p>
+              <p className="mx-auto mt-2 max-w-md text-sm text-muted">Try a different search term.</p>
+            </div>
+          )}
+
+          {source === ALT_SOURCE && altVisible.length > 0 && (
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+              {altVisible.map((ch) => (
+                <LiveChannelCard
+                  key={ch.id}
+                  channel={ch}
+                  to={`/live/alt/${encodeURIComponent(ch.id)}`}
+                />
+              ))}
             </div>
           )}
         </div>

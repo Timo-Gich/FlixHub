@@ -1,18 +1,7 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import Footer from '../components/Footer';
-import {
-  MediaPlayer,
-  MediaProvider,
-} from '@vidstack/react';
-import Hls from 'hls.js';
-import {
-  DefaultVideoLayout,
-  defaultLayoutIcons,
-} from '@vidstack/react/player/layouts/default';
-import '@vidstack/react/player/styles/base.css';
-import '@vidstack/react/player/styles/default/theme.css';
-import '@vidstack/react/player/styles/default/layouts/video.css';
+import LiveVideoPlayer from '../components/LiveVideoPlayer';
 import {
   fetchPlaylist,
   fetchEPGForRegions,
@@ -20,32 +9,14 @@ import {
   getUpcoming,
   programmeProgress,
   formatRange as formatProgRange,
-  getRegionByCode,
   getRegionForCountry,
   DEFAULT_EPG_REGION,
-  buildStreamUrl,
 } from '../services/liveTvService';
+import { LIVE_SERVERS } from '../services/liveServers';
 
 const COUNTRY_KEY = 'flixhub.liveCountry';
 const COUNTRY_ALL = '__all__';
-const STARTUP_TIMEOUT_MS = 90000;
-const STARTUP_RETRY_DELAYS_MS = [5000, 10000, 15000, 20000];
 const PROG_REFRESH_MS = 60000;
-
-// Aggressive hls.js tuning for low-latency live streams (see usage below).
-const HLS_CONFIG = {
-  liveSyncDurationCount: 3,
-  liveMaxLatencyDurationCount: 5,
-  maxBufferLength: 15,
-  maxMaxBufferLength: 30,
-  backBufferLength: 10,
-  initialLiveManifestSize: 1,
-  lowLatencyMode: true,
-  maxLiveSyncPlaybackRate: 1.5,
-  enableWorker: true,
-  fragLoadingMaxRetry: 6,
-  manifestLoadingMaxRetry: 4,
-};
 
 function readCountry() {
   try {
@@ -79,17 +50,6 @@ export default function LivePlayerPage() {
 
   const [channel, setChannel] = useState(null);
   const [missing, setMissing] = useState(false);
-  const [status, setStatus] = useState('loading'); // loading | healthy | unavailable
-  // True once the stream has shown any activity (playing OR time has advanced) —
-  // used to keep the health-probe timeout/error from killing an already-working
-  // channel. Bumped to force a fresh player mount on "Try again".
-  const startedRef = useRef(false);
-  const [retryKey, setRetryKey] = useState(0);
-  const [startupAttempt, setStartupAttempt] = useState(0);
-  const startupRetryCountRef = useRef(0);
-  const startupRetryTimerRef = useRef(null);
-
-  const playerSrc = buildStreamUrl(channel);
   // Use the same country selected in the Live TV browser; with "All countries",
   // use the channel's own country.
   const [selectedCountry] = useState(readCountry);
@@ -112,24 +72,6 @@ export default function LivePlayerPage() {
       cancelled = true;
     };
   }, [decoded]);
-
-  // Give slow upstreams time to start. A transient waiting/error event does not
-  // make the channel unavailable; only the full startup window does.
-  useEffect(() => {
-    if (!playerSrc) return;
-    startedRef.current = false;
-    startupRetryCountRef.current = 0;
-    setStatus('loading');
-    const timer = setTimeout(() => {
-      if (!startedRef.current) setStatus('unavailable');
-    }, STARTUP_TIMEOUT_MS);
-    return () => {
-      clearTimeout(timer);
-      clearTimeout(startupRetryTimerRef.current);
-      startupRetryTimerRef.current = null;
-    };
-    // retryKey restarts the window when the user manually retries.
-  }, [channel?.id, playerSrc, retryKey]);
 
   // Periodic clock tick to advance the Now Playing strip.
   useEffect(() => {
@@ -170,85 +112,15 @@ export default function LivePlayerPage() {
   const upcoming = getUpcoming(programs.entries || [], programs.now || programs.next, 4);
   const nowPct = programmeProgress(programs.now, clock);
 
-  const backToLive = '/live';
-
-  // -------------------------------------------------------------------------
-  // Live-stream playback and recovery.
-  // HLS manifests and segments are proxied by the Live TV backend. The browser
-  // only decodes media and asks hls.js to recover transient playback errors.
-  // -------------------------------------------------------------------------
-
-  const markActive = () => {
-    startedRef.current = true;
-    startupRetryCountRef.current = 0;
-    clearTimeout(startupRetryTimerRef.current);
-    startupRetryTimerRef.current = null;
-    setStatus('healthy');
-  };
-
-  const scheduleStartupRetry = () => {
-    if (startedRef.current || startupRetryTimerRef.current) return;
-    const retryDelay = STARTUP_RETRY_DELAYS_MS[startupRetryCountRef.current];
-    if (retryDelay === undefined) return;
-    startupRetryCountRef.current += 1;
-    startupRetryTimerRef.current = setTimeout(() => {
-      startupRetryTimerRef.current = null;
-      if (startedRef.current) return;
-      setStartupAttempt((attempt) => attempt + 1);
-    }, retryDelay);
-  };
-
-  const onPlaying = () => {
-    markActive();
-  };
-  const onTimeUpdate = () => {
-    markActive();
-  };
-
-  const onHlsInstance = (event) => {
-    const hls = event.detail;
-    if (!hls) return;
-    hls.on(Hls.Events.ERROR, (_event, data) => {
-      if (!data?.fatal) return;
-      if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
-        hls.startLoad();
-      } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
-        hls.recoverMediaError();
-      }
-    });
-  };
-
-  // Native media errors get spaced startup retries instead of an immediate
-  // unavailable state; HLS.js continues handling recoverable network errors.
-  const onError = () => {
-    scheduleStartupRetry();
-  };
-
-  // A manual retry starts a fresh startup window and retry sequence.
-  const retryStream = () => {
-    clearTimeout(startupRetryTimerRef.current);
-    startupRetryTimerRef.current = null;
-    startupRetryCountRef.current = 0;
-    startedRef.current = false;
-    setStatus('loading');
-    setRetryKey((k) => k + 1);
-  };
 return (
     <div className="min-h-screen bg-ink text-foreground">
-      {/* Top bar */}
-      <div className="flex items-center gap-3 border-b border-ink-border bg-ink-raised px-3 py-2.5 text-sm shadow-md">
-        <Link
-          to="/live"
-          className="inline-flex w-fit shrink-0 items-center gap-2 rounded-md bg-ink-raised px-3 py-1.5 font-semibold text-white ring-1 ring-ink-border transition hover:bg-brand"
-        >
-          <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor"
-               strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <path d="M19 12H5M12 19l-7-7 7-7" />
-          </svg>
-          Back to Live TV
-        </Link>
-        <span className="min-w-0 flex-1 truncate text-muted">Live · {channel?.name || 'Channel'}</span>
-      </div>
+      <LiveVideoPlayer
+        channel={channel}
+        missing={missing}
+        backHref="/live"
+        servers={LIVE_SERVERS}
+        defaultServerId="default"
+      />
 
       <main className="mx-auto w-full max-w-5xl px-4 pb-16 pt-6 sm:px-8">
         {/* Channel identity */}
@@ -282,69 +154,6 @@ return (
             </div>
           </div>
         )}
-
-        {/* Player / unavailable */}
-        <div className="relative aspect-video overflow-hidden rounded-lg border border-ink-border bg-black">
-          {missing && !channel && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 px-6 text-center">
-              <p className="text-2xl font-black text-white">Channel not found</p>
-              <p className="max-w-md text-sm text-muted">
-                We couldn’t find that channel. It may have been removed from the live TV feed.
-              </p>
-              <Link to="/live" className="rounded-md bg-brand px-6 py-2.5 text-sm font-bold text-white transition hover:bg-brand-dark">
-                Browse Live TV
-              </Link>
-            </div>
-          )}
-
-          {channel && status === 'unavailable' && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 px-6 text-center">
-              <p className="text-2xl font-black text-white">This channel is currently unavailable</p>
-              <p className="max-w-md text-sm text-muted">
-                Live streams go offline from time to time. Try again or come back in a moment.
-              </p>
-              <div className="flex flex-wrap items-center justify-center gap-3">
-                <button
-                  type="button"
-                  onClick={retryStream}
-                  className="rounded-md bg-brand px-6 py-2.5 text-sm font-bold text-white transition hover:bg-brand-dark"
-                >
-                  Try again
-                </button>
-                <Link
-                  to="/live"
-                  className="rounded-md border border-ink-border bg-ink-raised px-6 py-2.5 text-sm font-semibold text-white transition hover:border-brand hover:bg-brand"
-                >
-                  Try Another Channel
-                </Link>
-              </div>
-            </div>
-          )}
-
-          {channel && status !== 'unavailable' && !missing && (
-            <MediaPlayer
-              key={`${playerSrc}#retry-${retryKey}#attempt-${startupAttempt}`}
-              src={playerSrc}
-              playsInline
-              autoPlay
-              onCanPlay={markActive}
-              onPlaying={onPlaying}
-              onTimeUpdate={onTimeUpdate}
-              onError={onError}
-              onHlsInstance={onHlsInstance}
-            >
-              <MediaProvider library={Hls} config={HLS_CONFIG} />
-              <DefaultVideoLayout icons={defaultLayoutIcons} noScrubber={false} />
-            </MediaPlayer>
-          )}
-
-          {channel && status === 'loading' && !missing && (
-            <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-              <span className="h-10 w-10 animate-spin rounded-full border-4 border-brand border-t-transparent" aria-hidden="true" />
-              <span className="sr-only">Connecting to live stream…</span>
-            </div>
-          )}
-        </div>
 
         {/* Programme guide rail */}
         {channel && (

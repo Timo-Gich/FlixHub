@@ -7,7 +7,7 @@ import { programmeProgress, formatRange } from '../services/liveTvService';
  * Live channel tile v2 (16:9): logo header + Now/Next with progress.
  * `epg` = { now, next } | undefined — when absent shows category/country.
  */
-export default function LiveChannelCard({ channel, epg = null, clock = Date.now() }) {
+export default function LiveChannelCard({ channel, epg = null, clock = Date.now(), to: channelTo }) {
   const [imgFailed, setImgFailed] = useState(!channel?.logo);
   const [hover, setHover] = useState(false);
   const { isFavLive, toggleFav } = useLibrary();
@@ -23,7 +23,7 @@ export default function LiveChannelCard({ channel, epg = null, clock = Date.now(
 
   if (!channel) return null;
 
-  const to = `/live/${encodeURIComponent(channel.id)}`;
+  const to = channelTo || `/live/${encodeURIComponent(channel.id)}`;
   const pct = epg?.now ? programmeProgress(epg.now, clock) : null;
 
   const handleFav = (e) => {

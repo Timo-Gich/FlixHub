@@ -28,6 +28,7 @@ import DiscoverPage from './pages/DiscoverPage';
 // the initial bundle for the movies/series browsing routes.
 const LiveTVPage = lazy(() => import('./pages/LiveTVPage'));
 const LivePlayerPage = lazy(() => import('./pages/LivePlayerPage'));
+const AltLivePlayerPage = lazy(() => import('./pages/AltLivePlayerPage'));
 
 /**
  * Application root. Installs client-side routing so the VidKing player can live
@@ -114,6 +115,7 @@ export default function App() {
         <Route path="/new-popular" element={<NewAndPopularPage />} />
         <Route path="/discover" element={<DiscoverPage />} />
         <Route path="/live" element={<LiveTVPage />} />
+        <Route path="/live/alt/:id" element={<AltLivePlayerPage />} />
         <Route path="/live/:channelId" element={<LivePlayerPage />} />
         <Route path="/about" element={<InfoPage />} />
         <Route path="/careers" element={<InfoPage />} />

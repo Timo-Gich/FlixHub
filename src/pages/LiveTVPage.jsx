@@ -4,7 +4,7 @@ import Footer from '../components/Footer';
 import LiveChannelCard from '../components/LiveChannelCard';
 import LiveHero from '../components/LiveHero';
 import LiveGuide from '../components/LiveGuide';
-import altLiveChannels from '../data/altLiveChannels';
+import { DADDYLIVE_CHANNELS } from '../data/daddyliveChannels';
 import {
   fetchPlaylist, resetPlaylistCache, EPG_REGIONS, DEFAULT_EPG_REGION, fetchEPGForRegions, getRegionForCountry,
   matchProgrammes, pickFeaturedOnNow, sliceWindow,
@@ -16,11 +16,11 @@ const COUNTRY_KEY = 'flixhub.liveCountry';
 const COUNTRY_ALL = '__all__';
 const SOURCE_KEY = 'flixhub.liveSource';
 const DEFAULT_SOURCE = 'default';
-const ALT_SOURCE = 'alt';
+const DADDYLIVE_SOURCE = 'daddylive';
 
 function readSource() {
   try {
-    return localStorage.getItem(SOURCE_KEY) === ALT_SOURCE ? ALT_SOURCE : DEFAULT_SOURCE;
+    return localStorage.getItem(SOURCE_KEY) === DADDYLIVE_SOURCE ? DADDYLIVE_SOURCE : DEFAULT_SOURCE;
   } catch {
     return DEFAULT_SOURCE;
   }
@@ -76,10 +76,10 @@ function readStoredQuery() {
  * /live — professional Live TV browser: On-Now hero, EPG guide + grid views,
  * favorites, search, and country-driven programme data.
  */
-export default function LiveTVPage() {
+export default function LiveTVPage({ initialSource = readSource() }) {
   const [channels, setChannels] = useState(null); // null = loading
   const [error, setError] = useState(false);
-  const [source, setSource] = useState(readSource);
+  const [source, setSource] = useState(initialSource);
   const [country, setCountry] = useState(readCountry);
   const [view, setView] = useState(() => {
     try {
@@ -222,7 +222,9 @@ export default function LiveTVPage() {
   }, [source, loading, tab, categories]);
 
   const favorites = useMemo(() => favState.map((e) => e.channel), [favState]);
-// Apply tab + search filtering client-side.
+  const altLiveChannels = DADDYLIVE_CHANNELS;
+
+  // Apply tab + search filtering client-side.
   const visible = useMemo(() => {
     let list = channels || [];
     if (tab === TAB_FAVORITES) list = favorites;
@@ -371,7 +373,7 @@ export default function LiveTVPage() {
       setChannels(list);
     });
   };
-  const channelCount = source === ALT_SOURCE ? altVisible.length : visible.length;
+  const channelCount = source === DADDYLIVE_SOURCE ? altVisible.length : visible.length;
 return (
     <div className="min-h-screen bg-ink text-foreground">
       <Navbar />
@@ -408,15 +410,15 @@ return (
                 onClick={() => setSource(DEFAULT_SOURCE)}
                 className={`rounded px-3 py-1.5 text-sm font-semibold transition ${source === DEFAULT_SOURCE ? 'bg-brand text-white' : 'text-muted hover:text-white'}`}
               >
-                Default (IPTV)
+                IPTV
               </button>
               <button
                 type="button"
-                aria-pressed={source === ALT_SOURCE}
-                onClick={() => setSource(ALT_SOURCE)}
-                className={`rounded px-3 py-1.5 text-sm font-semibold transition ${source === ALT_SOURCE ? 'bg-brand text-white' : 'text-muted hover:text-white'}`}
+                aria-pressed={source === DADDYLIVE_SOURCE}
+                onClick={() => setSource(DADDYLIVE_SOURCE)}
+                className={`rounded px-3 py-1.5 text-sm font-semibold transition ${source === DADDYLIVE_SOURCE ? 'bg-brand text-white' : 'text-muted hover:text-white'}`}
               >
-                Alt Source
+                DaddyLive
               </button>
             </div>
             {source === DEFAULT_SOURCE && (
@@ -602,20 +604,20 @@ return (
             </div>
           )}
 
-          {source === ALT_SOURCE && altVisible.length === 0 && (
+          {source === DADDYLIVE_SOURCE && altVisible.length === 0 && (
             <div className="rounded-md border border-ink-border bg-ink-soft px-6 py-16 text-center">
               <p className="text-3xl font-black text-white">No channels found</p>
               <p className="mx-auto mt-2 max-w-md text-sm text-muted">Try a different search term.</p>
             </div>
           )}
 
-          {source === ALT_SOURCE && altVisible.length > 0 && (
+          {source === DADDYLIVE_SOURCE && altVisible.length > 0 && (
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
               {altVisible.map((ch) => (
                 <LiveChannelCard
                   key={ch.id}
                   channel={ch}
-                  to={`/live/alt/${encodeURIComponent(ch.id)}`}
+                  to={`/live/daddylive/${encodeURIComponent(ch.id)}`}
                 />
               ))}
             </div>

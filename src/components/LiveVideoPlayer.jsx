@@ -47,7 +47,7 @@ export default function LiveVideoPlayer({
   const startupRetryTimerRef = useRef(null);
   const activeServer = servers.find((server) => server.id === activeServerId) || servers[0];
   const playerSrc = channel && activeServer
-    ? activeServer.urlBuilder(channel.id, channel)
+    ? activeServer.urlBuilder(channel.id)
     : '';
 
   useEffect(() => {
@@ -166,7 +166,7 @@ export default function LiveVideoPlayer({
               src={playerSrc}
               title={`${channel.name} player`}
               className="absolute inset-0 block h-full w-full border-0"
-              allow="autoplay; encrypted-media"
+              allow="autoplay; fullscreen; encrypted-media"
               referrerPolicy="strict-origin-when-cross-origin"
               allowFullScreen
             />

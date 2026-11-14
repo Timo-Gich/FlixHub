@@ -234,165 +234,212 @@ export default function LiveTVPage({ initialSource = readSource() }) {
     });
   };
   const channelCount = source === DADDYLIVE_SOURCE ? altVisible.length : visible.length;
-return (
-    <div className="min-h-screen bg-ink text-foreground">
+  const channelCountLabel = loading && source === DEFAULT_SOURCE
+    ? 'Loading channels'
+    : `${channelCount.toLocaleString()} ${channelCount === 1 ? 'channel' : 'channels'}`;
+  const activeTabLabel = tabs.find((item) => item.key === tab)?.label || 'All channels';
+
+  return (
+    <div className="min-h-screen overflow-hidden bg-ink text-foreground">
       <Navbar />
 
-      <main className="mx-auto w-full max-w-[1600px] px-4 pt-24 sm:px-8">
-        {/* Header */}
-        <div className="flex flex-wrap items-end justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-brand text-white">
-                <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor"
-                     strokeWidth="1.6" aria-hidden="true">
-                  <rect x="2" y="7" width="20" height="15" rx="2" />
-                  <path d="M10 11.5v1.8a1 1 0 0 0 1.5.9l1.6-.9a1 1 0 0 0 0-1.8l-1.6-.9a1 1 0 0 0-1.5.9z" />
-                  <path d="M7 17h10" />
-                </svg>
+      <main className="mx-auto w-full max-w-[1600px] px-4 pb-12 pt-24 sm:px-8">
+        <section className="relative isolate overflow-hidden rounded-3xl border border-white/10 bg-[#111116] px-6 py-8 shadow-2xl shadow-black/20 sm:px-10 sm:py-10 lg:px-14 lg:py-12">
+          <div className="pointer-events-none absolute -right-20 -top-32 -z-10 h-96 w-96 rounded-full bg-brand/20 blur-3xl" />
+          <div className="pointer-events-none absolute bottom-[-10rem] right-1/4 -z-10 h-72 w-72 rounded-full bg-fuchsia-600/10 blur-3xl" />
+          <div className="grid items-center gap-8 md:grid-cols-[1.15fr_0.85fr] lg:gap-9">
+            <div className="max-w-2xl">
+              <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.06] px-3 py-1.5 text-[11px] font-bold uppercase tracking-[0.18em] text-white/80">
+                <span className="relative flex h-2 w-2">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-brand opacity-60" />
+                  <span className="relative inline-flex h-2 w-2 rounded-full bg-brand" />
+                </span>
+                FlixHub Live
               </span>
-              <h1 className="text-2xl font-black text-white sm:text-3xl">Live TV</h1>
-              <span className="ml-1 inline-flex items-center gap-1.5 rounded-full bg-brand/15 px-2.5 py-1 text-[11px] font-black uppercase tracking-wider text-brand-light">
-                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-brand" />
-                {channelCount.toLocaleString()} channels
-              </span>
+              <h1 className="mt-5 max-w-xl text-4xl font-black leading-[1.05] tracking-tight text-white sm:text-5xl lg:text-6xl">
+                Live TV, <span className="text-brand-light">your way.</span>
+              </h1>
+              <p className="mt-4 max-w-lg text-sm leading-6 text-white/65 sm:text-base">
+                Find something worth watching. Explore channels, save your favorites, and jump straight into the action.
+              </p>
             </div>
-            <p className="mt-1 text-sm text-muted">
-              Browse live channels and start watching.
-            </p>
-          </div>
 
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="flex rounded-md border border-ink-border bg-ink-raised p-0.5" role="group" aria-label="Live TV source">
-              <button
-                type="button"
-                aria-pressed={source === DEFAULT_SOURCE}
-                onClick={() => setSource(DEFAULT_SOURCE)}
-                className={`rounded px-3 py-1.5 text-sm font-semibold transition ${source === DEFAULT_SOURCE ? 'bg-brand text-white' : 'text-muted hover:text-white'}`}
-              >
-                IPTV
-              </button>
-              <button
-                type="button"
-                aria-pressed={source === DADDYLIVE_SOURCE}
-                onClick={() => setSource(DADDYLIVE_SOURCE)}
-                className={`rounded px-3 py-1.5 text-sm font-semibold transition ${source === DADDYLIVE_SOURCE ? 'bg-brand text-white' : 'text-muted hover:text-white'}`}
-              >
-                DaddyLive
-              </button>
+            <div className="relative mx-auto flex min-h-48 w-full max-w-md items-center justify-center overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br from-white/[0.08] via-white/[0.03] to-brand/10 p-6 md:min-h-56">
+              <div className="absolute inset-0 opacity-50" aria-hidden="true">
+                <div className="absolute -right-8 -top-14 h-48 w-48 rounded-full border border-white/10" />
+                <div className="absolute -right-1 -top-7 h-36 w-36 rounded-full border border-white/10" />
+                <div className="absolute -right-1 -top-7 h-36 w-36 rounded-full bg-brand/10 blur-2xl" />
+              </div>
+              <div className="relative flex w-full items-center gap-5">
+                <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-brand text-white shadow-xl shadow-brand/25 sm:h-20 sm:w-20">
+                  <svg viewBox="0 0 24 24" className="h-8 w-8 sm:h-9 sm:w-9" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
+                    <rect x="2" y="6" width="20" height="15" rx="2" />
+                    <path d="m9 10 6 3.5-6 3.5zM7 2l5 4 5-4" />
+                  </svg>
+                </div>
+                <div className="min-w-0">
+                  <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/50">Your lineup</p>
+                  <p className="mt-1 truncate text-2xl font-black tracking-tight text-white sm:text-3xl">
+                    {channelCountLabel}
+                  </p>
+                  <p className="mt-1 text-sm text-white/55">A whole world of live TV.</p>
+                </div>
+              </div>
+              <span className="absolute right-4 top-4 inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-black/30 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-white/75">
+                <span className="h-1.5 w-1.5 rounded-full bg-brand" />
+                Live
+              </span>
             </div>
-            {source === DEFAULT_SOURCE && (
-              <>
-                <label className="flex items-center gap-2 text-sm text-muted">
-                  <span className="hidden sm:inline">Country</span>
+          </div>
+        </section>
+
+        <section className="mt-7" aria-label="Find live channels">
+          <div className="flex flex-col gap-3 lg:flex-row">
+            <div className="relative min-w-0 flex-1">
+              <svg viewBox="0 0 24 24" className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-muted" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <circle cx="11" cy="11" r="7" />
+                <path d="m21 21-4.3-4.3" />
+              </svg>
+              <input
+                type="search"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search channels…"
+                aria-label="Search channels"
+                className="h-12 w-full rounded-xl border border-white/10 bg-white/[0.045] pl-12 pr-4 text-sm text-white outline-none transition placeholder:text-white/35 focus:border-brand/60 focus:bg-white/[0.07] focus:ring-2 focus:ring-brand/20"
+              />
+            </div>
+
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="flex rounded-xl border border-white/10 bg-white/[0.045] p-1" role="group" aria-label="Live TV source">
+                <button
+                  type="button"
+                  aria-pressed={source === DEFAULT_SOURCE}
+                  onClick={() => setSource(DEFAULT_SOURCE)}
+                  className={`rounded-lg px-4 py-2 text-sm font-semibold transition ${source === DEFAULT_SOURCE ? 'bg-brand text-white shadow-lg shadow-brand/20' : 'text-white/55 hover:text-white'}`}
+                >
+                  IPTV
+                </button>
+                <button
+                  type="button"
+                  aria-pressed={source === DADDYLIVE_SOURCE}
+                  onClick={() => setSource(DADDYLIVE_SOURCE)}
+                  className={`rounded-lg px-4 py-2 text-sm font-semibold transition ${source === DADDYLIVE_SOURCE ? 'bg-brand text-white shadow-lg shadow-brand/20' : 'text-white/55 hover:text-white'}`}
+                >
+                  DaddyLive
+                </button>
+              </div>
+              {source === DEFAULT_SOURCE && (
+                <label className="flex h-12 items-center gap-2 rounded-xl border border-white/10 bg-white/[0.045] px-3 text-sm text-white/55">
+                  <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M20 10c0 5-8 12-8 12S4 15 4 10a8 8 0 1 1 16 0Z" />
+                    <circle cx="12" cy="10" r="2.5" />
+                  </svg>
+                  <span className="sr-only">Country</span>
                   <select
                     value={country}
                     onChange={(e) => setCountry(e.target.value)}
                     aria-label="Filter channels by country"
-                    className="rounded-md border border-ink-border bg-ink-raised px-3 py-2 text-sm text-foreground outline-none focus:ring-2 focus:ring-brand/40"
+                    className="max-w-40 cursor-pointer bg-transparent text-sm text-white outline-none"
                   >
                     <option value={COUNTRY_ALL}>All countries</option>
                     {countries.map((code) => (
-                      <option key={code} value={code.toUpperCase()}>
+                      <option key={code} value={code.toUpperCase()} className="bg-ink-raised">
                         {countryLabel(code)}
                       </option>
                     ))}
                   </select>
                 </label>
-              </>
-            )}
+              )}
+            </div>
           </div>
-        </div>
+        </section>
 
-        {/* Search */}
-        <div className="relative mt-5 max-w-md">
-          <svg viewBox="0 0 24 24" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted"
-               fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <circle cx="11" cy="11" r="7" />
-            <path d="m21 21-4.3-4.3" />
-          </svg>
-          <input
-            type="search"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search channels…"
-            aria-label="Search channels"
-            className="w-full rounded-md border border-ink-border bg-ink-raised py-2.5 pl-9 pr-3 text-sm text-foreground placeholder:text-muted outline-none focus:border-brand/50 focus:ring-2 focus:ring-brand/40"
-          />
-        </div>
-
-        {/* Category tabs — scrollable rail with edge arrows */}
-        {source === DEFAULT_SOURCE && <div className="relative mt-6">
-          {canScrollLeft && (
-            <button
-              type="button"
-              onClick={() => scrollRail(-1)}
-              aria-label="Scroll categories left"
-              className="absolute -left-1 top-1/2 z-10 hidden h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full border border-ink-border bg-ink-raised/95 text-white shadow-lg backdrop-blur transition hover:bg-brand sm:flex"
-            >
-              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <path d="m15 18-6-6 6-6" />
-              </svg>
-            </button>
-          )}
-          {canScrollRight && (
-            <button
-              type="button"
-              onClick={() => scrollRail(1)}
-              aria-label="Scroll categories right"
-              className="absolute -right-1 top-1/2 z-10 hidden h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full border border-ink-border bg-ink-raised/95 text-white shadow-lg backdrop-blur transition hover:bg-brand sm:flex"
-            >
-              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <path d="m9 18 6-6-6-6" />
-              </svg>
-            </button>
-          )}
-          <div
-            ref={tabRailRef}
-            onScroll={updateRailArrows}
-            className="scrollbar-hide flex gap-2 overflow-x-auto scroll-smooth px-1 pb-1"
-            style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
-          >
-          {tabs.map((t) => {
-            const active = tab === t.key;
-            return (
+        {source === DEFAULT_SOURCE && (
+          <section className="relative mt-8" aria-label="Channel categories">
+            {canScrollLeft && (
               <button
-                key={t.key}
                 type="button"
-                data-active={active}
-                onClick={() => setTab(t.key)}
-                className={`shrink-0 rounded-full px-4 py-1.5 text-sm font-semibold transition ${
-                  active
-                    ? 'bg-brand text-white'
-                    : 'bg-ink-raised text-muted hover:bg-ink-border hover:text-white'
-                }`}
+                onClick={() => scrollRail(-1)}
+                aria-label="Scroll categories left"
+                className="absolute -left-2 top-1/2 z-10 hidden h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full border border-white/10 bg-ink-raised/95 text-white shadow-xl backdrop-blur transition hover:border-brand/50 hover:bg-ink-raised sm:flex"
               >
-                {t.label}
+                <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="m15 18-6-6 6-6" />
+                </svg>
               </button>
-            );
-          })}
-          </div>
-        </div>}
+            )}
+            {canScrollRight && (
+              <button
+                type="button"
+                onClick={() => scrollRail(1)}
+                aria-label="Scroll categories right"
+                className="absolute -right-2 top-1/2 z-10 hidden h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full border border-white/10 bg-ink-raised/95 text-white shadow-xl backdrop-blur transition hover:border-brand/50 hover:bg-ink-raised sm:flex"
+              >
+                <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="m9 18 6-6-6-6" />
+                </svg>
+              </button>
+            )}
+            <div
+              ref={tabRailRef}
+              onScroll={updateRailArrows}
+              className="scrollbar-hide flex gap-2 overflow-x-auto scroll-smooth px-0.5 pb-1"
+              style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+            >
+              {tabs.map((t) => {
+                const active = tab === t.key;
+                return (
+                  <button
+                    key={t.key}
+                    type="button"
+                    aria-pressed={active}
+                    data-active={active}
+                    onClick={() => setTab(t.key)}
+                    className={`shrink-0 rounded-full border px-4 py-2 text-sm font-semibold transition ${
+                      active
+                        ? 'border-brand bg-brand text-white shadow-lg shadow-brand/15'
+                        : 'border-white/[0.08] bg-white/[0.045] text-white/60 hover:border-white/20 hover:bg-white/[0.08] hover:text-white'
+                    }`}
+                  >
+                    {t.label}
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+        )}
 
-        {/* Content */}
-        <div className="mt-6 pb-4">
+        <section className="mt-8 pb-4" aria-label="Live channels">
+          <div className="mb-5 flex items-end justify-between gap-4">
+            <div>
+              <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-brand-light">
+                {source === DADDYLIVE_SOURCE ? 'DaddyLive' : 'Browse'}
+              </p>
+              <h2 className="mt-1 text-2xl font-bold tracking-tight text-white sm:text-3xl">
+                {source === DADDYLIVE_SOURCE ? 'Channel lineup' : activeTabLabel}
+              </h2>
+            </div>
+            <p className="shrink-0 pb-1 text-xs font-medium text-white/45 sm:text-sm">{channelCountLabel}</p>
+          </div>
+
           {source === DEFAULT_SOURCE && loading && (
-            <div className="flex flex-col items-center justify-center py-24 text-muted">
+            <div className="flex min-h-64 flex-col items-center justify-center rounded-2xl border border-white/[0.07] bg-white/[0.025] text-muted">
               <span className="h-10 w-10 animate-spin rounded-full border-4 border-brand border-t-transparent" aria-hidden="true" />
-              <p className="mt-4 text-sm">Loading channels…</p>
+              <p className="mt-4 text-sm">Finding your channels…</p>
             </div>
           )}
 
           {source === DEFAULT_SOURCE && error && (
-            <div className="rounded-md border border-ink-border bg-ink-soft px-6 py-16 text-center">
-              <p className="text-3xl font-black text-white">Couldn’t load channels</p>
-              <p className="mx-auto mt-2 max-w-md text-sm text-muted">
+            <div className="rounded-2xl border border-white/[0.08] bg-white/[0.03] px-6 py-16 text-center">
+              <p className="text-2xl font-black text-white sm:text-3xl">Couldn’t load channels</p>
+              <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-muted">
                 The live TV playlist is temporarily unreachable. Check your connection and try again.
               </p>
               <button
                 type="button"
                 onClick={retry}
-                className="mt-6 inline-block rounded-md bg-brand px-6 py-2.5 text-sm font-bold text-white transition hover:bg-brand-dark"
+                className="mt-6 rounded-lg bg-brand px-6 py-2.5 text-sm font-bold text-white transition hover:bg-brand-dark focus:outline-none focus:ring-2 focus:ring-brand/50 focus:ring-offset-2 focus:ring-offset-ink"
               >
                 Try again
               </button>
@@ -400,18 +447,18 @@ return (
           )}
 
           {source === DEFAULT_SOURCE && tab === TAB_FAVORITES && !error && favorites.length === 0 && !loading && (
-            <div className="rounded-md border border-ink-border bg-ink-soft px-6 py-16 text-center">
-              <p className="text-3xl font-black text-white">No favorite channels yet</p>
-              <p className="mx-auto mt-2 max-w-md text-sm text-muted">
-                Tap the ♥ on any live channel to pin it here and jump straight back in.
+            <div className="rounded-2xl border border-white/[0.08] bg-white/[0.03] px-6 py-16 text-center">
+              <p className="text-2xl font-black text-white sm:text-3xl">Your favorites live here</p>
+              <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-muted">
+                Tap the heart on any channel to save it and jump straight back in.
               </p>
             </div>
           )}
 
           {source === DEFAULT_SOURCE && tab !== TAB_FAVORITES && !error && emptyVisible && (
-            <div className="rounded-md border border-ink-border bg-ink-soft px-6 py-16 text-center">
-              <p className="text-3xl font-black text-white">No channels found</p>
-              <p className="mx-auto mt-2 max-w-md text-sm text-muted">Try a different category or search term.</p>
+            <div className="rounded-2xl border border-white/[0.08] bg-white/[0.03] px-6 py-16 text-center">
+              <p className="text-2xl font-black text-white sm:text-3xl">No channels found</p>
+              <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-muted">Try a different category or search term.</p>
             </div>
           )}
 
@@ -424,21 +471,21 @@ return (
           )}
 
           {source === DEFAULT_SOURCE && !loading && !error && hasMore && (
-            <div className="mt-8 flex justify-center">
+            <div className="mt-9 flex justify-center">
               <button
                 type="button"
                 onClick={() => setPage((p) => p + 1)}
-                className="rounded-md border border-ink-border bg-ink-raised px-6 py-2.5 text-sm font-semibold text-white transition hover:border-brand hover:bg-brand"
+                className="rounded-xl border border-white/10 bg-white/[0.05] px-7 py-3 text-sm font-semibold text-white transition hover:border-brand/40 hover:bg-white/[0.09] focus:outline-none focus:ring-2 focus:ring-brand/50"
               >
-                Load more {Math.min(PAGE_SIZE, visible.length - shownCount)}
+                Load {Math.min(PAGE_SIZE, visible.length - shownCount)} more channels
               </button>
             </div>
           )}
 
           {source === DADDYLIVE_SOURCE && altVisible.length === 0 && (
-            <div className="rounded-md border border-ink-border bg-ink-soft px-6 py-16 text-center">
-              <p className="text-3xl font-black text-white">No channels found</p>
-              <p className="mx-auto mt-2 max-w-md text-sm text-muted">Try a different search term.</p>
+            <div className="rounded-2xl border border-white/[0.08] bg-white/[0.03] px-6 py-16 text-center">
+              <p className="text-2xl font-black text-white sm:text-3xl">No channels found</p>
+              <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-muted">Try a different search term.</p>
             </div>
           )}
 
@@ -453,7 +500,7 @@ return (
               ))}
             </div>
           )}
-        </div>
+        </section>
       </main>
 
       <Footer />

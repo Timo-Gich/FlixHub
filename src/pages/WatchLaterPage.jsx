@@ -95,10 +95,18 @@ export default function WatchLaterPage() {
         return a.savedAt - b.savedAt;
       case 'title':
         return (a.movie.title || '').localeCompare(b.movie.title || '');
-      case 'year':
-        return (b.movie.release_date || a.movie.release_date || '').localeCompare(
-          a.movie.release_date || b.movie.release_date || '',
+      case 'year': {
+        const getReleaseDate = (movie) => (
+          movie.media_type === 'tv'
+            ? movie.first_air_date || movie.release_date
+            : movie.release_date || movie.first_air_date
         );
+        const dateA = getReleaseDate(a.movie);
+        const dateB = getReleaseDate(b.movie);
+        if (!dateA) return dateB ? 1 : 0;
+        if (!dateB) return -1;
+        return dateA.localeCompare(dateB);
+      }
       case 'rating':
         return (b.movie.vote_average || 0) - (a.movie.vote_average || 0);
       default:

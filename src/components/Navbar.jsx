@@ -124,6 +124,12 @@ export default function Navbar() {
   const [results, setResults] = useState([]);
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState(null);
+  const [voiceListening, setVoiceListening] = useState(false);
+  const [voiceSearchError, setVoiceSearchError] = useState('');
+  const recognitionRef = useRef(null);
+  const SpeechRecognition =
+    typeof window !== 'undefined' && (window.SpeechRecognition || window.webkitSpeechRecognition);
+  const voiceSearchSupported = Boolean(SpeechRecognition);
 
   // Debounced query-suggestion state.
   const [suggestions, setSuggestions] = useState([]);
@@ -304,6 +310,60 @@ export default function Navbar() {
     }
   };
 
+  const toggleVoiceSearch = () => {
+    if (voiceListening) {
+      recognitionRef.current?.stop();
+      return;
+    }
+
+    if (!SpeechRecognition) return;
+
+    const recognition = new SpeechRecognition();
+    recognition.lang = navigator.language || 'en-US';
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+    recognition.onstart = () => {
+      setVoiceSearchError('');
+      setVoiceListening(true);
+    };
+    recognition.onresult = (event) => {
+      const transcript = Array.from(event.results)
+        .slice(event.resultIndex)
+        .filter((result) => result.isFinal)
+        .map((result) => result[0]?.transcript ?? '')
+        .join(' ')
+        .trim();
+      if (!transcript) return;
+      handleChange(transcript);
+      runSearch(transcript);
+      setMobileSearchOpen(false);
+    };
+    recognition.onerror = (event) => {
+      const messages = {
+        'not-allowed': 'Microphone access was denied. Check your browser permissions.',
+        'audio-capture': 'No microphone was found.',
+        'no-speech': 'No speech detected. Try again.',
+        network: 'Voice search could not connect. Check your connection.',
+      };
+      setVoiceSearchError(messages[event.error] || 'Voice search could not start. Try again.');
+      setVoiceListening(false);
+    };
+    recognition.onend = () => {
+      setVoiceListening(false);
+      if (recognitionRef.current === recognition) recognitionRef.current = null;
+    };
+    recognitionRef.current = recognition;
+    try {
+      recognition.start();
+    } catch (error) {
+      recognitionRef.current = null;
+      setVoiceListening(false);
+      setVoiceSearchError(error.message || 'Voice search could not start. Try again.');
+    }
+  };
+
+  useEffect(() => () => recognitionRef.current?.stop(), []);
+
   const closeResults = () => {
     setSubmittedQuery('');
     setSearchError(null);
@@ -365,6 +425,10 @@ return (
           onChange={handleChange}
           onSubmit={runSearch}
           loading={searching}
+          voiceSearchSupported={voiceSearchSupported}
+          voiceListening={voiceListening}
+          voiceSearchError={voiceSearchError}
+          onVoiceSearch={toggleVoiceSearch}
           filter={filter}
           onFilterChange={setFilter}
           className="hidden md:flex"
@@ -508,6 +572,10 @@ return (
               setMobileSearchOpen(false);
             }}
             loading={searching}
+            voiceSearchSupported={voiceSearchSupported}
+            voiceListening={voiceListening}
+            voiceSearchError={voiceSearchError}
+            onVoiceSearch={toggleVoiceSearch}
             filter={filter}
             onFilterChange={setFilter}
             className="w-full"

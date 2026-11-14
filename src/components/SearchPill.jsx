@@ -28,6 +28,10 @@ export default function SearchPill({
   onChange,
   onSubmit,
   loading = false,
+  voiceSearchSupported = false,
+  voiceListening = false,
+  voiceSearchError = '',
+  onVoiceSearch,
   filter = 'all',
   onFilterChange,
   placeholder = 'Search',
@@ -124,12 +128,43 @@ export default function SearchPill({
         value={value}
         onChange={(e) => onChange?.(e.target.value)}
         placeholder={placeholder}
-        className="h-8 md:h-10 w-full rounded-3xl border-0 bg-black/50 pl-[85px] pr-10 text-sm
+        className={`h-8 md:h-10 w-full rounded-3xl border-0 bg-black/50 pl-[85px]
+                   ${voiceSearchSupported ? 'pr-20' : 'pr-10'} text-sm
                    capitalize !text-white caret-white placeholder:text-gray-500
                    placeholder:text-center focus:placeholder:opacity-0
                    outline-none shadow-none focus:outline-none focus:ring-0 focus-visible:ring-0
-                   transition-colors sm:w-64 md:w-72 lg:w-[450px]"
+                   transition-colors sm:w-64 md:w-72 lg:w-[450px]`}
       />
+
+      {voiceSearchSupported && (
+        <button
+          type="button"
+          onClick={onVoiceSearch}
+          aria-label={voiceListening ? 'Stop voice search' : 'Search by voice'}
+          aria-pressed={voiceListening}
+          title={voiceListening ? 'Listening… Click to stop' : 'Search by voice'}
+          className={`absolute inset-y-0 right-10 flex w-10 items-center justify-center rounded-full
+                      transition-colors ${
+                        voiceListening
+                          ? 'text-brand-light'
+                          : 'text-white/60 hover:text-white'
+                      }`}
+        >
+          <svg
+            viewBox="0 0 24 24"
+            className={`h-[18px] w-[18px] ${voiceListening ? 'animate-pulse' : ''}`}
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+          >
+            <rect x="9" y="2" width="6" height="12" rx="3" />
+            <path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3m-4 0h8" />
+          </svg>
+        </button>
+      )}
 
       {/* Loading spinner or search icon (submit) on the right */}
       {loading && (
@@ -150,6 +185,15 @@ export default function SearchPill({
           <line x1="21" y1="21" x2="16.65" y2="16.65" />
         </svg>
       </button>
+      {voiceSearchError && (
+        <span
+          role="status"
+          className="absolute left-2 top-full z-50 mt-1 rounded-lg border border-ink-border
+                     bg-ink px-3 py-1.5 text-xs text-foreground shadow-lg"
+        >
+          {voiceSearchError}
+        </span>
+      )}
     </form>
   );
 }

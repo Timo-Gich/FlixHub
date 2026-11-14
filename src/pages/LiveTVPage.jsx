@@ -2,9 +2,11 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import LiveChannelCard from '../components/LiveChannelCard';
+import VoiceSearchButton from '../components/VoiceSearchButton';
 import { DADDYLIVE_CHANNELS } from '../data/daddyliveChannels';
 import { fetchPlaylist, resetPlaylistCache } from '../services/liveTvService';
 import { useLibrary } from '../hooks/useLibrary.jsx';
+import useVoiceSearch from '../hooks/useVoiceSearch';
 
 const COUNTRY_KEY = 'flixhub.liveCountry';
 const COUNTRY_ALL = '__all__';
@@ -72,6 +74,12 @@ export default function LiveTVPage({ initialSource = readSource() }) {
   const [country, setCountry] = useState(readCountry);
   const [tab, setTab] = useState(readStoredTab);
   const [query, setQuery] = useState(readStoredQuery);
+  const {
+    supported: voiceSearchSupported,
+    listening: voiceListening,
+    error: voiceSearchError,
+    toggle: toggleVoiceSearch,
+  } = useVoiceSearch(setQuery);
   const { favoritesLive: favState } = useLibrary();
   const [page, setPage] = useState(1);
   const tabRailRef = useRef(null);
@@ -244,52 +252,18 @@ export default function LiveTVPage({ initialSource = readSource() }) {
       <Navbar />
 
       <main className="mx-auto w-full max-w-[1600px] px-4 pb-12 pt-24 sm:px-8">
-        <section className="relative isolate overflow-hidden rounded-3xl border border-white/10 bg-[#111116] px-6 py-8 shadow-2xl shadow-black/20 sm:px-10 sm:py-10 lg:px-14 lg:py-12">
+        <section className="relative isolate overflow-hidden rounded-3xl border border-white/10 bg-[#111116] px-6 py-6 shadow-2xl shadow-black/20 sm:px-10 sm:py-7 lg:px-14">
           <div className="pointer-events-none absolute -right-20 -top-32 -z-10 h-96 w-96 rounded-full bg-brand/20 blur-3xl" />
           <div className="pointer-events-none absolute bottom-[-10rem] right-1/4 -z-10 h-72 w-72 rounded-full bg-fuchsia-600/10 blur-3xl" />
-          <div className="grid items-center gap-8 md:grid-cols-[1.15fr_0.85fr] lg:gap-9">
-            <div className="max-w-2xl">
-              <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.06] px-3 py-1.5 text-[11px] font-bold uppercase tracking-[0.18em] text-white/80">
-                <span className="relative flex h-2 w-2">
-                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-brand opacity-60" />
-                  <span className="relative inline-flex h-2 w-2 rounded-full bg-brand" />
-                </span>
-                FlixHub Live
-              </span>
-              <h1 className="mt-5 max-w-xl text-4xl font-black leading-[1.05] tracking-tight text-white sm:text-5xl lg:text-6xl">
-                Live TV, <span className="text-brand-light">your way.</span>
-              </h1>
-              <p className="mt-4 max-w-lg text-sm leading-6 text-white/65 sm:text-base">
-                Find something worth watching. Explore channels, save your favorites, and jump straight into the action.
-              </p>
-            </div>
-
-            <div className="relative mx-auto flex min-h-48 w-full max-w-md items-center justify-center overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br from-white/[0.08] via-white/[0.03] to-brand/10 p-6 md:min-h-56">
-              <div className="absolute inset-0 opacity-50" aria-hidden="true">
-                <div className="absolute -right-8 -top-14 h-48 w-48 rounded-full border border-white/10" />
-                <div className="absolute -right-1 -top-7 h-36 w-36 rounded-full border border-white/10" />
-                <div className="absolute -right-1 -top-7 h-36 w-36 rounded-full bg-brand/10 blur-2xl" />
-              </div>
-              <div className="relative flex w-full items-center gap-5">
-                <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-brand text-white shadow-xl shadow-brand/25 sm:h-20 sm:w-20">
-                  <svg viewBox="0 0 24 24" className="h-8 w-8 sm:h-9 sm:w-9" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
-                    <rect x="2" y="6" width="20" height="15" rx="2" />
-                    <path d="m9 10 6 3.5-6 3.5zM7 2l5 4 5-4" />
-                  </svg>
-                </div>
-                <div className="min-w-0">
-                  <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/50">Your lineup</p>
-                  <p className="mt-1 truncate text-2xl font-black tracking-tight text-white sm:text-3xl">
-                    {channelCountLabel}
-                  </p>
-                  <p className="mt-1 text-sm text-white/55">A whole world of live TV.</p>
-                </div>
-              </div>
-              <span className="absolute right-4 top-4 inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-black/30 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-white/75">
-                <span className="h-1.5 w-1.5 rounded-full bg-brand" />
-                Live
-              </span>
-            </div>
+          <div className="pointer-events-none absolute right-8 top-1/2 -z-10 h-36 w-36 -translate-y-1/2 rounded-full border border-white/[0.08] sm:right-16 sm:h-48 sm:w-48" />
+          <div className="pointer-events-none absolute right-14 top-1/2 -z-10 h-24 w-24 -translate-y-1/2 rounded-full border border-white/[0.08] sm:right-24 sm:h-32 sm:w-32" />
+          <div className="relative">
+            <h1 className="whitespace-nowrap text-3xl font-black uppercase leading-none tracking-tight text-white sm:text-4xl md:text-5xl">
+              FLIXHUB <span className="text-brand-light">LIVE</span>
+            </h1>
+            <p className="mt-3 text-base font-semibold tracking-wide text-white/65 sm:text-lg">
+              Live TV, <span className="text-brand-light">your way.</span>
+            </p>
           </div>
         </section>
 
@@ -301,13 +275,30 @@ export default function LiveTVPage({ initialSource = readSource() }) {
                 <path d="m21 21-4.3-4.3" />
               </svg>
               <input
+                id="live-channel-search"
                 type="search"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Search channels…"
                 aria-label="Search channels"
-                className="h-12 w-full rounded-xl border border-white/10 bg-white/[0.045] pl-12 pr-4 text-sm text-white outline-none transition placeholder:text-white/35 focus:border-brand/60 focus:bg-white/[0.07] focus:ring-2 focus:ring-brand/20"
+                className={`h-12 w-full rounded-xl border border-white/10 bg-white/[0.045] pl-12 text-sm text-white outline-none transition placeholder:text-white/35 focus:border-brand/60 focus:bg-white/[0.07] focus:ring-2 focus:ring-brand/20 ${
+                  voiceSearchSupported ? 'pr-14' : 'pr-4'
+                }`}
               />
+              <VoiceSearchButton
+                supported={voiceSearchSupported}
+                listening={voiceListening}
+                onClick={toggleVoiceSearch}
+                className="absolute right-2 top-1/2 h-9 w-9 -translate-y-1/2 rounded-lg hover:bg-white/[0.08]"
+              />
+              {voiceSearchError && (
+                <span
+                  role="status"
+                  className="absolute left-2 top-full z-50 mt-1 rounded-lg border border-ink-border bg-ink px-3 py-1.5 text-xs text-foreground shadow-lg"
+                >
+                  {voiceSearchError}
+                </span>
+              )}
             </div>
 
             <div className="flex flex-wrap items-center gap-3">

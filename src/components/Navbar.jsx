@@ -6,6 +6,7 @@ import NotificationBell from './NotificationBell';
 import SearchPill from './SearchPill';
 import SearchResults from './SearchResults';
 import SearchSuggestions from './SearchSuggestions';
+import useVoiceSearch from '../hooks/useVoiceSearch';
 import { searchAllWithImdb } from '../services/searchService';
 import { cacheImdbItem } from '../services/imdbService';
 
@@ -124,13 +125,6 @@ export default function Navbar() {
   const [results, setResults] = useState([]);
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState(null);
-  const [voiceListening, setVoiceListening] = useState(false);
-  const [voiceSearchError, setVoiceSearchError] = useState('');
-  const recognitionRef = useRef(null);
-  const SpeechRecognition =
-    typeof window !== 'undefined' && (window.SpeechRecognition || window.webkitSpeechRecognition);
-  const voiceSearchSupported = Boolean(SpeechRecognition);
-
   // Debounced query-suggestion state.
   const [suggestions, setSuggestions] = useState([]);
   const [suggestionsLoading, setSuggestionsLoading] = useState(false);
@@ -165,12 +159,17 @@ export default function Navbar() {
   const navigate = useNavigate();
   const location = useLocation();
   const { pathname } = location;
+  const isLiveTvBrowsePage = pathname === '/live' || pathname === '/live/daddylive';
 
   // Routes that are self-contained players with their own contextual "Back"
   // button (in the player bar). The global arrow is hidden there so each
   // screen ends up with exactly one back affordance.
   const PLAYER_PREFIXES = ['/watch', '/live/'];
   const isPlayerPath = (p) => PLAYER_PREFIXES.some((seg) => p.startsWith(seg));
+
+  useEffect(() => {
+    if (isLiveTvBrowsePage) setMobileSearchOpen(false);
+  }, [isLiveTvBrowsePage]);
 
   // Keep an in-app stack of previously visited routes so "back" stays inside
   // the app (never exiting to an external referrer) and doesn't depend on the
@@ -248,6 +247,11 @@ export default function Navbar() {
         e.key === '/' || ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k');
       if (!isSearchShortcut || isTypingTarget(e.target)) return;
       e.preventDefault();
+      const liveSearch = document.getElementById('live-channel-search');
+      if (liveSearch && getComputedStyle(liveSearch).display !== 'none') {
+        liveSearch.focus();
+        return;
+      }
       const desktop = document.getElementById('desktop-search');
       // The desktop pill's wrapper is hidden below md, so only focus it when visible.
       const desktopVisible =
@@ -269,6 +273,12 @@ export default function Navbar() {
   // Debounced query suggestions — fires only after the user pauses typing.
   useEffect(() => {
     const term = query.trim();
+    if (isLiveTvBrowsePage) {
+      setSuggestionsActive(false);
+      setSuggestions([]);
+      setSuggestionsLoading(false);
+      return undefined;
+    }
     if (term.length < MIN_SUGGEST_CHARS) {
       setSuggestionsActive(false);
       setSuggestions([]);
@@ -289,7 +299,7 @@ export default function Navbar() {
       }
     }, DEBOUNCE_MS);
     return () => clearTimeout(timer);
-  }, [query]);
+  }, [query, isLiveTvBrowsePage]);
 
   const runSearch = async (termOverride) => {
     const term = (termOverride ?? query).trim();
@@ -310,59 +320,17 @@ export default function Navbar() {
     }
   };
 
-  const toggleVoiceSearch = () => {
-    if (voiceListening) {
-      recognitionRef.current?.stop();
-      return;
-    }
-
-    if (!SpeechRecognition) return;
-
-    const recognition = new SpeechRecognition();
-    recognition.lang = navigator.language || 'en-US';
-    recognition.interimResults = false;
-    recognition.maxAlternatives = 1;
-    recognition.onstart = () => {
-      setVoiceSearchError('');
-      setVoiceListening(true);
-    };
-    recognition.onresult = (event) => {
-      const transcript = Array.from(event.results)
-        .slice(event.resultIndex)
-        .filter((result) => result.isFinal)
-        .map((result) => result[0]?.transcript ?? '')
-        .join(' ')
-        .trim();
-      if (!transcript) return;
-      handleChange(transcript);
-      runSearch(transcript);
-      setMobileSearchOpen(false);
-    };
-    recognition.onerror = (event) => {
-      const messages = {
-        'not-allowed': 'Microphone access was denied. Check your browser permissions.',
-        'audio-capture': 'No microphone was found.',
-        'no-speech': 'No speech detected. Try again.',
-        network: 'Voice search could not connect. Check your connection.',
-      };
-      setVoiceSearchError(messages[event.error] || 'Voice search could not start. Try again.');
-      setVoiceListening(false);
-    };
-    recognition.onend = () => {
-      setVoiceListening(false);
-      if (recognitionRef.current === recognition) recognitionRef.current = null;
-    };
-    recognitionRef.current = recognition;
-    try {
-      recognition.start();
-    } catch (error) {
-      recognitionRef.current = null;
-      setVoiceListening(false);
-      setVoiceSearchError(error.message || 'Voice search could not start. Try again.');
-    }
+  const handleVoiceResult = (transcript) => {
+    handleChange(transcript);
+    runSearch(transcript);
+    setMobileSearchOpen(false);
   };
-
-  useEffect(() => () => recognitionRef.current?.stop(), []);
+  const {
+    supported: voiceSearchSupported,
+    listening: voiceListening,
+    error: voiceSearchError,
+    toggle: toggleVoiceSearch,
+  } = useVoiceSearch(handleVoiceResult);
 
   const closeResults = () => {
     setSubmittedQuery('');
@@ -419,38 +387,42 @@ return (
         </div>
 
         {/* Center: full search pill on md+, collapsed to an icon on small screens */}
-        <SearchPill
-          id="desktop-search"
-          value={query}
-          onChange={handleChange}
-          onSubmit={runSearch}
-          loading={searching}
-          voiceSearchSupported={voiceSearchSupported}
-          voiceListening={voiceListening}
-          voiceSearchError={voiceSearchError}
-          onVoiceSearch={toggleVoiceSearch}
-          filter={filter}
-          onFilterChange={setFilter}
-          className="hidden md:flex"
-        />
-        <button
-          type="button"
-          aria-label="Search"
-          aria-expanded={mobileSearchOpen}
-          aria-controls="mobile-search"
-          onClick={() => {
-            setMobileSearchOpen((open) => !open);
-            setMenuOpen(false);
-          }}
-          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted
-                     transition hover:text-white md:hidden"
-        >
-          <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor"
-               strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <circle cx="11" cy="11" r="7" />
-            <line x1="21" y1="21" x2="16.65" y2="16.65" />
-          </svg>
-        </button>
+        {!isLiveTvBrowsePage && (
+          <SearchPill
+            id="desktop-search"
+            value={query}
+            onChange={handleChange}
+            onSubmit={runSearch}
+            loading={searching}
+            voiceSearchSupported={voiceSearchSupported}
+            voiceListening={voiceListening}
+            voiceSearchError={voiceSearchError}
+            onVoiceSearch={toggleVoiceSearch}
+            filter={filter}
+            onFilterChange={setFilter}
+            className="hidden md:flex"
+          />
+        )}
+        {!isLiveTvBrowsePage && (
+          <button
+            type="button"
+            aria-label="Search"
+            aria-expanded={mobileSearchOpen}
+            aria-controls="mobile-search"
+            onClick={() => {
+              setMobileSearchOpen((open) => !open);
+              setMenuOpen(false);
+            }}
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted
+                       transition hover:text-white md:hidden"
+          >
+            <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor"
+                 strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <circle cx="11" cy="11" r="7" />
+              <line x1="21" y1="21" x2="16.65" y2="16.65" />
+            </svg>
+          </button>
+        )}
 
         {/* Right: compact icon group (no labels) */}
         <div className="relative flex shrink-0 items-center gap-2">
@@ -557,7 +529,7 @@ return (
       </nav>
 
       {/* Mobile search row — expands beneath the bar when the icon is tapped */}
-      {mobileSearchOpen && (
+      {mobileSearchOpen && !isLiveTvBrowsePage && (
         <div
           id="mobile-search"
           className="animate-[dropdown_0.2s_ease-out] border-t border-ink-border bg-ink/98 px-4 py-3
@@ -586,7 +558,7 @@ return (
       {/* Nav-hamburger menu is rendered inside the right icon group above. */}
 
       {/* Query suggestions panel — shown while typing (debounced) */}
-      {showSuggestions && (
+      {!isLiveTvBrowsePage && showSuggestions && (
         <SearchSuggestions
           query={query.trim()}
           suggestions={filteredSuggestions}
@@ -597,7 +569,7 @@ return (
       )}
 
       {/* Search results panel — shared across desktop and mobile */}
-      {showResults && (
+      {!isLiveTvBrowsePage && showResults && (
         <SearchResults
           query={submittedQuery}
           results={filteredResults}

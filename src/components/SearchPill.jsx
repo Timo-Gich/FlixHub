@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import VoiceSearchButton from './VoiceSearchButton';
 
 const FILTER_OPTIONS = [
   { key: 'all', label: 'Filter' },
@@ -136,35 +137,12 @@ export default function SearchPill({
                    transition-colors sm:w-64 md:w-72 lg:w-[450px]`}
       />
 
-      {voiceSearchSupported && (
-        <button
-          type="button"
-          onClick={onVoiceSearch}
-          aria-label={voiceListening ? 'Stop voice search' : 'Search by voice'}
-          aria-pressed={voiceListening}
-          title={voiceListening ? 'Listening… Click to stop' : 'Search by voice'}
-          className={`absolute inset-y-0 right-10 flex w-10 items-center justify-center rounded-full
-                      transition-colors ${
-                        voiceListening
-                          ? 'text-brand-light'
-                          : 'text-white/60 hover:text-white'
-                      }`}
-        >
-          <svg
-            viewBox="0 0 24 24"
-            className={`h-[18px] w-[18px] ${voiceListening ? 'animate-pulse' : ''}`}
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.8"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            aria-hidden="true"
-          >
-            <rect x="9" y="2" width="6" height="12" rx="3" />
-            <path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3m-4 0h8" />
-          </svg>
-        </button>
-      )}
+      <VoiceSearchButton
+        supported={voiceSearchSupported}
+        listening={voiceListening}
+        onClick={onVoiceSearch}
+        className="absolute inset-y-0 right-10 w-10 rounded-full"
+      />
 
       {/* Loading spinner or search icon (submit) on the right */}
       {loading && (

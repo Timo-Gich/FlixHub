@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test, { after, before } from 'node:test';
-import { EPG_FALLBACK_URL, PLAYLIST_URL } from '../src/parsers.js';
+import { PLAYLIST_URL } from '../src/parsers.js';
 import { app } from '../src/server.js';
 
 let server;
@@ -66,86 +66,11 @@ test('serves channels without exposing upstream stream URLs and proxies signed H
   assert.equal(invalidToken.status, 403);
 });
 
-test('fetches a country guide and falls back to the Lite guide', async () => {
-  const now = new Date();
-  const start = new Date(now.getTime() - 30 * 60 * 1000);
-  const stop = new Date(now.getTime() + 30 * 60 * 1000);
-  const xmlTime = (date) => `${date.getUTCFullYear()}${String(date.getUTCMonth() + 1).padStart(2, '0')}` +
-    `${String(date.getUTCDate()).padStart(2, '0')}${String(date.getUTCHours()).padStart(2, '0')}` +
-    `${String(date.getUTCMinutes()).padStart(2, '0')}00 +0000`;
-  const xml = `<tv><channel id="provider-guide"><display-name>Kenya News</display-name></channel>` +
-    `<programme channel="provider-guide" start="${xmlTime(start)}" stop="${xmlTime(stop)}">` +
-    '<title>Current programme</title></programme></tv>';
-  globalThis.fetch = async (input, options) => {
-    const url = String(input);
-    if (url.startsWith(origin)) return nativeFetch(input, options);
-    if (url === 'https://epg.pw/xmltv/epg_ZZ.xml') return new Response(null, { status: 404 });
-    if (url === EPG_FALLBACK_URL) return new Response(xml);
-    throw new Error(`Unexpected upstream request: ${url}`);
-  };
-
+test('does not expose the removed programme guide endpoint', async () => {
   const response = await nativeFetch(`${origin}/api/epg`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      country: 'ZZ',
-      channels: [{ tvgId: 'KenyaNews.ke@Provider', name: 'Kenya News' }],
-      from: now.getTime() - 60 * 60 * 1000,
-      to: now.getTime() + 60 * 60 * 1000,
-    }),
+    body: JSON.stringify({}),
   });
-  assert.equal(response.status, 200);
-  const payload = await response.json();
-  assert.equal(payload.programmes['KenyaNews.ke@Provider'][0].title, 'Current programme');
-});
-
-test('falls back to the Lite guide when a country feed has no matching channels', async () => {
-  const now = new Date();
-  const xmlTime = (date) => `${date.getUTCFullYear()}${String(date.getUTCMonth() + 1).padStart(2, '0')}` +
-    `${String(date.getUTCDate()).padStart(2, '0')}${String(date.getUTCHours()).padStart(2, '0')}` +
-    `${String(date.getUTCMinutes()).padStart(2, '0')}00 +0000`;
-  const start = new Date(now.getTime() - 30 * 60 * 1000);
-  const stop = new Date(now.getTime() + 30 * 60 * 1000);
-  const countryGuide = '<tv><channel id="unrelated"><display-name>Other channel</display-name></channel></tv>';
-  const liteGuide = `<tv><channel id="lite-provider"><display-name>Kenya News HD</display-name></channel>` +
-    `<programme channel="lite-provider" start="${xmlTime(start)}" stop="${xmlTime(stop)}">` +
-    '<title>Lite current programme</title></programme></tv>';
-  let liteRequested = false;
-  globalThis.fetch = async (input, options) => {
-    const url = String(input);
-    if (url.startsWith(origin)) return nativeFetch(input, options);
-    if (url === 'https://epg.pw/xmltv/epg_YY.xml') return new Response(countryGuide);
-    if (url === EPG_FALLBACK_URL) {
-      liteRequested = true;
-      return new Response(liteGuide);
-    }
-    throw new Error(`Unexpected upstream request: ${url}`);
-  };
-
-  const response = await nativeFetch(`${origin}/api/epg`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      country: 'YY',
-      channels: [{ tvgId: 'KenyaNews.ke@Provider', name: 'Kenya News' }],
-      from: now.getTime() - 60 * 60 * 1000,
-      to: now.getTime() + 60 * 60 * 1000,
-    }),
-  });
-  assert.equal(response.status, 200);
-  const payload = await response.json();
-  assert.equal(liteRequested, true);
-  assert.equal(payload.programmes['KenyaNews.ke@Provider'][0].title, 'Lite current programme');
-});
-
-test('validates guide requests before making upstream calls', async () => {
-  globalThis.fetch = async () => {
-    throw new Error('Invalid requests must not fetch upstream data');
-  };
-  const response = await nativeFetch(`${origin}/api/epg`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ country: 'invalid', channels: [], from: 0, to: 1 }),
-  });
-  assert.equal(response.status, 400);
+  assert.equal(response.status, 404);
 });

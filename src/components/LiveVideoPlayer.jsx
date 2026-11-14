@@ -47,7 +47,7 @@ export default function LiveVideoPlayer({
   const startupRetryTimerRef = useRef(null);
   const activeServer = servers.find((server) => server.id === activeServerId) || servers[0];
   const playerSrc = channel && activeServer
-    ? activeServer.urlBuilder(channel.id)
+    ? activeServer.urlBuilder(channel.id, channel)
     : '';
 
   useEffect(() => {

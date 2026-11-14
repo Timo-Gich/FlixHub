@@ -2,16 +2,10 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import LiveChannelCard from '../components/LiveChannelCard';
-import LiveHero from '../components/LiveHero';
-import LiveGuide from '../components/LiveGuide';
 import { DADDYLIVE_CHANNELS } from '../data/daddyliveChannels';
-import {
-  fetchPlaylist, resetPlaylistCache, EPG_REGIONS, DEFAULT_EPG_REGION, fetchEPGForRegions, getRegionForCountry,
-  matchProgrammes, pickFeaturedOnNow, sliceWindow,
-} from '../services/liveTvService';
+import { fetchPlaylist, resetPlaylistCache } from '../services/liveTvService';
 import { useLibrary } from '../hooks/useLibrary.jsx';
 
-const VIEW_KEY = 'flixhub.liveView';
 const COUNTRY_KEY = 'flixhub.liveCountry';
 const COUNTRY_ALL = '__all__';
 const SOURCE_KEY = 'flixhub.liveSource';
@@ -36,8 +30,6 @@ function readCountry() {
 
 function countryLabel(code) {
   const normalized = code.toUpperCase();
-  const region = EPG_REGIONS.find((item) => item.code === normalized);
-  if (region) return region.label;
   try {
     return new Intl.DisplayNames(['en'], { type: 'region' }).of(normalized) || normalized;
   } catch {
@@ -48,8 +40,6 @@ function countryLabel(code) {
 const TAB_ALL = '__all__';
 const TAB_FAVORITES = '__favorites__';
 const PAGE_SIZE = 48;
-const GUIDE_ROWS = 30;
-const GUIDE_HOURS = 4;
 
 // The active category/search are kept in sessionStorage so returning from a
 // channel player lands the user back on the same tab they were viewing.
@@ -73,34 +63,17 @@ function readStoredQuery() {
 }
 
 /**
- * /live — professional Live TV browser: On-Now hero, EPG guide + grid views,
- * favorites, search, and country-driven programme data.
+ * /live — Live TV channel browser with favorites, search, and filtering.
  */
 export default function LiveTVPage({ initialSource = readSource() }) {
   const [channels, setChannels] = useState(null); // null = loading
   const [error, setError] = useState(false);
   const [source, setSource] = useState(initialSource);
   const [country, setCountry] = useState(readCountry);
-  const [view, setView] = useState(() => {
-    try {
-      const v = localStorage.getItem(VIEW_KEY);
-      if (v === 'guide' || v === 'grid') return v;
-    } catch { /* ignore */ }
-    return typeof window !== 'undefined' && window.innerWidth < 768 ? 'grid' : 'guide';
-  });
   const [tab, setTab] = useState(readStoredTab);
   const [query, setQuery] = useState(readStoredQuery);
   const { favoritesLive: favState } = useLibrary();
   const [page, setPage] = useState(1);
-  const [guidePage, setGuidePage] = useState(1);
-  const [epgMaps, setEpgMaps] = useState({});
-  const [epgStatus, setEpgStatus] = useState('idle');
-  const [clock, setClock] = useState(Date.now());
-  const bounds = useMemo(() => {
-    const s = Math.floor(Date.now() / (30 * 60000)) * (30 * 60000) - 30 * 60000;
-    return { winStart: s, winEnd: s + GUIDE_HOURS * 3600000 };
-  }, []);
-  const epgReqRef = useRef(0);
   const tabRailRef = useRef(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(false);
@@ -164,17 +137,6 @@ export default function LiveTVPage({ initialSource = readSource() }) {
       /* ignore storage errors */
     }
   }, [source]);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(VIEW_KEY, view);
-    } catch { /* ignore */ }
-  }, [view]);
-
-  useEffect(() => {
-    const id = setInterval(() => setClock(Date.now()), 60000);
-    return () => clearInterval(id);
-  }, []);
 
   // Remember the active tab & search across the session so returning from a
   // channel player restores the view the user was on.
@@ -256,109 +218,7 @@ export default function LiveTVPage({ initialSource = readSource() }) {
   // Reset pagination whenever the grid's input set changes.
   useEffect(() => {
     setPage(1);
-    setGuidePage(1);
   }, [source, tab, query, favState, channels, country]);
-
-  const viewKey = `${tab}|${query}|${(channels || []).length}|${country}`;
-  // EPG is strictly progressive enhancement: it loads lazily AFTER the
-  // channel list renders and never blocks it. A guide feed can take longer
-  // than the initial page render, so keep its loading state until it finishes.
-  useEffect(() => {
-    if (source !== DEFAULT_SOURCE || !visible.length) {
-      setEpgMaps({});
-      setEpgStatus('idle');
-      return;
-    }
-    const myReq = epgReqRef.current + 1;
-    epgReqRef.current = myReq;
-    let cancelled = false;
-    let controller = null;
-    let requestTimeout = null;
-    setEpgMaps({});
-    setEpgStatus('idle');
-    // Defer so first paint (channels) always wins over guide data.
-    const timer = setTimeout(() => {
-      if (cancelled) return;
-      setEpgStatus((s) => (s === 'idle' ? 'loading' : s));
-      const counts = new Map();
-      visible.slice(0, 400).forEach((c) => {
-        if (!c.country) return;
-        const r = getRegionForCountry(c.country);
-        if (r) counts.set(r.code, (counts.get(r.code) || 0) + 1);
-      });
-      const guideCountry = country === COUNTRY_ALL
-        ? [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || DEFAULT_EPG_REGION
-        : getRegionForCountry(country)?.code || country;
-      controller = new AbortController();
-      requestTimeout = setTimeout(() => controller.abort(), 130000);
-      fetchEPGForRegions([guideCountry], {
-        channels: visible.slice(0, 400),
-        from: bounds.winStart,
-        to: bounds.winEnd,
-        signal: controller.signal,
-      }).then((maps) => {
-        if (cancelled || epgReqRef.current !== myReq) return;
-        setEpgMaps(maps || {});
-        const anyData = Object.values(maps || {}).some((m) => m && Object.keys(m).length);
-        setEpgStatus(anyData ? 'ready' : 'empty');
-      }).catch((error) => {
-        if (cancelled) return;
-        console.error('[live-tv] could not load guide:', error);
-        setEpgStatus('error');
-      }).finally(() => {
-        clearTimeout(requestTimeout);
-      });
-    }, 800);
-    return () => {
-      cancelled = true;
-      clearTimeout(timer);
-      clearTimeout(requestTimeout);
-      controller?.abort();
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [source, viewKey]);
-
-  const epgByChannel = useMemo(() => {
-    const map = new Map();
-    if (!visible.length || epgStatus === 'loading') return map;
-    const codes = Object.keys(epgMaps);
-    if (!codes.length) return map;
-    // Cap matching work: exact tvg-id lookups are cheap, but the
-    // normalized-name fallback scans all EPG keys per channel — 120 max.
-    visible.slice(0, 120).forEach((ch) => {
-      for (const code of codes) {
-        const m = epgMaps[code];
-        if (!m || !Object.keys(m).length) continue;
-        const res = matchProgrammes(m, ch.tvgId, ch.name, clock);
-        if (res.found && (res.now || res.next)) { map.set(ch.id, res); break; }
-      }
-    });
-    return map;
-  }, [visible, epgMaps, epgStatus, clock]);
-
-  const featured = useMemo(() => pickFeaturedOnNow(visible, epgByChannel, 5), [visible, epgByChannel]);
-
-  const guideRows = useMemo(() => {
-    const withEpg = [];
-    const without = [];
-    visible.forEach((ch) => {
-      const info = epgByChannel.get(ch.id);
-      if (info?.now || info?.next) withEpg.push(ch);
-      else without.push(ch);
-    });
-    return [...withEpg, ...without].slice(0, guidePage * GUIDE_ROWS).map((ch) => {
-      let entries = [];
-      for (const code of Object.keys(epgMaps)) {
-        const m = epgMaps[code];
-        if (!m) continue;
-        const base = String(ch.tvgId || '').split('@')[0];
-        if (m[ch.tvgId]?.length) { entries = m[ch.tvgId]; break; }
-        if (base && m[base]?.length) { entries = m[base]; break; }
-      }
-      return { channel: ch, progs: sliceWindow(entries, bounds.winStart, bounds.winEnd) };
-    });
-  }, [visible, epgByChannel, epgMaps, guidePage, bounds]);
-  const guideHasMore = guidePage * GUIDE_ROWS < visible.length;
 
   const shownCount = Math.min(page * PAGE_SIZE, visible.length);
   const paged = visible.slice(0, shownCount);
@@ -398,7 +258,7 @@ return (
               </span>
             </div>
             <p className="mt-1 text-sm text-muted">
-              What&rsquo;s on now — browse the guide or jump straight in.
+              Browse live channels and start watching.
             </p>
           </div>
 
@@ -423,15 +283,6 @@ return (
             </div>
             {source === DEFAULT_SOURCE && (
               <>
-                <div className="flex rounded-md border border-ink-border bg-ink-raised p-0.5" role="tablist" aria-label="Layout">
-                  {['guide', 'grid'].map((v) => (
-                    <button key={v} type="button" role="tab" aria-selected={view === v}
-                      onClick={() => setView(v)}
-                      className={`rounded px-3 py-1.5 text-sm font-semibold capitalize transition ${view === v ? 'bg-brand text-white' : 'text-muted hover:text-white'}`}>
-                      {v}
-                    </button>
-                  ))}
-                </div>
                 <label className="flex items-center gap-2 text-sm text-muted">
                   <span className="hidden sm:inline">Country</span>
                   <select
@@ -453,12 +304,6 @@ return (
           </div>
         </div>
 
-        {source === DEFAULT_SOURCE && !loading && !error && featured.length > 0 && (
-          <div className="mt-5">
-            <LiveHero items={featured} clock={clock} />
-          </div>
-        )}
-
         {/* Search */}
         <div className="relative mt-5 max-w-md">
           <svg viewBox="0 0 24 24" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted"
@@ -470,7 +315,7 @@ return (
             type="search"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search channels or shows…"
+            placeholder="Search channels…"
             aria-label="Search channels"
             className="w-full rounded-md border border-ink-border bg-ink-raised py-2.5 pl-9 pr-3 text-sm text-foreground placeholder:text-muted outline-none focus:border-brand/50 focus:ring-2 focus:ring-brand/40"
           />
@@ -570,29 +415,15 @@ return (
             </div>
           )}
 
-          {source === DEFAULT_SOURCE && !loading && !error && !emptyVisible && view === 'guide' && (
-            <>
-              <LiveGuide rows={guideRows} winStart={bounds.winStart} winEnd={bounds.winEnd} clock={clock} epgStatus={epgStatus} />
-              {guideHasMore && (
-                <div className="mt-6 flex justify-center">
-                  <button type="button" onClick={() => setGuidePage((p) => p + 1)}
-                    className="rounded-md border border-ink-border bg-ink-raised px-6 py-2.5 text-sm font-semibold text-white transition hover:border-brand hover:bg-brand">
-                    Show more channels
-                  </button>
-                </div>
-              )}
-            </>
-          )}
-
-          {source === DEFAULT_SOURCE && !loading && !error && !emptyVisible && view === 'grid' && (
+          {source === DEFAULT_SOURCE && !loading && !error && !emptyVisible && (
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
               {paged.map((ch) => (
-                <LiveChannelCard key={ch.id} channel={ch} epg={epgByChannel.get(ch.id) || null} clock={clock} />
+                <LiveChannelCard key={ch.id} channel={ch} />
               ))}
             </div>
           )}
 
-          {source === DEFAULT_SOURCE && view === 'grid' && !loading && !error && hasMore && (
+          {source === DEFAULT_SOURCE && !loading && !error && hasMore && (
             <div className="mt-8 flex justify-center">
               <button
                 type="button"

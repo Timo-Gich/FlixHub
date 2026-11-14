@@ -37,7 +37,7 @@ A Netflix-inspired streaming web application for discovering, browsing, and watc
 - **Content Discovery** - Browse trending, popular, now-playing, top-rated, and upcoming movies; trending and popular TV shows. Powered by the TMDb API.
 - **Unified Search** - Search across movies and TV shows with TMDb. Falls back to IMDb suggestions when TMDb returns no results or encounters an error.
 - **Watch Player** - Stream movies and TV episodes through six embed provider servers (VidSrc, VidCore, 2Embed, VidFast, VidRock, PrimeSrc) with a server selector.
-- **Live TV** - Browse channels and EPG from a separately deployed backend that caches and parses the iptv-org playlist/XMLTV guides and proxies HLS manifests and segments.
+- **Live TV** - Browse, search, and play channels from a separately deployed backend that caches the iptv-org playlist and proxies HLS manifests and segments.
 - **Continue Watching** - Automatically tracks watch progress and surfaces unfinished titles at the top of the home page.
 - **Watchlist & History** - Save titles into named watchlist collections, filter the watchlist by folder, and keep a chronological watch history (up to 200 entries).
 - **Optional Accounts** - Sign in with Google OAuth or email magic link via Supabase. Guest mode works out of the box using localStorage. Library data syncs to the cloud on sign-in and merges with local data.
@@ -64,7 +64,7 @@ A Netflix-inspired streaming web application for discovering, browsing, and watc
 | Analytics | [@vercel/analytics](https://vercel.com/docs/concepts/monitoring/analytics) |
 | Content data | [TMDb API](https://developer.themoviedb.org/) (v3) |
 | IMDb fallback | [IMDb public suggestion endpoint](https://v3.sg.media-imdb.com/) |
-| Live TV sources | [iptv-org](https://github.com/iptv-org/iptv) playlist + XMLTV EPG |
+| Live TV source | [iptv-org](https://github.com/iptv-org/iptv) playlist |
 | Live TV backend | [Render](https://render.com/) |
 | Deployment | [Vercel](https://vercel.com/) (frontend) |
 
@@ -76,8 +76,8 @@ A Netflix-inspired streaming web application for discovering, browsing, and watc
 flixhub/
   live-tv-backend/           # Separate Render service for Live TV
     src/
-      parsers.js             # Server-side M3U/XMLTV parsing
-      server.js              # Cached channel/EPG API + signed HLS proxy
+      parsers.js             # Server-side M3U parsing
+      server.js              # Cached channel API + signed HLS proxy
     test/
       parsers.test.js
   api/                      # Vercel serverless functions
@@ -249,8 +249,10 @@ resource URLs.
 
 Set `LIVE_TV_API_URL` in the Vercel project to the Render service URL
 (for example `https://flixhub-live-tv.onrender.com`) and redeploy the frontend.
-For local development, start `npm --prefix live-tv-backend start` on port 3001
-and run `npm run dev`; Vite proxies Live TV API requests to the local backend.
+For local development, set `LIVE_TV_API_URL` in `.env` to the Render service URL
+and run `npm run dev`; Vite proxies requests through the dev server to avoid
+browser CORS restrictions. If the variable is unset, start
+`npm --prefix live-tv-backend start` on port 3001 and Vite proxies to the local backend.
 
 ### Vercel (recommended)
 
@@ -344,11 +346,10 @@ The notification pipeline has three moving parts:
 
 ### Live TV
 
-The Render service downloads and parses the iptv-org M3U playlist and XMLTV guides,
-then caches the results. The frontend receives channel metadata and only the
-requested programmes for the visible channels/time range. HLS manifests and
-segments are streamed through signed backend URLs, with upstream retries and
-range forwarding handled by the service rather than direct browser requests.
+The Render service downloads and parses the iptv-org M3U playlist, then caches
+channel metadata. The frontend browses that channel list, while HLS manifests
+and segments are streamed through signed backend URLs with upstream retries
+and range forwarding handled by the service rather than direct browser requests.
 
 ### Embed servers
 

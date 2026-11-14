@@ -7,19 +7,12 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import express from 'express';
 import {
-  EPG_BASE_URL,
-  EPG_FALLBACK_URL,
   PLAYLIST_URL,
-  indexXmltvStream,
-  matchXmltv,
   parsePlaylistStream,
 } from './parsers.js';
 
 const PORT = Number(process.env.PORT) || 3001;
 const PLAYLIST_TTL_MS = 15 * 60 * 1000;
-const EPG_TTL_MS = 3 * 60 * 60 * 1000;
-const EPG_WINDOW_BEHIND_MS = 4 * 60 * 60 * 1000;
-const EPG_WINDOW_AHEAD_MS = 24 * 60 * 60 * 1000;
 const MAX_PLAYLIST_BYTES = 80 * 1024 * 1024;
 const STREAM_SECRET = process.env.STREAM_SIGNING_SECRET || crypto.randomBytes(32).toString('hex');
 const dnsCache = new Map();
@@ -30,8 +23,6 @@ const FRONTEND_ORIGINS = (process.env.FRONTEND_ORIGINS || '*')
 
 let playlistCache = null;
 let playlistPending = null;
-let epgCache = null;
-let epgPending = null;
 
 const app = express();
 app.set('trust proxy', 1);
@@ -41,14 +32,12 @@ app.use((req, res, next) => {
     res.setHeader('Access-Control-Allow-Origin', FRONTEND_ORIGINS.includes('*') ? '*' : origin);
   }
   res.setHeader('Vary', 'Origin');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, HEAD, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Range');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Range');
   res.setHeader('Access-Control-Expose-Headers', 'Content-Length, Content-Range, Accept-Ranges');
   if (req.method === 'OPTIONS') return res.status(204).end();
   next();
 });
-app.use(express.json({ limit: '256kb' }));
-
 app.get('/health', (_req, res) => res.json({ status: 'ok' }));
 
 async function getPlaylist() {
@@ -96,123 +85,6 @@ app.get('/api/channels', async (_req, res) => {
   } catch (error) {
     console.error('[live-tv] playlist request failed:', error);
     res.status(502).json({ error: 'Live channel playlist is temporarily unavailable' });
-  }
-});
-
-async function getRemoteEpg(code, requestedChannels) {
-  const now = Date.now();
-  const requestKey = crypto.createHash('sha1')
-    .update(JSON.stringify(requestedChannels.map(({ tvgId, name }) => [tvgId, name])))
-    .digest('hex');
-  let cached = epgCache?.code === code ? epgCache : null;
-  let cachedIsCurrent = cached && cached.expiresAt > now &&
-    cached.fromMs <= now - EPG_WINDOW_BEHIND_MS &&
-    cached.toMs >= now + EPG_WINDOW_AHEAD_MS;
-  const cachedHasMatches = cachedIsCurrent &&
-    Object.keys(matchXmltv(cached.index, requestedChannels, now - EPG_WINDOW_BEHIND_MS,
-      now + EPG_WINDOW_AHEAD_MS)).length > 0;
-  if (cachedIsCurrent && (cachedHasMatches ||
-      (cached.source === 'lite' && cached.requestKey === requestKey) ||
-      cached.fallbackCheckedFor === requestKey)) return cached;
-  if (epgPending) {
-    if (epgPending.code === code) return epgPending.promise;
-    await epgPending.promise.catch(() => {});
-    return getRemoteEpg(code, requestedChannels);
-  }
-
-  const fromMs = now - EPG_WINDOW_BEHIND_MS;
-  const toMs = now + EPG_WINDOW_AHEAD_MS;
-  const promise = (async () => {
-    try {
-      let source = 'country';
-      let index = cachedIsCurrent ? cached.index : null;
-      let fallbackChecked = cached?.fallbackCheckedFor === requestKey;
-      if (!index) {
-        let response = await fetch(`${EPG_BASE_URL}/epg_${code}.xml`, {
-          signal: AbortSignal.timeout(60000),
-        });
-        if (!response.ok) {
-          await response.body?.cancel();
-          response = await fetch(EPG_FALLBACK_URL, { signal: AbortSignal.timeout(60000) });
-          source = 'lite';
-        }
-        if (!response.ok) throw new Error(`XMLTV upstream returned ${response.status}`);
-        index = await indexXmltvStream(response.body, fromMs, toMs);
-      }
-      if (source === 'country' &&
-          !fallbackChecked &&
-          !Object.keys(matchXmltv(index, requestedChannels, fromMs, toMs)).length) {
-        fallbackChecked = true;
-        if (cachedIsCurrent) {
-          epgCache = null;
-          cached = null;
-          cachedIsCurrent = false;
-        }
-        index = null;
-        let fallbackResponse = await fetch(EPG_FALLBACK_URL, {
-          signal: AbortSignal.timeout(60000),
-        });
-        if (!fallbackResponse.ok) {
-          await fallbackResponse.body?.cancel();
-          throw new Error(`Lite XMLTV upstream returned ${fallbackResponse.status}`);
-        }
-        index = await indexXmltvStream(fallbackResponse.body, fromMs, toMs);
-        source = 'lite';
-      }
-      if (index.truncated) {
-        console.warn(`[live-tv] ${code} EPG exceeded the index limit; some entries were omitted`);
-      }
-      epgCache = {
-        code,
-        source,
-        index,
-        requestKey: source === 'lite' ? requestKey : null,
-        fallbackCheckedFor: fallbackChecked ? requestKey : null,
-        fromMs,
-        toMs,
-        expiresAt: Date.now() + EPG_TTL_MS,
-      };
-      return epgCache;
-    } catch (error) {
-      if (cachedIsCurrent) {
-        console.warn(`[live-tv] serving stale ${code} EPG after refresh failure:`, error.message);
-        return cached;
-      }
-      throw error;
-    } finally {
-      if (epgPending?.promise === promise) epgPending = null;
-    }
-  })();
-  epgPending = { code, promise };
-  return promise;
-}
-
-app.post('/api/epg', async (req, res) => {
-  const code = String(req.body?.country || '').toUpperCase();
-  const channels = req.body?.channels;
-  const fromMs = Number(req.body?.from);
-  const toMs = Number(req.body?.to);
-  if (!/^[A-Z]{2}$/.test(code)) return res.status(400).json({ error: 'country must be an ISO-2 code' });
-  if (!Array.isArray(channels) || channels.length < 1 || channels.length > 500) {
-    return res.status(400).json({ error: 'channels must contain 1 to 500 channel entries' });
-  }
-  if (!Number.isFinite(fromMs) || !Number.isFinite(toMs) || toMs <= fromMs ||
-      toMs - fromMs > 24 * 60 * 60 * 1000) {
-    return res.status(400).json({ error: 'EPG time range must be at most 24 hours' });
-  }
-  const requested = channels.filter((channel) =>
-    channel && typeof channel.tvgId === 'string' && channel.tvgId.length <= 256 &&
-    typeof channel.name === 'string' && channel.name.length <= 256,
-  );
-  if (requested.length !== channels.length) return res.status(400).json({ error: 'invalid channel entries' });
-
-  try {
-    const guide = await getRemoteEpg(code, requested);
-    res.setHeader('Cache-Control', 'public, max-age=300, stale-while-revalidate=1800');
-    res.json({ country: code, programmes: matchXmltv(guide.index, requested, fromMs, toMs) });
-  } catch (error) {
-    console.error(`[live-tv] ${code} EPG request failed:`, error);
-    res.status(502).json({ error: 'Programme guide is temporarily unavailable' });
   }
 });
 

@@ -68,6 +68,9 @@ function vercelApiPlugin(apiEnv) {
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
+  const liveTvApiUrl = (process.env.LIVE_TV_API_URL || env.LIVE_TV_API_URL || '')
+    .trim()
+    .replace(/\/+$/, '');
   const apiEnv = Object.fromEntries(
     [
       'SUPABASE_URL',
@@ -84,7 +87,7 @@ export default defineConfig(({ mode }) => {
     plugins: [react(), tailwindcss(), vercelApiPlugin(apiEnv)],
     define: {
       'import.meta.env.LIVE_TV_API_URL': JSON.stringify(
-        process.env.LIVE_TV_API_URL || env.LIVE_TV_API_URL || '',
+        mode === 'development' ? '' : liveTvApiUrl,
       ),
     },
     envPrefix: ['VITE_', 'TMDB_', 'SUPABASE_URL', 'SUPABASE_ANON_KEY'],
@@ -92,7 +95,7 @@ export default defineConfig(({ mode }) => {
       allowedHosts: ['undocked-casually-cloud.ngrok-free.dev'],
       proxy: {
         '/live-tv-api': {
-          target: 'http://localhost:3001',
+          target: liveTvApiUrl || 'http://localhost:3001',
           changeOrigin: true,
           rewrite: (requestPath) => requestPath.replace(/^\/live-tv-api/, ''),
         },

@@ -1,3 +1,5 @@
+import { buildStreamUrl } from './liveTvService';
+
 ﻿const DADDY_BASE_URL = 'https://thedaddy.li';
 
 
@@ -46,11 +48,12 @@ export const LIVE_SERVERS = [
   },
   {
     id: 'iptv',
-    label: 'Server 7 (IPTV)',
+    label: 'IPTV',
     provider: 'IPTV (HLS)',
     type: 'hls',
-    urlBuilder: (id) => `https://iptv.example.com/stream/${id}.m3u8`,
+    urlBuilder: (_id, channel) => buildStreamUrl(channel),
   },
 ];
 
 export const DADDYLIVE_SERVERS = LIVE_SERVERS.filter((server) => server.provider === 'DaddyLive');
+export const IPTV_SERVERS = LIVE_SERVERS.filter((server) => server.id === 'iptv');

@@ -1,13 +1,11 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useLibrary } from '../hooks/useLibrary.jsx';
-import { programmeProgress, formatRange } from '../services/liveTvService';
 
 /**
- * Live channel tile v2 (16:9): logo header + Now/Next with progress.
- * `epg` = { now, next } | undefined — when absent shows category/country.
+ * Live channel tile with channel details and favorite controls.
  */
-export default function LiveChannelCard({ channel, epg = null, clock = Date.now(), to: channelTo }) {
+export default function LiveChannelCard({ channel, to: channelTo }) {
   const [imgFailed, setImgFailed] = useState(!channel?.logo);
   const [hover, setHover] = useState(false);
   const { isFavLive, toggleFav } = useLibrary();
@@ -24,7 +22,6 @@ export default function LiveChannelCard({ channel, epg = null, clock = Date.now(
   if (!channel) return null;
 
   const to = channelTo || `/live/${encodeURIComponent(channel.id)}`;
-  const pct = epg?.now ? programmeProgress(epg.now, clock) : null;
 
   const handleFav = (e) => {
     e.preventDefault();
@@ -92,32 +89,12 @@ export default function LiveChannelCard({ channel, epg = null, clock = Date.now(
         </span>
       </div>
 
-      {/* Now / Next body */}
+      {/* Channel details */}
       <div className="p-3">
         <p className="truncate text-sm font-bold text-white">{channel.name}</p>
-        {epg?.now ? (
-          <>
-            <p className="mt-1 truncate text-xs font-semibold text-brand-light">{epg.now.title}</p>
-            <p className="mt-0.5 text-[11px] text-muted">{formatRange(epg.now.startMs, epg.now.stopMs)}</p>
-            {pct != null && (
-              <span className="mt-2 block h-1 overflow-hidden rounded-full bg-white/10">
-                <span className="block h-full rounded-full bg-brand" style={{ width: `${Math.round(pct * 100)}%` }} />
-              </span>
-            )}
-            {epg.next && (
-              <p className="mt-1.5 truncate text-[11px] text-muted">Next: <span className="text-white/80">{epg.next.title}</span></p>
-            )}
-          </>
-        ) : (
-          <p className="mt-1 flex items-center gap-1.5 text-[11px] text-muted">
-            {channel.category && (
-              <span className="rounded bg-brand/15 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-brand-light">
-                {channel.category}
-              </span>
-            )}
-            {channel.country ? channel.country.toUpperCase() : 'Guide unavailable'}
-          </p>
-        )}
+        <p className="mt-1 truncate text-[11px] text-muted">
+          {[channel.category, channel.country?.toUpperCase()].filter(Boolean).join(' · ') || 'Live channel'}
+        </p>
       </div>
     </Link>
   );

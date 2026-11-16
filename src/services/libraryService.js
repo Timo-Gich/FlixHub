@@ -371,8 +371,8 @@ export function isFavLive(id) {
 
 /**
  * Add or remove a live channel from favorites. Stores a minimal snapshot of the
- * channel (id, name, logo, category, country, streamUrl, tvgId) so a card can be
- * rendered from favorites alone. Returns the new "saved" state.
+ * channel so a card can be rendered from favorites alone and reopened with its
+ * original player source.
  */
 export function toggleFavLive(channel) {
   if (!channel?.id) return false;
@@ -385,6 +385,7 @@ export function toggleFavLive(channel) {
     country: channel.country,
     streamUrl: channel.streamUrl,
     tvgId: channel.tvgId,
+    source: channel.source,
     userAgent: channel.userAgent || '',
   };
   const items = getFavoritesLive();

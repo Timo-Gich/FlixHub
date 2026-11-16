@@ -165,7 +165,8 @@ export default function Navbar() {
   // button (in the player bar). The global arrow is hidden there so each
   // screen ends up with exactly one back affordance.
   const PLAYER_PREFIXES = ['/watch', '/live/'];
-  const isPlayerPath = (p) => PLAYER_PREFIXES.some((seg) => p.startsWith(seg));
+  const isPlayerPath = (p) =>
+    !isLiveTvBrowsePage && PLAYER_PREFIXES.some((seg) => p.startsWith(seg));
 
   useEffect(() => {
     if (isLiveTvBrowsePage) setMobileSearchOpen(false);
@@ -383,7 +384,7 @@ return (
               </svg>
             </button>
           )}
-          <Logo />
+          {!isLiveTvBrowsePage && <Logo />}
         </div>
 
         {/* Center: full search pill on md+, collapsed to an icon on small screens */}

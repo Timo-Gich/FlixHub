@@ -20,7 +20,11 @@ export default function LiveChannelCard({ channel, to: channelTo }) {
 
   if (!channel) return null;
 
-  const to = channelTo || `/live/${encodeURIComponent(channel.id)}`;
+  const to = channelTo || (
+    channel.source === 'daddylive'
+      ? `/live/daddylive/${encodeURIComponent(channel.id)}`
+      : `/live/${encodeURIComponent(channel.id)}`
+  );
 
   const handleFav = (e) => {
     e.preventDefault();

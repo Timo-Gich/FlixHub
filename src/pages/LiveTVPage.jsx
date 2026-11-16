@@ -13,6 +13,13 @@ const COUNTRY_ALL = '__all__';
 const SOURCE_KEY = 'flixhub.liveSource';
 const DEFAULT_SOURCE = 'default';
 const DADDYLIVE_SOURCE = 'daddylive';
+const DADDYLIVE_CHANNELS_WITH_SOURCE = DADDYLIVE_CHANNELS.map((channel) => ({
+  ...channel,
+  source: DADDYLIVE_SOURCE,
+}));
+const DADDYLIVE_CHANNELS_BY_ID = new Map(
+  DADDYLIVE_CHANNELS_WITH_SOURCE.map((channel) => [String(channel.id), channel]),
+);
 
 function readSource() {
   try {
@@ -191,8 +198,15 @@ export default function LiveTVPage({ initialSource = readSource() }) {
     if (!valid) setTab(TAB_ALL);
   }, [source, loading, tab, categories]);
 
-  const favorites = useMemo(() => favState.map((e) => e.channel), [favState]);
-  const altLiveChannels = DADDYLIVE_CHANNELS;
+  const favorites = useMemo(() => favState.map((entry) => {
+    const channel = entry.channel;
+    if (channel?.source === DADDYLIVE_SOURCE) return channel;
+    const knownDaddyLiveChannel = DADDYLIVE_CHANNELS_BY_ID.get(String(channel?.id));
+    return knownDaddyLiveChannel?.name === channel?.name
+      ? { ...channel, source: DADDYLIVE_SOURCE }
+      : channel;
+  }), [favState]);
+  const altLiveChannels = DADDYLIVE_CHANNELS_WITH_SOURCE;
 
   // Apply tab + search filtering client-side.
   const visible = useMemo(() => {
@@ -252,18 +266,15 @@ export default function LiveTVPage({ initialSource = readSource() }) {
       <Navbar />
 
       <main className="mx-auto w-full max-w-[1600px] px-4 pb-12 pt-24 sm:px-8">
-        <section className="relative isolate overflow-hidden rounded-3xl border border-white/10 bg-[#111116] px-6 py-6 shadow-2xl shadow-black/20 sm:px-10 sm:py-7 lg:px-14">
+        <section className="relative isolate overflow-hidden rounded-3xl border border-white/10 bg-[#111116] px-6 py-10 shadow-2xl shadow-black/20 sm:px-10 lg:px-14">
           <div className="pointer-events-none absolute -right-20 -top-32 -z-10 h-96 w-96 rounded-full bg-brand/20 blur-3xl" />
           <div className="pointer-events-none absolute bottom-[-10rem] right-1/4 -z-10 h-72 w-72 rounded-full bg-fuchsia-600/10 blur-3xl" />
           <div className="pointer-events-none absolute right-8 top-1/2 -z-10 h-36 w-36 -translate-y-1/2 rounded-full border border-white/[0.08] sm:right-16 sm:h-48 sm:w-48" />
           <div className="pointer-events-none absolute right-14 top-1/2 -z-10 h-24 w-24 -translate-y-1/2 rounded-full border border-white/[0.08] sm:right-24 sm:h-32 sm:w-32" />
           <div className="relative">
-            <h1 className="whitespace-nowrap text-3xl font-black uppercase leading-none tracking-tight text-white sm:text-4xl md:text-5xl">
-              FLIXHUB <span className="text-brand-light">LIVE</span>
-            </h1>
-            <p className="mt-3 text-base font-semibold tracking-wide text-white/65 sm:text-lg">
+            <h1 className="text-3xl font-black leading-none tracking-tight text-white sm:text-4xl md:text-5xl">
               Live TV, <span className="text-brand-light">your way.</span>
-            </p>
+            </h1>
           </div>
         </section>
 

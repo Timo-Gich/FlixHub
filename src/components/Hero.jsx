@@ -244,8 +244,7 @@ export default function Hero() {
                                px-4 pb-8 sm:px-8 sm:pb-12">
                 <span
                   aria-label={`Top 10, number ${slideIndex + 1} trending today`}
-                  className="inline-flex w-fit items-center gap-2 rounded-sm px-1.5 py-1
-                             text-white shadow-sm"
+                  className="inline-flex w-fit items-center gap-2 text-white"
                 >
                   <span
                     aria-hidden="true"

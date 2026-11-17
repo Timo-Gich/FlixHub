@@ -12,7 +12,7 @@ import SectionHeading from './SectionHeading';
  */
 export default function RecommendationsRow({ title = 'More Like This', items = [], grid = false }) {
   const filteredItems = (items ?? []).filter((item) => item.id != null);
-  const list = grid ? filteredItems : filteredItems.slice(0, 20);
+  const list = filteredItems.slice(0, grid ? 15 : 20);
   if (list.length === 0) return null;
 
   return (

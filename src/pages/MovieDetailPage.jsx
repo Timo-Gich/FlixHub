@@ -80,7 +80,7 @@ export default function MovieDetailPage() {
             />
 
             <CastRow people={movie.credits?.cast} />
-            <RecommendationsRow title="Similar Movies" items={movie.recommendations?.results} />
+            <RecommendationsRow title="Similar Movies" items={movie.recommendations?.results} grid />
           </>
         )}
       </main>

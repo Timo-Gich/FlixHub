@@ -13,9 +13,21 @@ export default function HorizontalScrollRail({ label, contentLength, className, 
   }, []);
 
   useEffect(() => {
+    const rail = railRef.current;
+    if (!rail) return undefined;
+
     updateScrollArrows();
+    const observer = typeof ResizeObserver === 'undefined'
+      ? null
+      : new ResizeObserver(updateScrollArrows);
+    observer?.observe(rail);
+    Array.from(rail.children).forEach((child) => observer?.observe(child));
+
     window.addEventListener('resize', updateScrollArrows);
-    return () => window.removeEventListener('resize', updateScrollArrows);
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener('resize', updateScrollArrows);
+    };
   }, [contentLength, updateScrollArrows]);
 
   const scrollRail = (direction) => {

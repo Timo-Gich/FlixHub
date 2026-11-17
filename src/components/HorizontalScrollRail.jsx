@@ -25,7 +25,7 @@ export default function HorizontalScrollRail({ label, contentLength, className, 
   };
 
   return (
-    <div className="group relative">
+    <div className="group/rail relative">
       <div
         ref={railRef}
         onScroll={updateScrollArrows}
@@ -42,7 +42,7 @@ export default function HorizontalScrollRail({ label, contentLength, className, 
           title="Scroll left"
           className="pointer-events-none absolute left-0 top-1/2 z-[60] hidden h-10 w-10 -translate-y-1/2 items-center justify-center
                      rounded-full border border-ink-border bg-ink-raised/90 text-white opacity-0 shadow transition
-                     group-hover:pointer-events-auto group-hover:opacity-100 focus-visible:pointer-events-auto
+                     group-hover/rail:pointer-events-auto group-hover/rail:opacity-100 focus-visible:pointer-events-auto
                      focus-visible:opacity-100 hover:bg-brand md:flex"
         >
           <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor"
@@ -60,7 +60,7 @@ export default function HorizontalScrollRail({ label, contentLength, className, 
           title="Scroll right"
           className="pointer-events-none absolute right-0 top-1/2 z-[60] hidden h-10 w-10 -translate-y-1/2 items-center justify-center
                      rounded-full border border-ink-border bg-ink-raised/90 text-white opacity-0 shadow transition
-                     group-hover:pointer-events-auto group-hover:opacity-100 focus-visible:pointer-events-auto
+                     group-hover/rail:pointer-events-auto group-hover/rail:opacity-100 focus-visible:pointer-events-auto
                      focus-visible:opacity-100 hover:bg-brand md:flex"
         >
           <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor"

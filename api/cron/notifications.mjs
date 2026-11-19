@@ -1,4 +1,4 @@
-import { timingSafeEqual } from 'node:crypto';
+import { Receiver } from '@upstash/qstash';
 import { getAdminClient, configureVapid, sendPushToUser } from '../_lib/push.mjs';
 
 const TMDB_BASE_URL = 'https://api.themoviedb.org/3';
@@ -14,15 +14,15 @@ function json(res, status, body) {
   return res.status(status).json(body);
 }
 
-function isAuthorized(req) {
-  const expected = process.env.CRON_SECRET || process.env.SECRET;
-  if (!expected) return null;
-  const match = (req.headers.authorization || '').match(/^Bearer\s+(.+)$/i);
-  if (!match) return false;
-  const actualBuffer = Buffer.from(match[1]);
-  const expectedBuffer = Buffer.from(expected);
-  return actualBuffer.length === expectedBuffer.length && timingSafeEqual(actualBuffer, expectedBuffer);
+async function readRawBody(req) {
+  const chunks = [];
+  for await (const chunk of req) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  }
+  return Buffer.concat(chunks).toString('utf8');
 }
+
+export const config = { api: { bodyParser: false } };
 
 async function fetchTMDB(path, apiKey) {
   const url = new URL(`${TMDB_BASE_URL}${path}`);
@@ -325,14 +325,43 @@ async function getEnabledSettings(admin) {
 
 export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store');
-  if (req.method !== 'GET') {
-    res.setHeader('Allow', 'GET');
+  if (req.method !== 'POST') {
+    res.setHeader('Allow', 'POST');
     return json(res, 405, { error: 'Method not allowed.' });
   }
 
-  const authorized = isAuthorized(req);
-  if (authorized === null) return json(res, 503, { error: 'CRON_SECRET or SECRET is not configured on the server.' });
-  if (!authorized) return json(res, 401, { error: 'Unauthorized.' });
+  const { QSTASH_CURRENT_SIGNING_KEY: currentSigningKey, QSTASH_NEXT_SIGNING_KEY: nextSigningKey } = process.env;
+  const configuredDestinationUrl = process.env.QSTASH_DESTINATION_URL;
+  if (!currentSigningKey || !nextSigningKey || !configuredDestinationUrl) {
+    return json(res, 503, { error: 'QStash signing keys and destination URL are not configured on the server.' });
+  }
+  let destinationUrl;
+  try {
+    const destination = new URL(configuredDestinationUrl);
+    if (destination.protocol !== 'https:'
+      || destination.pathname !== '/api/cron/notifications'
+      || destination.username
+      || destination.password
+      || destination.search
+      || destination.hash) {
+      return json(res, 503, { error: 'QSTASH_DESTINATION_URL must be an HTTPS notification endpoint URL.' });
+    }
+    destinationUrl = destination.toString();
+  } catch {
+    return json(res, 503, { error: 'QSTASH_DESTINATION_URL must be an HTTPS notification endpoint URL.' });
+  }
+  const signature = req.headers['upstash-signature'];
+  if (typeof signature !== 'string') return json(res, 401, { error: 'Unauthorized.' });
+
+  const body = await readRawBody(req);
+  let verified = false;
+  try {
+    verified = await new Receiver({ currentSigningKey, nextSigningKey })
+      .verify({ signature, body, url: destinationUrl });
+  } catch {
+    return json(res, 401, { error: 'Unauthorized.' });
+  }
+  if (!verified) return json(res, 401, { error: 'Unauthorized.' });
 
   let admin;
   try {

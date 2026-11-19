@@ -41,7 +41,7 @@ A Netflix-inspired streaming web application for discovering, browsing, and watc
 - **Continue Watching** - Automatically tracks watch progress and surfaces unfinished titles at the top of the home page.
 - **Watchlist & History** - Save titles into named watchlist collections, filter the watchlist by folder, and keep a chronological watch history (up to 200 entries).
 - **Optional Accounts** - Sign in with Google OAuth or email magic link via Supabase. Guest mode works out of the box using localStorage. Library data syncs to the cloud on sign-in and merges with local data.
-- **Notifications** - In-app notification bell with a dropdown. Browser push notifications (Web Push) deliver alerts to opted-in subscribed devices. A daily cron job generates relevant notifications based on the user's watch history and watchlist.
+- **Notifications** - In-app notification bell with a dropdown. Browser push notifications (Web Push) deliver alerts to opted-in subscribed devices. A QStash schedule checks for relevant notifications every five minutes.
 - **Progressive Web App** - Service worker provides offline app shell caching and installability on desktop and mobile.
 - **Responsive Design** - Desktop navigation with a hamburger menu and a fixed bottom navigation bar on mobile.
 - **Dark Theme** - Default Netflix-style dark theme (deep blacks with a red accent) or an optional Cinema theme (deep teal/green with amber accents).
@@ -61,6 +61,7 @@ A Netflix-inspired streaming web application for discovering, browsing, and watc
 | Realtime | [Supabase Realtime](https://supabase.com/docs/guides/realtime) |
 | Video player | [Vidstack React](https://www.vidstack.dev/) + [hls.js](https://github.com/video-dev/hls.js) |
 | Push notifications | [web-push](https://github.com/web-push-codelab/web-push) |
+| Job scheduling | [Upstash QStash](https://upstash.com/docs/qstash/overall/introduction) |
 | Analytics | [@vercel/analytics](https://vercel.com/docs/concepts/monitoring/analytics) |
 | Content data | [TMDb API](https://developer.themoviedb.org/) (v3) |
 | IMDb fallback | [IMDb public suggestion endpoint](https://v3.sg.media-imdb.com/) |
@@ -84,7 +85,7 @@ flixhub/
     _lib/
       push.mjs              # Shared Web Push + Supabase admin helpers
     cron/
-      notifications.mjs     # Daily cron: generate and send notifications
+      notifications.mjs     # QStash-signed handler: generate and send notifications
     delete-account.mjs      # POST /api/delete-account -- account deletion
     push.mjs                # GET /api/push (VAPID public key), POST (send push)
     stream.mjs              # Legacy Vercel HLS proxy
@@ -98,6 +99,7 @@ flixhub/
     logos/
   scripts/
     generate-icons.mjs      # PWA icon generation
+    setup-qstash.mjs        # Create or update the five-minute QStash schedule
     verify-icons.mjs        # Icon validation
   src/
     components/             # UI components (Navbar, Hero, VideoPlayer, etc.)
@@ -132,7 +134,7 @@ flixhub/
     collections-migration.sql # Add collections to an existing Supabase project
   docs/                     # Documentation
   index.html
-  vercel.json               # Vercel deployment config
+  vercel.json               # Vercel deployment config (without Vercel Cron)
   vite.config.js            # Vite config (dev API shim for /api/*)
   package.json
   .env.example
@@ -147,7 +149,7 @@ flixhub/
 - **npm** (comes with Node.js)
 - A **TMDb API key** (free) -- required for content discovery
 - A **Supabase project** -- required only for user accounts, library sync, and notifications (optional; the app works in guest mode without it)
-- A **Vercel account** -- required only for push notifications and the daily cron (optional; the app works fully locally without it)
+- A **Vercel account** -- required only for push notifications and the scheduled job (optional; the app works fully locally without it)
 
 ---
 
@@ -219,7 +221,10 @@ These are read by the `api/` serverless functions on Vercel and must be configur
 | `VAPID_PUBLIC_KEY` | Web Push public key. Generate with `npx web-push generate-vapid-keys`. |
 | `VAPID_PRIVATE_KEY` | Web Push private key (keep secret). |
 | `VAPID_SUBJECT` | VAPID subject (e.g., `mailto:you@example.com`). |
-| `CRON_SECRET` | Shared secret for protecting the daily notification cron endpoint. |
+| `QSTASH_TOKEN` | Server-side QStash token used by the one-time schedule setup script. |
+| `QSTASH_CURRENT_SIGNING_KEY` | QStash signing key used to verify scheduled requests. |
+| `QSTASH_NEXT_SIGNING_KEY` | Next QStash signing key, used during key rotation. |
+| `QSTASH_DESTINATION_URL` | Exact public HTTPS URL for `/api/cron/notifications`; required by both setup and signature verification. |
 
 ### Vite env prefix
 
@@ -234,6 +239,7 @@ The Vite config whitelists both `VITE_` and non-prefixed env names, so either `V
 | `npm run dev` | Start the Vite development server at `http://localhost:5173`. |
 | `npm run build` | Build the production bundle with Vite. |
 | `npm run preview` | Preview the production build locally. |
+| `npm run setup:qstash` | Create or update the five-minute notification schedule in QStash. |
 
 ---
 
@@ -256,11 +262,18 @@ browser CORS restrictions. If the variable is unset, start
 
 ### Vercel (recommended)
 
-The project includes a `vercel.json` with three concerns:
+The project includes a `vercel.json` with two concerns:
 
 1. **SPA fallback** - All non-API routes rewrite to `/index.html` so client-side routing works.
 2. **API passthrough** - `/api/*` routes are served by the serverless functions in the `api/` directory.
-3. **Daily cron** - A Vercel Cron Job runs `/api/cron/notifications` every day at 09:00 UTC to generate and send notifications.
+Notification checks use QStash rather than Vercel Cron, so they can run every five minutes on the Hobby plan. Add QStash to the Vercel project through the Marketplace, set `QSTASH_DESTINATION_URL` to the production URL ending in `/api/cron/notifications`, and ensure the QStash token and signing keys are configured. Then create or update the schedule once from an environment with the QStash token and destination URL:
+
+```sh
+npm run setup:qstash
+```
+
+The setup uses the stable schedule ID `flixhub-notifications`, so rerunning it updates the same schedule instead of creating duplicates. The endpoint accepts only `POST` requests with a valid QStash signature and verifies the configured destination URL.
+The setup script reads `QSTASH_TOKEN` and `QSTASH_DESTINATION_URL` from its shell environment.
 
 ```sh
 # Install the Vercel CLI if you haven't already
@@ -341,8 +354,8 @@ The PWA service worker (`public/sw.js`) implements a cache-first strategy for th
 The notification pipeline has three moving parts:
 
 1. **In-app** -- A React context (`NotificationsContext`) subscribes to Supabase Realtime changes on the `notifications` table. The notification bell in the Navbar shows unread counts and a dropdown with recent items.
-2. **Browser push** -- The user can opt in to Web Push via the Account page. The browser subscription is stored in a `push_subscriptions` table. The daily cron generates notifications and sends pushes to subscribed devices via the `/api/push` endpoint.
-3. **Daily cron** (`/api/cron/notifications`) -- Runs at 09:00 UTC on Vercel. For each opted-in user, it generates relevant notifications based on trending titles that match the user's watching patterns, release alerts for recent episodes of followed shows, release alerts for watchlisted upcoming movies, and "Continue watching" reminders. Notifications are deduplicated by key and expire after 30 days. The cron is protected by a `CRON_SECRET` checked via bearer token.
+2. **Browser push** -- The user can opt in to Web Push via the Account page. The browser subscription is stored in a `push_subscriptions` table. The scheduled job generates notifications and sends pushes to subscribed devices via the `/api/push` endpoint.
+3. **QStash schedule** (`/api/cron/notifications`) -- Runs every five minutes. For each opted-in user, it generates relevant notifications based on trending titles that match the user's watching patterns, release alerts for recent episodes of followed shows, release alerts for watchlisted upcoming movies, and "Continue watching" reminders. Notifications are deduplicated by key and expire after 30 days. The route verifies QStash signatures against both signing keys and the configured destination URL.
 
 ### Live TV
 

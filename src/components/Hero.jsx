@@ -14,6 +14,7 @@ import { gradients } from '../data/movies';
 const MAX_SLIDES = 10; // Number of trending titles in the carousel.
 const ROTATE_MS = 10000; // Autoplay interval.
 const heroLogoCache = new Map();
+let activeHeroIndex = 0;
 
 /**
  * Full-width, auto-rotating hero carousel backdropped by the top trending
@@ -29,7 +30,7 @@ export default function Hero() {
 
   const slides = (data?.results ?? []).slice(0, MAX_SLIDES);
   const slideCount = slides.length;
-  const [activeIndex, setActiveIndex] = useState(0);
+  const [activeIndex, setActiveIndex] = useState(() => activeHeroIndex);
   const [resettingTrack, setResettingTrack] = useState(false);
   const [paused, setPaused] = useState(false);
   const [brokenBackdrops, setBrokenBackdrops] = useState({});
@@ -42,6 +43,10 @@ export default function Hero() {
   const safeActive = slideCount ? activeIndex % slideCount : 0;
   const trackIndex = activeIndex <= slideCount ? activeIndex : safeActive;
   const trackSlides = slideCount > 1 ? [...slides, slides[0]] : slides;
+
+  useEffect(() => {
+    if (slideCount) activeHeroIndex = safeActive;
+  }, [safeActive, slideCount]);
 
   // Give the track time to render its transition-free reset before enabling
   // transitions again, so the duplicate-to-first jump stays invisible.

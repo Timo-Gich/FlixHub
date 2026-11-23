@@ -404,7 +404,7 @@ function FeaturePanel({
         <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-black/10" />
         <div className="relative flex min-h-[350px] max-w-2xl flex-col justify-end px-5 py-7 sm:min-h-[390px] sm:px-10 sm:py-10">
           <p className="mb-3 text-xs font-bold uppercase tracking-[0.2em] text-brand-light">
-            {source === 'personalized' ? 'Picked for you' : 'Curated for today'}
+            {source === 'personalized' ? 'Picked for you' : "Today's pick"}
             {personalizedUnavailable && source !== 'personalized' && (
               <span className="ml-2 text-white/60">Personal picks unavailable</span>
             )}

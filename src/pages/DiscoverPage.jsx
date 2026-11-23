@@ -2,23 +2,15 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useSearchParams } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import MovieCard from '../components/MovieCard';
-import DiscoveryRow from '../components/DiscoveryRow';
 import SectionHeading from '../components/SectionHeading';
 import TrailerModal from '../components/TrailerModal';
-import { useLibrary } from '../hooks/useLibrary.jsx';
 import { useMovieData } from '../hooks/useMovieData';
 import {
   discoverTitles,
   fetchGenres,
   fetchMovieDetails,
-  fetchNowPlayingMovies,
-  fetchOnTheAirTV,
-  fetchPopularMovies,
-  fetchPopularTV,
-  fetchTopRatedMovies,
   fetchTrendingAll,
   fetchTVDetails,
-  fetchUpcomingMovies,
   formatRating,
   formatYear,
   getBackdropUrl,
@@ -51,58 +43,31 @@ const SORT_OPTIONS = [
   { value: 'original_title.asc', label: 'Title A–Z' },
 ];
 
+const SURPRISE_STORAGE_KEY = 'flixhub.discoverSurprise';
+
+function readSavedSurprise() {
+  const raw = localStorage.getItem(SURPRISE_STORAGE_KEY);
+  if (!raw) return null;
+
+  try {
+    const saved = JSON.parse(raw);
+    if (
+      saved
+      && (saved.media_type === 'movie' || saved.media_type === 'tv')
+      && saved.id != null
+    ) {
+      return saved;
+    }
+  } catch (error) {
+    if (!(error instanceof SyntaxError)) throw error;
+  }
+
+  localStorage.removeItem(SURPRISE_STORAGE_KEY);
+  return null;
+}
+
 const withMediaType = (items, mediaType) =>
   (items ?? []).map((item) => ({ ...item, media_type: mediaType }));
-
-async function fetchRecentlyReleased() {
-  const [movies, shows] = await Promise.all([fetchNowPlayingMovies(), fetchOnTheAirTV()]);
-  return [
-    ...withMediaType(movies.results, 'movie'),
-    ...withMediaType(shows.results, 'tv'),
-  ]
-    .sort((a, b) => {
-      const dateA = a.release_date ?? a.first_air_date ?? '';
-      const dateB = b.release_date ?? b.first_air_date ?? '';
-      return dateB.localeCompare(dateA);
-    })
-    .slice(0, 20);
-}
-
-async function fetchTopRatedAll() {
-  const [movies, shows] = await Promise.all([
-    fetchTopRatedMovies(),
-    discoverTitles('tv', {
-      sort_by: 'vote_average.desc',
-      'vote_count.gte': '200',
-    }),
-  ]);
-  return [
-    ...withMediaType(movies.results, 'movie'),
-    ...withMediaType(shows.results, 'tv'),
-  ]
-    .filter((item) => (item.vote_count ?? 0) >= 200)
-    .sort((a, b) => (b.vote_average ?? 0) - (a.vote_average ?? 0))
-    .slice(0, 20);
-}
-
-async function fetchHiddenGems() {
-  const [movies, shows] = await Promise.all(
-    ['movie', 'tv'].map((type) =>
-      discoverTitles(type, {
-        'vote_average.gte': '7.3',
-        'vote_count.gte': '250',
-        sort_by: 'popularity.asc',
-      }),
-    ),
-  );
-  return [
-    ...withMediaType(movies.results, 'movie'),
-    ...withMediaType(shows.results, 'tv'),
-  ]
-    .filter((item) => (item.vote_count ?? 0) >= 250 && (item.popularity ?? Infinity) <= 80)
-    .sort((a, b) => (b.vote_average ?? 0) - (a.vote_average ?? 0))
-    .slice(0, 20);
-}
 
 async function fetchLowkeyTitles() {
   const [movies, shows] = await Promise.all(
@@ -466,90 +431,6 @@ function FeaturePanel({ movie, loading, error, reload, genres }) {
   );
 }
 
-function PersonalizedRecommendations() {
-  const { history } = useLibrary();
-  const latestEntry = [...history]
-    .filter((entry) => entry?.movie?.id)
-    .sort((a, b) => (b.updatedAt || b.watchedAt || 0) - (a.updatedAt || a.watchedAt || 0))[0];
-  const source = latestEntry?.movie;
-  const mediaType = latestEntry?.type === 'tv' || source?.media_type === 'tv' || (source?.name && !source?.title)
-    ? 'tv'
-    : 'movie';
-  const {
-    data,
-    loading,
-    error,
-    reload,
-  } = useMovieData(
-    () => {
-      if (!source?.id) return Promise.resolve({ results: [] });
-      const request = mediaType === 'tv' ? fetchTVDetails(source.id) : fetchMovieDetails(source.id);
-      return request.then((details) => ({
-        results: withMediaType(details.recommendations?.results, mediaType)
-          .filter((item) => item.id !== source.id)
-          .slice(0, 20),
-      }));
-    },
-    [mediaType, source?.id],
-  );
-
-  if (!source) {
-    return (
-      <section className="mx-auto w-full max-w-[1600px] px-4 py-6 sm:px-8" aria-label="Recommendations">
-        <SectionHeading className="text-xl md:text-2xl">Picked from your history</SectionHeading>
-        <p className="mt-2 text-sm text-muted">
-          Watch a title and recommendations based on your viewing history will appear here.
-        </p>
-      </section>
-    );
-  }
-
-  if (loading) {
-    return (
-      <section className="mx-auto w-full max-w-[1600px] px-4 py-6 sm:px-8" aria-label="Recommendations">
-        <SectionHeading className="text-xl md:text-2xl">Picked from your history</SectionHeading>
-        <div className="mt-4 flex gap-3 overflow-hidden" aria-label="Loading recommendations">
-          {Array.from({ length: 6 }).map((_, index) => (
-            <div key={index} className="aspect-[2/3] w-[38vw] shrink-0 animate-pulse rounded-md bg-ink-raised sm:w-40" />
-          ))}
-        </div>
-      </section>
-    );
-  }
-
-  if (error) {
-    return (
-      <section className="mx-auto w-full max-w-[1600px] px-4 py-6 sm:px-8" aria-label="Recommendations">
-        <SectionHeading className="text-xl md:text-2xl">Picked from your history</SectionHeading>
-        <div className="mt-4 rounded-xl border border-brand/30 bg-brand/5 px-4 py-5">
-          <p className="text-sm text-muted">{error.message}</p>
-          <button type="button" onClick={reload} className="mt-3 rounded-md bg-brand px-4 py-2 text-sm font-bold text-white">
-            Try again
-          </button>
-        </div>
-      </section>
-    );
-  }
-
-  if (!data?.results?.length) {
-    return (
-      <section className="mx-auto w-full max-w-[1600px] px-4 py-6 sm:px-8" aria-label="Recommendations">
-        <SectionHeading className="text-xl md:text-2xl">Picked from your history</SectionHeading>
-        <p className="mt-2 text-sm text-muted">TMDb has no recommendations for your most recently watched title yet.</p>
-      </section>
-    );
-  }
-
-  return (
-    <DiscoveryRow
-      id={`recommendations-${mediaType}-${source.id}`}
-      title="Picked from your history"
-      description={`Because you watched ${source.title || source.name || 'this title'}.`}
-      fetcher={() => data.results}
-    />
-  );
-}
-
 export default function DiscoverPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const location = useLocation();
@@ -560,7 +441,7 @@ export default function DiscoverPage() {
   const [yearTo, setYearTo] = useState('');
   const [minRating, setMinRating] = useState('');
   const [sortBy, setSortBy] = useState('popularity.desc');
-  const [surprise, setSurprise] = useState(null);
+  const [surprise, setSurprise] = useState(readSavedSurprise);
   const [surpriseLoading, setSurpriseLoading] = useState(false);
   const [surpriseError, setSurpriseError] = useState('');
   const surpriseCandidatesRef = useRef(null);
@@ -587,8 +468,6 @@ export default function DiscoverPage() {
   const featured = (trendingData?.results ?? []).find((item) => item.backdrop_path)
     ?? trendingData?.results?.[0]
     ?? null;
-  const trending = (trendingData?.results ?? []).slice(0, 20);
-
   const updateLanguage = (code) => {
     setLanguageCode(code);
     const nextParams = new URLSearchParams(searchParams);
@@ -634,6 +513,7 @@ export default function DiscoverPage() {
         ...recentSurpriseIds.current,
       ].slice(0, Math.min(5, candidates.length - 1));
       setSurprise(pick);
+      localStorage.setItem(SURPRISE_STORAGE_KEY, JSON.stringify(pick));
     } catch (requestError) {
       setSurpriseError(requestError.message);
     } finally {
@@ -662,55 +542,6 @@ export default function DiscoverPage() {
       label: `Sort: ${SORT_OPTIONS.find((option) => option.value === sortBy)?.label ?? sortBy}`,
       clear: () => setSortBy('popularity.desc'),
     }] : []),
-  ];
-
-  const rows = [
-    ...(trending.length ? [{
-      id: 'trending-all',
-      title: 'Trending now',
-      description: 'The movies and shows everyone is talking about.',
-      fetcher: () => trending,
-      seeAll: '/new-popular',
-    }] : []),
-    {
-      id: 'popular-movies',
-      title: 'Popular movies',
-      description: 'Big stories finding a wide audience.',
-      fetcher: fetchPopularMovies,
-      seeAll: '/movies',
-    },
-    {
-      id: 'popular-tv',
-      title: 'Popular TV shows',
-      description: 'Series worth settling in for.',
-      fetcher: fetchPopularTV,
-      seeAll: '/series',
-    },
-    {
-      id: 'recently-released',
-      title: 'Recently released',
-      description: 'New arrivals in theatres and on television.',
-      fetcher: fetchRecentlyReleased,
-    },
-    {
-      id: 'top-rated',
-      title: 'Top rated',
-      description: 'Highly rated picks with enough votes to count.',
-      fetcher: fetchTopRatedAll,
-    },
-    {
-      id: 'hidden-gems',
-      title: 'Hidden gems',
-      description: 'Well-reviewed titles beyond the usual blockbusters.',
-      fetcher: fetchHiddenGems,
-    },
-    {
-      id: 'coming-soon',
-      title: 'Coming soon',
-      description: 'A look at upcoming movie releases.',
-      fetcher: fetchUpcomingMovies,
-      seeAll: '/new-popular',
-    },
   ];
 
   return (
@@ -985,11 +816,6 @@ export default function DiscoverPage() {
           sortBy={sortBy}
         />
 
-        <PersonalizedRecommendations />
-
-        {rows.map((row) => (
-          <DiscoveryRow key={row.id} {...row} />
-        ))}
       </main>
     </div>
   );

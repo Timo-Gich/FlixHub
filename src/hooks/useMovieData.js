@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 const MAX_RETRIES = 3;
 const RETRY_DELAY_MS = 1000;
+const dataCache = new Map();
 
 /**
  * Small data-fetching hook with graceful loading / error states.
@@ -13,11 +14,16 @@ const RETRY_DELAY_MS = 1000;
  *
  * @param {() => Promise<any>} fetcher  async function returning the payload
  * @param {Array} [deps]                values that trigger a refetch
+ * @param {{ cacheKey?: string }} [options] cache successful data in memory
  * @returns {{ data:any, loading:boolean, error:Error|null, reload:()=>void }}
  */
-export function useMovieData(fetcher, deps = []) {
+export function useMovieData(fetcher, deps = [], { cacheKey } = {}) {
   const [tick, setTick] = useState(0);
-  const [state, setState] = useState({ data: null, loading: true, error: null });
+  const [state, setState] = useState(() => (
+    cacheKey && dataCache.has(cacheKey)
+      ? { data: dataCache.get(cacheKey), loading: false, error: null }
+      : { data: null, loading: true, error: null }
+  ));
 
   // Always call the latest fetcher without re-triggering the effect on every
   // render (callers often pass inline arrow functions).
@@ -30,6 +36,12 @@ export function useMovieData(fetcher, deps = []) {
     let active = true;
     let retryTimer;
     let cancelRetry;
+    const handleOnline = () => reload();
+    window.addEventListener('online', handleOnline);
+
+    if (cacheKey && dataCache.has(cacheKey) && tick === 0) {
+      return () => window.removeEventListener('online', handleOnline);
+    }
 
     // Enter loading state if we're (re)running, but don't blow away previous
     // data if we already have it — keeps stale-while-revalidate feel.
@@ -40,6 +52,7 @@ export function useMovieData(fetcher, deps = []) {
       for (let attempt = 0; attempt <= MAX_RETRIES; attempt += 1) {
         try {
           const res = await fetcherRef.current();
+          if (cacheKey) dataCache.set(cacheKey, res);
           if (active) setState({ data: res, loading: false, error: null });
           return;
         } catch (err) {
@@ -60,8 +73,6 @@ export function useMovieData(fetcher, deps = []) {
       }
     };
 
-    const handleOnline = () => reload();
-    window.addEventListener('online', handleOnline);
     fetchWithRetry();
 
     return () => {
@@ -71,7 +82,7 @@ export function useMovieData(fetcher, deps = []) {
       window.removeEventListener('online', handleOnline);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [...deps, tick]);
+  }, [...deps, tick, cacheKey]);
 
   return { ...state, reload };
 }

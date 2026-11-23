@@ -13,6 +13,7 @@ import { gradients } from '../data/movies';
 
 const MAX_SLIDES = 10; // Number of trending titles in the carousel.
 const ROTATE_MS = 10000; // Autoplay interval.
+const heroLogoCache = new Map();
 
 /**
  * Full-width, auto-rotating hero carousel backdropped by the top trending
@@ -20,7 +21,11 @@ const ROTATE_MS = 10000; // Autoplay interval.
  * overview and a Play button. Rotates automatically and pauses on hover/focus.
  */
 export default function Hero() {
-  const { data, loading, error, reload } = useMovieData(fetchTrendingAll, []);
+  const { data, loading, error, reload } = useMovieData(
+    fetchTrendingAll,
+    [],
+    { cacheKey: 'home-trending-hero' },
+  );
 
   const slides = (data?.results ?? []).slice(0, MAX_SLIDES);
   const slideCount = slides.length;
@@ -72,10 +77,18 @@ export default function Hero() {
     const key = slideKey(movie);
     if (titleLogos[key] !== undefined || logoStatus[key]) return;
 
+    if (heroLogoCache.has(key)) {
+      const url = heroLogoCache.get(key);
+      setTitleLogos((prev) => ({ ...prev, [key]: url }));
+      setLogoStatus((prev) => ({ ...prev, [key]: url ? 'loaded' : 'error' }));
+      return;
+    }
+
     setLogoStatus((prev) => ({ ...prev, [key]: 'loading' }));
     fetchMediaImages(movie.media_type, movie.id)
       .then((images) => {
         const url = getLogoUrl(images?.logos);
+        heroLogoCache.set(key, url);
         setTitleLogos((prev) => ({ ...prev, [key]: url }));
         setLogoStatus((prev) => ({ ...prev, [key]: url ? 'loaded' : 'error' }));
       })

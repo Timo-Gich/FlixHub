@@ -1,15 +1,22 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useSearchParams } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import MovieCard from '../components/MovieCard';
 import SectionHeading from '../components/SectionHeading';
 import TrailerModal from '../components/TrailerModal';
+import { useAuth } from '../context/AuthContext';
+import { useLibrary } from '../hooks/useLibrary.jsx';
 import { useMovieData } from '../hooks/useMovieData';
+import {
+  getDiscoverDayKey,
+  persistDailyFeatured,
+  readDailyFeatured,
+  selectDailyFeatured,
+} from '../services/discoverFeaturedService';
 import {
   discoverTitles,
   fetchGenres,
   fetchMovieDetails,
-  fetchTrendingAll,
   fetchTVDetails,
   formatRating,
   formatYear,
@@ -303,7 +310,15 @@ function DiscoverResults({
   );
 }
 
-function FeaturePanel({ movie, loading, error, reload, genres }) {
+function FeaturePanel({
+  movie,
+  source,
+  personalizedUnavailable,
+  loading,
+  error,
+  reload,
+  genres,
+}) {
   const [trailerId, setTrailerId] = useState(null);
   const [trailerLoading, setTrailerLoading] = useState(false);
   const [trailerError, setTrailerError] = useState('');
@@ -367,7 +382,7 @@ function FeaturePanel({ movie, loading, error, reload, genres }) {
   const year = formatYear(movie.release_date ?? movie.first_air_date);
   const rating = formatRating(movie.vote_average);
   const genreLabels = (movie.genre_ids ?? [])
-    .map((id) => genres.find((genre) => genre.id === id)?.name)
+    .map((id) => genres?.[movie.media_type]?.find((genre) => genre.id === id)?.name)
     .filter(Boolean)
     .slice(0, 3);
 
@@ -388,7 +403,12 @@ function FeaturePanel({ movie, loading, error, reload, genres }) {
         <div className="absolute inset-0 bg-gradient-to-r from-black via-black/75 to-black/10" />
         <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-black/10" />
         <div className="relative flex min-h-[350px] max-w-2xl flex-col justify-end px-5 py-7 sm:min-h-[390px] sm:px-10 sm:py-10">
-          <p className="mb-3 text-xs font-bold uppercase tracking-[0.2em] text-brand-light">Featured on FlixHub</p>
+          <p className="mb-3 text-xs font-bold uppercase tracking-[0.2em] text-brand-light">
+            {source === 'personalized' ? 'Picked for you' : 'Curated for today'}
+            {personalizedUnavailable && source !== 'personalized' && (
+              <span className="ml-2 text-white/60">Personal picks unavailable</span>
+            )}
+          </p>
           <h2 className="font-display text-3xl font-semibold leading-tight text-white text-shadow-hero sm:text-5xl">
             {title}
           </h2>
@@ -434,6 +454,15 @@ function FeaturePanel({ movie, loading, error, reload, genres }) {
 export default function DiscoverPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const location = useLocation();
+  const { loading: authLoading, user } = useAuth();
+  const { history, watchLater, syncing } = useLibrary();
+  const featuredScope = user?.id ?? 'guest';
+  const [dayKey, setDayKey] = useState(getDiscoverDayKey);
+  const [featuredState, setFeaturedState] = useState(() => {
+    const selection = readDailyFeatured(dayKey, featuredScope);
+    return { selection, loading: !selection, error: null, scope: featuredScope, day: dayKey };
+  });
+  const [featuredRetry, setFeaturedRetry] = useState(0);
   const [mediaType, setMediaType] = useState('movie');
   const [genreId, setGenreId] = useState('');
   const [languageCode, setLanguageCode] = useState(() => searchParams.get('language') ?? '');
@@ -446,6 +475,14 @@ export default function DiscoverPage() {
   const [surpriseError, setSurpriseError] = useState('');
   const surpriseCandidatesRef = useRef(null);
   const recentSurpriseIds = useRef([]);
+  const historyKey = useMemo(
+    () => history.map((entry) => `${entry.type ?? entry.movie?.media_type ?? ''}:${entry.movie?.id ?? ''}`).join(','),
+    [history],
+  );
+  const watchLaterKey = useMemo(
+    () => watchLater.map((entry) => `${entry.movie?.media_type ?? ''}:${entry.movie?.id ?? ''}`).join(','),
+    [watchLater],
+  );
 
   const {
     data: genreData,
@@ -456,18 +493,90 @@ export default function DiscoverPage() {
     const [movies, shows] = await Promise.all([fetchGenres('movie'), fetchGenres('tv')]);
     return { movie: movies.genres ?? [], tv: shows.genres ?? [] };
   }, []);
-  const {
-    data: trendingData,
-    loading: trendingLoading,
-    error: trendingError,
-    reload: reloadTrending,
-  } = useMovieData(fetchTrendingAll, []);
-
   const genres = genreData?.[mediaType] ?? [];
   const selectedGenre = genres.find((genre) => String(genre.id) === genreId);
-  const featured = (trendingData?.results ?? []).find((item) => item.backdrop_path)
-    ?? trendingData?.results?.[0]
-    ?? null;
+
+  useEffect(() => {
+    const now = new Date();
+    const nextDay = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+    const timer = setTimeout(() => setDayKey(getDiscoverDayKey()), nextDay.getTime() - now.getTime());
+    return () => clearTimeout(timer);
+  }, [dayKey]);
+
+  useEffect(() => {
+    const saved = readDailyFeatured(dayKey, featuredScope);
+    if (saved) {
+      setFeaturedState({
+        selection: saved,
+        loading: false,
+        error: null,
+        scope: featuredScope,
+        day: dayKey,
+      });
+      return undefined;
+    }
+
+    if (authLoading || syncing) {
+      setFeaturedState({
+        selection: null,
+        loading: true,
+        error: null,
+        scope: featuredScope,
+        day: dayKey,
+      });
+      return undefined;
+    }
+
+    let active = true;
+    setFeaturedState({
+      selection: null,
+      loading: true,
+      error: null,
+      scope: featuredScope,
+      day: dayKey,
+    });
+    selectDailyFeatured({ dayKey, history, watchLater, scopeKey: featuredScope })
+      .then((selection) => {
+        if (!active) return;
+        const persisted = persistDailyFeatured(selection, featuredScope);
+        setFeaturedState({
+          selection: persisted,
+          loading: false,
+          error: null,
+          scope: featuredScope,
+          day: dayKey,
+        });
+      })
+      .catch((error) => {
+        if (active) {
+          setFeaturedState({
+            selection: null,
+            loading: false,
+            error,
+            scope: featuredScope,
+            day: dayKey,
+          });
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [authLoading, dayKey, featuredRetry, featuredScope, historyKey, syncing, watchLaterKey]);
+
+  const activeFeatured = featuredState.scope === featuredScope
+    && featuredState.selection?.day === dayKey
+    && !authLoading
+    ? featuredState.selection
+    : null;
+  const featuredError = featuredState.scope === featuredScope && featuredState.day === dayKey
+    ? featuredState.error
+    : null;
+  const featuredLoading = authLoading
+    || featuredState.scope !== featuredScope
+    || featuredState.loading
+    || (!activeFeatured && !featuredError);
+  const retryFeatured = () => setFeaturedRetry((attempt) => attempt + 1);
   const updateLanguage = (code) => {
     setLanguageCode(code);
     const nextParams = new URLSearchParams(searchParams);
@@ -494,11 +603,13 @@ export default function DiscoverPage() {
       if (!surpriseCandidatesRef.current?.length) {
         surpriseCandidatesRef.current = await fetchLowkeyTitles();
       }
-      const trendingIds = new Set(
-        (trendingData?.results ?? []).map((item) => `${item.media_type}-${item.id}`),
+      const featuredMovie = featuredState.selection?.movie;
+      const featuredKey = featuredMovie
+        ? `${featuredMovie.media_type}-${featuredMovie.id}`
+        : null;
+      const candidates = surpriseCandidatesRef.current.filter(
+        (item) => `${item.media_type}-${item.id}` !== featuredKey,
       );
-      const candidates = surpriseCandidatesRef.current.filter((item) =>
-        !trendingIds.has(`${item.media_type}-${item.id}`));
       const available = candidates.filter(
         (item) => !recentSurpriseIds.current.includes(`${item.media_type}-${item.id}`),
       );
@@ -556,16 +667,18 @@ export default function DiscoverPage() {
             Discover
           </h1>
           <p className="mt-3 text-sm leading-6 text-muted sm:text-base">
-            Find your next favourite. Explore stories worth watching.
+            Explore stories worth watching.
           </p>
         </header>
 
         <FeaturePanel
-          movie={featured}
-          loading={trendingLoading}
-          error={trendingError}
-          reload={reloadTrending}
-          genres={genres}
+          movie={activeFeatured?.movie}
+          source={activeFeatured?.source}
+          personalizedUnavailable={activeFeatured?.personalizedUnavailable}
+          loading={featuredLoading}
+          error={featuredError}
+          reload={retryFeatured}
+          genres={genreData}
         />
 
         <section className="mb-10 rounded-2xl border border-ink-border bg-ink-soft p-5 sm:p-7" aria-labelledby="next-watch-heading">

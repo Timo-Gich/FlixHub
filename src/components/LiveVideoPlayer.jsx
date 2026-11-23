@@ -36,9 +36,17 @@ export default function LiveVideoPlayer({
   backHref,
   servers,
   defaultServerId,
+  serverPreferenceKey,
   missing = false,
 }) {
-  const [activeServerId, setActiveServerId] = useState(defaultServerId);
+  const [activeServerId, setActiveServerId] = useState(() => {
+    const storedServerId = serverPreferenceKey
+      ? localStorage.getItem(serverPreferenceKey)
+      : null;
+    return servers.some((server) => server.id === storedServerId)
+      ? storedServerId
+      : defaultServerId;
+  });
   const [status, setStatus] = useState('loading');
   const [retryKey, setRetryKey] = useState(0);
   const [startupAttempt, setStartupAttempt] = useState(0);
@@ -55,6 +63,12 @@ export default function LiveVideoPlayer({
       setActiveServerId(defaultServerId || servers[0]?.id);
     }
   }, [activeServerId, defaultServerId, servers]);
+
+  useEffect(() => {
+    if (serverPreferenceKey && servers.some((server) => server.id === activeServerId)) {
+      localStorage.setItem(serverPreferenceKey, activeServerId);
+    }
+  }, [activeServerId, serverPreferenceKey, servers]);
 
   useEffect(() => {
     clearTimeout(startupRetryTimerRef.current);

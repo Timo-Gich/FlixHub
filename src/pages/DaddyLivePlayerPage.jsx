@@ -16,6 +16,7 @@ export default function DaddyLivePlayerPage() {
         backHref="/live/daddylive"
         servers={DADDYLIVE_SERVERS}
         defaultServerId="daddylive-server1"
+        serverPreferenceKey="preferredDaddyLiveServer"
       />
       <Footer />
     </div>

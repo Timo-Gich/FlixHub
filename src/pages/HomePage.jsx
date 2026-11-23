@@ -6,32 +6,22 @@ import HorizontalScrollRail from '../components/HorizontalScrollRail';
 import SectionHeading from '../components/SectionHeading';
 import Footer from '../components/Footer';
 import { fetchTrendingMovies, fetchPopularMovies, discoverTitles } from '../services/tmdbService';
-import { FINISH_THRESHOLD, latestHistoryByTitle } from '../services/libraryService';
+import { latestHistoryByTitle } from '../services/libraryService';
 import { useLibrary } from '../hooks/useLibrary.jsx';
 
 /**
  * Home page: the fixed navbar, a full-width trending hero carousel, a
- * "Continue Watching" row (from watch history — unfinished first, then
- * finished titles, so nothing is ever hidden), a couple of self-fetching
+ * "Continue Watching" row (ordered by the most recent watch activity),
+ * a couple of self-fetching
  * content rows, and the footer.
  */
 export default function HomePage() {
   // Cloud-aware history (falls back to localStorage for guests).
   const { history } = useLibrary();
 
-  // A title counts as "finished" once progress reaches 98% of its duration.
-  const isFinished = (entry) => {
-    const dur = entry.durationSeconds || 0;
-    return dur > 0 && (entry.progressSeconds || 0) >= dur * FINISH_THRESHOLD;
-  };
-
-  // "Continue Watching" shows the latest entry per title, with in-progress
-  // titles first. Cloud rows with a missing snapshot are skipped.
-  const latestHistory = latestHistoryByTitle(history);
-  const continueWatching = [
-    ...latestHistory.filter((entry) => !isFinished(entry)),
-    ...latestHistory.filter(isFinished),
-  ];
+  // "Continue Watching" shows the latest entry per title, ordered strictly
+  // by most recent watch activity. Finished titles remain in the row.
+  const continueWatching = latestHistoryByTitle(history);
 
   return (
     <div className="min-h-screen bg-ink text-foreground">

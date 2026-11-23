@@ -39,7 +39,14 @@ export function latestHistoryByTitle(items = []) {
       latest.set(key, entry);
     }
   }
-  return [...latest.values()].sort((a, b) => historyTimestamp(b) - historyTimestamp(a));
+  return [...latest.values()].sort((a, b) => {
+    const timestampDifference = historyTimestamp(b) - historyTimestamp(a);
+    if (timestampDifference !== 0) return timestampDifference;
+
+    const aKey = `${historyMediaType(a)}|${String(a.movie.id)}`;
+    const bKey = `${historyMediaType(b)}|${String(b.movie.id)}`;
+    return aKey.localeCompare(bKey);
+  });
 }
 
 function readJSON(key, fallback) {
@@ -291,9 +298,11 @@ export function createPlayedEntry(movie, opts = {}, existing) {
     && existing.type === (opts.type || undefined)
     && existing.season === opts.season
     && existing.episode === opts.episode;
+  const now = Date.now();
   const entry = {
     movie: snapshot(movie),
-    watchedAt: Date.now(),
+    watchedAt: now,
+    updatedAt: now,
     progressSeconds: sameEpisode ? existing.progressSeconds || 0 : 0,
     durationSeconds: Math.round((movie.runtime || 0) * 60),
     type: opts.type,

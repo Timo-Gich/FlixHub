@@ -17,6 +17,18 @@ const SORT_OPTIONS = [
   { value: 'rating', label: 'Rating' },
 ];
 
+const SORT_STORAGE_KEY = 'flixhub.watchlistSort';
+
+function readSortPreference() {
+  try {
+    const savedSort = localStorage.getItem(SORT_STORAGE_KEY);
+    return SORT_OPTIONS.some((option) => option.value === savedSort) ? savedSort : 'recent';
+  } catch (error) {
+    console.error('Unable to read watchlist sort preference.', error);
+    return 'recent';
+  }
+}
+
 function CollectionIcon({ className = 'h-5 w-5' }) {
   return (
     <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
@@ -73,7 +85,7 @@ export default function WatchLaterPage() {
     moveMovieToCollection,
     syncing,
   } = useLibrary();
-  const [sort, setSort] = useState('recent');
+  const [sort, setSort] = useState(readSortPreference);
   const [selectedCollection, setSelectedCollection] = useState('all');
   const [openMenuId, setOpenMenuId] = useState(null);
   const [editingId, setEditingId] = useState(null);
@@ -141,6 +153,15 @@ export default function WatchLaterPage() {
     event.dataTransfer.effectAllowed = 'move';
     event.dataTransfer.setData('text/plain', String(movie.id));
     setDraggedMovieId(String(movie.id));
+  };
+
+  const updateSort = (value) => {
+    setSort(value);
+    try {
+      localStorage.setItem(SORT_STORAGE_KEY, value);
+    } catch (error) {
+      console.error('Unable to save watchlist sort preference.', error);
+    }
   };
 
   const handleCollectionDrop = async (event, collection) => {
@@ -337,7 +358,7 @@ export default function WatchLaterPage() {
               Sort by
               <select
                 value={sort}
-                onChange={(event) => setSort(event.target.value)}
+                onChange={(event) => updateSort(event.target.value)}
                 className="rounded-md border border-ink-border bg-ink-raised px-3 py-1.5 text-sm text-foreground outline-none focus:ring-2 focus:ring-brand/40"
               >
                 {SORT_OPTIONS.map((option) => (

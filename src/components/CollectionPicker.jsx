@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 
 function CollectionIcon({ className = 'h-5 w-5' }) {
   return (
@@ -21,11 +22,13 @@ export default function CollectionPicker({
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState('');
   const [busy, setBusy] = useState(false);
+  const [query, setQuery] = useState('');
 
   useEffect(() => {
     if (!open) return;
     setCreating(false);
     setName('');
+    setQuery('');
   }, [open]);
 
   useEffect(() => {
@@ -62,7 +65,11 @@ export default function CollectionPicker({
     }
   };
 
-  return (
+  const filteredCollections = collections.filter((collection) =>
+    collection.name.toLowerCase().includes(query.trim().toLowerCase()),
+  );
+
+  return createPortal(
     <div className="fixed inset-0 z-[120] flex items-end justify-center sm:items-center sm:px-4" role="dialog" aria-modal="true" aria-labelledby="collection-picker-title">
       <button
         type="button"
@@ -71,9 +78,9 @@ export default function CollectionPicker({
         disabled={busy}
         className="absolute inset-0 bg-black/70 backdrop-blur-sm"
       />
-      <div className="relative max-h-[85dvh] w-full overflow-y-auto rounded-t-2xl border border-ink-border bg-ink-soft p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-2xl sm:max-w-md sm:rounded-xl sm:p-6">
-        <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-white/20 sm:hidden" />
-        <div className="flex items-start justify-between gap-4">
+      <div className="relative flex max-h-[85dvh] w-full flex-col overflow-hidden rounded-t-2xl border border-ink-border bg-ink-soft p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-2xl sm:max-w-md sm:rounded-xl sm:p-6">
+        <div className="mx-auto mb-4 h-1 w-10 shrink-0 rounded-full bg-white/20 sm:hidden" />
+        <div className="flex shrink-0 items-start justify-between gap-4">
           <div>
             <h2 id="collection-picker-title" className="text-lg font-black text-white">{title}</h2>
             {movieTitle && <p className="mt-1 line-clamp-1 text-sm text-muted">{movieTitle}</p>}
@@ -86,7 +93,7 @@ export default function CollectionPicker({
         </div>
 
         {creating ? (
-          <form onSubmit={create} className="mt-5">
+          <form onSubmit={create} className="mt-5 min-h-0 overflow-y-auto">
             <label htmlFor="new-collection-name" className="text-sm font-semibold text-foreground">Collection name</label>
             <input
               id="new-collection-name"
@@ -105,12 +112,12 @@ export default function CollectionPicker({
             </div>
           </form>
         ) : (
-          <div className="mt-5 space-y-2">
+          <div className="mt-4 flex min-h-0 flex-1 flex-col gap-3">
             <button
               type="button"
               onClick={() => choose(null)}
               disabled={busy}
-              className="flex w-full items-center gap-3 rounded-lg border border-ink-border bg-ink-raised px-4 py-3 text-left hover:border-brand/60 disabled:opacity-50"
+              className="flex w-full shrink-0 items-center gap-3 rounded-lg border border-ink-border bg-ink-raised px-4 py-3 text-left hover:border-brand/60 disabled:opacity-50"
             >
               <CollectionIcon className="h-5 w-5 text-muted" />
               <span className="min-w-0 flex-1">
@@ -119,24 +126,45 @@ export default function CollectionPicker({
               </span>
               <span className="text-xs font-bold text-brand">Quick save</span>
             </button>
-            {collections.map((collection) => (
-              <button
-                type="button"
-                key={collection.id}
-                onClick={() => choose(collection.id)}
-                disabled={busy}
-                className="flex w-full items-center gap-3 rounded-lg border border-ink-border bg-ink-raised px-4 py-3 text-left hover:border-brand/60 disabled:opacity-50"
-              >
-                <CollectionIcon className="h-5 w-5 text-brand" />
-                <span className="font-semibold text-white">{collection.name}</span>
-              </button>
-            ))}
+            {collections.length > 0 && (
+              <label className="block shrink-0">
+                <span className="sr-only">Search collections</span>
+                <input
+                  type="search"
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  placeholder="Search collections"
+                  autoComplete="off"
+                  className="w-full rounded-lg border border-ink-border bg-ink-raised px-3 py-2.5 text-sm text-white
+                             outline-none placeholder:text-muted focus:border-brand focus:ring-2 focus:ring-brand/30"
+                />
+              </label>
+            )}
+            <div className="min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain pr-1">
+              {filteredCollections.map((collection) => (
+                <button
+                  type="button"
+                  key={collection.id}
+                  onClick={() => choose(collection.id)}
+                  disabled={busy}
+                  className="flex w-full items-center gap-3 rounded-lg border border-ink-border bg-ink-raised px-4 py-3 text-left
+                             hover:border-brand/60 disabled:opacity-50"
+                >
+                  <CollectionIcon className="h-5 w-5 shrink-0 text-brand" />
+                  <span className="min-w-0 flex-1 break-words font-semibold text-white">{collection.name}</span>
+                </button>
+              ))}
+              {collections.length > 0 && filteredCollections.length === 0 && (
+                <p className="py-5 text-center text-sm text-muted">No collections match “{query.trim()}”.</p>
+              )}
+            </div>
             {allowCreate && (
               <button
                 type="button"
                 onClick={() => setCreating(true)}
                 disabled={busy}
-                className="flex w-full items-center gap-3 rounded-lg border border-dashed border-ink-border px-4 py-3 text-left font-bold text-foreground hover:border-brand/60 hover:text-white disabled:opacity-50"
+                className="flex w-full shrink-0 items-center gap-3 rounded-lg border border-dashed border-ink-border px-4 py-3 text-left
+                           font-bold text-foreground hover:border-brand/60 hover:text-white disabled:opacity-50"
               >
                 <span className="flex h-5 w-5 items-center justify-center rounded-full bg-brand text-sm leading-none text-white">+</span>
                 New Collection
@@ -145,6 +173,7 @@ export default function CollectionPicker({
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
